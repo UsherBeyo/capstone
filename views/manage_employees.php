@@ -134,6 +134,8 @@ if (isset($_GET['export_budget'])) {
                 <td><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></td>
                 <td>
                     <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">&#128100;</a>
+                    &nbsp;
+                    <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link">✏️</a>
                 </td>
             </tr>
             <?php endforeach; ?>
@@ -150,7 +152,7 @@ if (isset($_GET['export_budget'])) {
             <tr>
                 <td><?= htmlspecialchars($h['leave_type']); ?></td>
                 <td><?= $h['start_date'].' to '.$h['end_date']; ?></td>
-                <td><?= $h['total_days']; ?></td>
+                <td><?= intval($h['total_days']); ?></td>
                 <td><?= ucfirst($h['status']); ?></td>
                 <td><?= htmlspecialchars($h['manager_comments'] ?? ''); ?></td>
             </tr>

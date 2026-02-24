@@ -217,7 +217,9 @@ class Leave {
             return true;
 
         } catch (Exception $e) {
-            $this->conn->rollBack();
+            if ($this->conn->inTransaction()) {
+                $this->conn->rollBack();
+            }
             return false;
         }
     }

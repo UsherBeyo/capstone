@@ -7,10 +7,24 @@ if ($_SESSION['role'] !== 'admin') {
 }
 $db = (new Database())->connect();
 
-$requests = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
+// split the requests into pending/approved/rejected
+$pending = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
     JOIN users u ON e.user_id = u.id
+    WHERE lr.status = 'pending'
+    ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
+$approved = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
+    FROM leave_requests lr
+    JOIN employees e ON lr.employee_id = e.id
+    JOIN users u ON e.user_id = u.id
+    WHERE lr.status = 'approved'
+    ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
+$rejected = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
+    FROM leave_requests lr
+    JOIN employees e ON lr.employee_id = e.id
+    JOIN users u ON e.user_id = u.id
+    WHERE lr.status = 'rejected'
     ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
 
 if (empty($_SESSION['csrf_token'])) {
@@ -28,32 +42,78 @@ if (empty($_SESSION['csrf_token'])) {
 
 <div class="content">
     <h2>All Leave Requests</h2>
+
+    <h3>Pending</h3>
+    <?php if(empty($pending)): ?>
+        <p>No pending requests.</p>
+    <?php else: ?>
     <table border="1" width="100%">
-        <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Comments</th><th>Action</th></tr>
-        <?php foreach($requests as $r): ?>
+        <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Action</th></tr>
+        <?php foreach($pending as $r): ?>
         <tr>
             <td><?= htmlspecialchars($r['first_name'].' '.$r['last_name']); ?></td>
             <td><?= htmlspecialchars($r['email']); ?></td>
             <td><?= htmlspecialchars($r['leave_type']); ?></td>
             <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
-            <td><?= $r['total_days']; ?></td>
-            <td><?= ucfirst($r['status']); ?></td>
-            <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+            <td><?= intval($r['total_days']); ?></td>
+            <td><?= htmlspecialchars($r['reason'] ?? ''); ?></td>
             <td>
                 <form method="POST" action="../controllers/LeaveController.php" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                     <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
-                    <select name="action">
-                        <option value="approve">Approve</option>
-                        <option value="reject">Reject</option>
-                    </select>
-                    <input type="text" name="comments" placeholder="Comments">
-                    <button type="submit">Go</button>
+                    <button type="submit" name="action" value="approve">Approve</button>
+                </form>
+                &nbsp;
+                <form method="POST" action="../controllers/LeaveController.php" style="display:inline;" onsubmit="return confirm('Reject this request?');">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                    <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
+                    <input type="hidden" name="action" value="reject">
+                    <input type="text" name="comments" placeholder="Reason" required>
+                    <button type="submit">Reject</button>
                 </form>
             </td>
         </tr>
         <?php endforeach; ?>
     </table>
+    <?php endif; ?>
+
+    <h3 style="margin-top:20px;">Approved</h3>
+    <?php if(empty($approved)): ?>
+        <p>No approved requests.</p>
+    <?php else: ?>
+    <table border="1" width="100%">
+        <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Comments</th></tr>
+        <?php foreach($approved as $r): ?>
+        <tr>
+            <td><?= htmlspecialchars($r['first_name'].' '.$r['last_name']); ?></td>
+            <td><?= htmlspecialchars($r['email']); ?></td>
+            <td><?= htmlspecialchars($r['leave_type']); ?></td>
+            <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
+            <td><?= intval($r['total_days']); ?></td>
+            <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table>
+    <?php endif; ?>
+
+    <h3 style="margin-top:20px;">Rejected</h3>
+    <?php if(empty($rejected)): ?>
+        <p>No rejected requests.</p>
+    <?php else: ?>
+    <table border="1" width="100%">
+        <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Comments</th></tr>
+        <?php foreach($rejected as $r): ?>
+        <tr>
+            <td><?= htmlspecialchars($r['first_name'].' '.$r['last_name']); ?></td>
+            <td><?= htmlspecialchars($r['email']); ?></td>
+            <td><?= htmlspecialchars($r['leave_type']); ?></td>
+            <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
+            <td><?= intval($r['total_days']); ?></td>
+            <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table>
+    <?php endif; ?>
 </div>
 </body>
-</html>
+</html>​

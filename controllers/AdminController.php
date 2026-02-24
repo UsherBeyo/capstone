@@ -115,8 +115,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = 'approved';
         $approved_by = $_SESSION['user_id'];
 
-        // get balance snapshots before deduction
+        // get balance snapshots before deduction, allow override via form
         $snapshots = $leaveModel->getBalanceSnapshots($empId);
+        if (isset($_POST['snapshot_annual_balance']) && $_POST['snapshot_annual_balance'] !== '') {
+            $snapshots['annual_balance'] = floatval($_POST['snapshot_annual_balance']);
+        }
+        if (isset($_POST['snapshot_sick_balance']) && $_POST['snapshot_sick_balance'] !== '') {
+            $snapshots['sick_balance'] = floatval($_POST['snapshot_sick_balance']);
+        }
+        if (isset($_POST['snapshot_force_balance']) && $_POST['snapshot_force_balance'] !== '') {
+            $snapshots['force_balance'] = intval($_POST['snapshot_force_balance']);
+        }
 
         $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, total_days, reason, status, approved_by, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([$empId, $type, $start, $end, $days, $reason, $status, $approved_by, $snapshots['annual_balance'], $snapshots['sick_balance'], $snapshots['force_balance']]);
@@ -193,7 +202,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: ../views/manage_employees.php?success=1");
         exit();
     } catch (Exception $e) {
-        $db->rollBack();
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
         echo "Error: " . $e->getMessage();
     }
 }

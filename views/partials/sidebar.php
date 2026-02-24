@@ -7,6 +7,7 @@ $role = $_SESSION['role'] ?? '';
     <h3>Leave System</h3>
     <p><?= strtoupper(htmlspecialchars($role)); ?></p>
     <a href="dashboard.php">Dashboard</a><br><br>
+    <a href="employee_profile.php">My Profile</a><br><br>
     <a href="change_password.php">Change Password</a><br><br>
     <?php if(in_array($role,['employee','manager','hr','admin'])): ?>
         <a href="calendar.php">Leave Calendar</a><br><br>

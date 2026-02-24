@@ -25,11 +25,28 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
     $stmt = $db->prepare("SELECT leave_type, start_date, end_date, total_days, status, created_at as 'submitted_date', reason, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance FROM leave_requests WHERE employee_id = ? ORDER BY start_date");
     $stmt->execute([$id]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="leave_history_'.$id.'.csv"');
-    $out = fopen('php://output','w');
-    fputcsv($out,array_keys($rows[0] ?? ['leave_type','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance']));
-    foreach($rows as $r) fputcsv($out,$r);
+    // output as simple Excel (HTML) so clients can adjust column widths
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+    header('Content-Disposition: attachment; filename="leave_history_'.$id.'.xls"');
+    echo "<table border=1>\n";
+    // header row with some width hints
+    echo "<tr>";
+    $headers = $rows[0] ? array_keys($rows[0]) : ['leave_type','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance'];
+    foreach($headers as $h) {
+        echo "<th style='min-width:120px;'>".htmlspecialchars($h)."</th>";
+    }
+    echo "</tr>\n";
+    foreach($rows as $r) {
+        echo "<tr>";
+        foreach($r as $key => $cell) {
+            if ($key === 'total_days') {
+                $cell = intval($cell);
+            }
+            echo "<td>".htmlspecialchars($cell)."</td>";
+        }
+        echo "</tr>\n";
+    }
+    echo "</table>";
     exit();
 }
 
@@ -127,6 +144,14 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <input type="number" step="0.01" name="total_days" required>
                     <label>Comments</label>
                     <input type="text" name="reason">
+                    <hr>
+                    <p style="font-size:12px;opacity:0.8;">(optional) supply the leave balances that were available at the time of this historical entry.</p>
+                    <label>Annual balance at time</label>
+                    <input type="number" step="0.01" name="snapshot_annual_balance" value="">
+                    <label>Sick balance at time</label>
+                    <input type="number" step="0.01" name="snapshot_sick_balance" value="">
+                    <label>Force balance at time</label>
+                    <input type="number" name="snapshot_force_balance" value="">
                     <div style="text-align:right;">
                         <button type="submit">Add history entry</button>
                     </div>
@@ -144,7 +169,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
             <tr>
                 <td><?= htmlspecialchars($h['leave_type'] ?? ''); ?></td>
                 <td><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
-                <td><?= $h['total_days'] ?? ''; ?></td>
+                <td><?= isset($h['total_days']) ? intval($h['total_days']) : ''; ?></td>
                 <td><?= htmlspecialchars($h['status'] ?? ''); ?></td>
                 <td><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
                 <td><?= $h['snapshot_annual_balance'] ?? '—'; ?></td>

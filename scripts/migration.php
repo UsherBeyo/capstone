@@ -62,7 +62,9 @@ try {
     $db->commit();
     echo "Migration completed.\n";
 } catch (Exception $e) {
-    $db->rollBack();
+    if ($db->inTransaction()) {
+        $db->rollBack();
+    }
     echo "Migration failed: " . $e->getMessage() . "\n";
 }
 ?>
