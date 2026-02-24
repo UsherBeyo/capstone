@@ -10,4 +10,7 @@ header("Location: views/login.php");
 
 # yahoo
 
+echo 'echo echo echo try';
+#gitigtigtigtit
+
 ?>
