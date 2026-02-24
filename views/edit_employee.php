@@ -2,11 +2,11 @@
 session_start();
 require_once '../config/database.php';
 
-// admin can edit any employee, employees can edit their own profile
+// admin/hr/manager can edit any employee, employees can edit their own profile
 $role = $_SESSION['role'] ?? '';
 $emp_id = $_SESSION['emp_id'] ?? 0;
 
-if ($role !== 'admin' && $role !== 'hr' && $role !== 'manager') {
+if ($role !== 'admin' && $role !== 'hr' && $role !== 'manager' && $role !== 'employee') {
     die("Access denied");
 }
 

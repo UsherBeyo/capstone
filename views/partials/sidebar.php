@@ -13,6 +13,7 @@ $role = $_SESSION['role'] ?? '';
     <?php endif; ?>
     <?php if($role == 'employee'): ?>
         <a href="apply_leave.php">Apply Leave</a><br><br>
+        <a href="employee_profile.php">My Profile</a><br><br>
     <?php endif; ?>
     <?php if($role == 'admin'): ?>
         <a href="manage_employees.php">Manage Employees</a><br><br>

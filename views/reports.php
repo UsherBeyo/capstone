@@ -65,10 +65,14 @@ if ($reportType === 'balance') {
     $query = "SELECT e.id, e.first_name, e.last_name, e.department, e.annual_balance, e.sick_balance, e.force_balance 
               FROM employees e";
     if ($departmentFilter) {
-        $query .= " WHERE e.department = '" . $db->quote($departmentFilter) . "'";
+        $query .= " WHERE e.department = ?";
+        $stmt = $db->prepare($query . " ORDER BY e.department, e.first_name");
+        $stmt->execute([$departmentFilter]);
+    } else {
+        $query .= " ORDER BY e.department, e.first_name";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
     }
-    $query .= " ORDER BY e.department, e.first_name";
-    $stmt = $db->query($query);
     $reportData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $reportTitle = "Leave Balance Report";
 } elseif ($reportType === 'usage') {
@@ -77,10 +81,14 @@ if ($reportType === 'balance') {
               JOIN employees e ON lr.employee_id = e.id 
               WHERE lr.status = 'approved'";
     if ($departmentFilter) {
-        $query .= " AND e.department = '" . $db->quote($departmentFilter) . "'";
+        $query .= " AND e.department = ?";
+        $stmt = $db->prepare($query . " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type");
+        $stmt->execute([$departmentFilter]);
+    } else {
+        $query .= " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
     }
-    $query .= " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type";
-    $stmt = $db->query($query);
     $reportData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $reportTitle = "Leave Usage Report";
 } else {
