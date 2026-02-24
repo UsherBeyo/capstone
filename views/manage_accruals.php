@@ -44,11 +44,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
     }
 }
 
-// Get employees for dropdown
-$employees = $db->query("SELECT e.id, e.first_name, e.last_name, e.annual_balance FROM employees ORDER BY first_name")->fetchAll(PDO::FETCH_ASSOC);
+// Get employees for dropdown (only from employees table)
+$employees = $db->query("SELECT id, first_name, last_name, annual_balance FROM employees ORDER BY first_name")->fetchAll(PDO::FETCH_ASSOC);
 
-// Get accruals history
-$accruals = $db->query("SELECT a.*, e.first_name, e.last_name FROM accruals a JOIN employees e ON a.employee_id = e.id ORDER BY a.created_at DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+// Get accruals history (with error handling)
+$accruals = [];
+try {
+    $accruals = $db->query("SELECT a.id, a.employee_id, a.amount, a.created_at, e.first_name, e.last_name FROM accruals a JOIN employees e ON a.employee_id = e.id ORDER BY a.created_at DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $ex) {
+    // table might not exist yet
+}
 ?>
 
 <!DOCTYPE html>

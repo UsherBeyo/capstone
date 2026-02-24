@@ -21,38 +21,39 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
         $query = "SELECT e.id, e.first_name, e.last_name, e.department, e.annual_balance, e.sick_balance, e.force_balance 
                   FROM employees e";
         if ($departmentFilter) {
-            $query .= " WHERE e.department = '" . $db->quote($departmentFilter) . "'";
+            $stmt = $db->prepare("SELECT e.id, e.first_name, e.last_name, e.department, e.annual_balance, e.sick_balance, e.force_balance FROM employees e WHERE e.department = ? ORDER BY e.first_name");
+            $stmt->execute([$departmentFilter]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } else {
+            $query .= " ORDER BY e.department, e.first_name";
+            $rows = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
         }
-        $query .= " ORDER BY e.department, e.first_name";
-        
-        $stmt = $db->query($query);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $headers = ['ID', 'First Name', 'Last Name', 'Department', 'Annual Balance', 'Sick Balance', 'Force Balance'];
     } elseif ($reportType === 'usage') {
-        $query = "SELECT e.department, lr.leave_type, COUNT(*) as count, SUM(lr.total_days) as total_days 
+        $query = "SELECT e.department, lr.leave_type, COUNT(*) as request_count, SUM(lr.total_days) as total_days 
                   FROM leave_requests lr 
                   JOIN employees e ON lr.employee_id = e.id 
                   WHERE lr.status = 'approved'";
         if ($departmentFilter) {
-            $query .= " AND e.department = '" . $db->quote($departmentFilter) . "'";
+            $stmt = $db->prepare("SELECT e.department, lr.leave_type, COUNT(*) as request_count, SUM(lr.total_days) as total_days FROM leave_requests lr JOIN employees e ON lr.employee_id = e.id WHERE lr.status = 'approved' AND e.department = ? GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type");
+            $stmt->execute([$departmentFilter]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } else {
+            $query .= " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type";
+            $rows = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
         }
-        $query .= " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type";
-        
-        $stmt = $db->query($query);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $headers = ['Department', 'Leave Type', 'Count', 'Total Days'];
+        $headers = ['Department', 'Leave Type', 'Request Count', 'Total Days'];
     }
 
-    if (!empty($rows)) {
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="leave_report_' . date('Y-m-d') . '.csv"');
-        $out = fopen('php://output', 'w');
-        fputcsv($out, $headers);
-        foreach ($rows as $row) {
-            fputcsv($out, array_values($row));
-        }
-        exit();
+    // Always export, even if empty
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="leave_report_' . date('Y-m-d') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, $headers);
+    foreach ($rows as $row) {
+        fputcsv($out, array_values($row));
     }
+    exit();
 }
 
 // Get departments for filter

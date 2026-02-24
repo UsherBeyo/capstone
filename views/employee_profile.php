@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once '../config/database.php';
 
 $db = (new Database())->connect();
@@ -20,13 +22,13 @@ if (!in_array($role, ['admin','manager','hr']) && ($_SESSION['emp_id'] ?? 0) != 
 
 // export leave history CSV
 if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role']==='hr')) {
-    $stmt = $db->prepare("SELECT leave_type, start_date, end_date, total_days, status, created_at as 'submitted_date', reason FROM leave_requests WHERE employee_id = ? ORDER BY start_date");
+    $stmt = $db->prepare("SELECT leave_type, start_date, end_date, total_days, status, created_at as 'submitted_date', reason, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance FROM leave_requests WHERE employee_id = ? ORDER BY start_date");
     $stmt->execute([$id]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     header('Content-Type: text/csv');
     header('Content-Disposition: attachment; filename="leave_history_'.$id.'.csv"');
     $out = fopen('php://output','w');
-    fputcsv($out,array_keys($rows[0] ?? ['leave_type','start_date','end_date','total_days','status','submitted_date','reason']));
+    fputcsv($out,array_keys($rows[0] ?? ['leave_type','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance']));
     foreach($rows as $r) fputcsv($out,$r);
     exit();
 }
@@ -74,8 +76,14 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                 <p><?= htmlspecialchars($e['email']); ?></p>
                 <p>Department: <?= htmlspecialchars($e['department']); ?></p>
                 <p>Annual: <?= $e['annual_balance'] ?? 0; ?> days — Sick: <?= $e['sick_balance'] ?? 0; ?> — Force: <?= $e['force_balance'] ?? 0; ?></p>
-                <p><a href="edit_employee.php?id=<?= $e['id']; ?>">Edit profile</a> |
-                   <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1">Export history</a></p>
+                <p>
+                    <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
+                        <a href="edit_employee.php?id=<?= $e['id']; ?>">Edit profile</a>
+                    <?php endif; ?>
+                    <?php if(in_array($_SESSION['role'], ['admin','hr'])): ?>
+                        &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1">Export history</a>
+                    <?php endif; ?>
+                </p>
             </div>
         </div>
     </div>
@@ -130,8 +138,8 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
 
     <div class="card" style="margin-top:16px;">
         <h3>Leave History</h3>
-        <table>
-            <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Submitted</th><th>Comments</th></tr>
+        <table style="font-size:12px;">
+            <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Submitted</th><th>Annual Bal</th><th>Sick Bal</th><th>Force Bal</th><th>Comments</th></tr>
             <?php foreach($history as $h): ?>
             <tr>
                 <td><?= htmlspecialchars($h['leave_type'] ?? ''); ?></td>
@@ -139,6 +147,9 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                 <td><?= $h['total_days'] ?? ''; ?></td>
                 <td><?= htmlspecialchars($h['status'] ?? ''); ?></td>
                 <td><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
+                <td><?= $h['snapshot_annual_balance'] ?? '—'; ?></td>
+                <td><?= $h['snapshot_sick_balance'] ?? '—'; ?></td>
+                <td><?= $h['snapshot_force_balance'] ?? '—'; ?></td>
                 <td><?= htmlspecialchars($h['manager_comments'] ?? $h['reason'] ?? ''); ?></td>
             </tr>
             <?php endforeach; ?>
@@ -166,97 +177,6 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
         <?php endif; ?>
     </div>
 
-</div>
-</body>
-</html>
-<?php
-session_start();
-require_once '../config/database.php';
-
-// allow admin/hr and the employee to view their profile
-$role = $_SESSION['role'] ?? '';
-$db = (new Database())->connect();
-
-$id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-if (!$id) {
-    header('Location: manage_employees.php');
-    exit();
-}
-
-$stmt = $db->prepare("SELECT e.*, u.email FROM employees e JOIN users u ON e.user_id = u.id WHERE e.id = ?");
-$stmt->execute([$id]);
-$emp = $stmt->fetch(PDO::FETCH_ASSOC);
-if (!$emp) {
-    die("Employee not found");
-}
-
-// export leave history CSV
-if (isset($_GET['export']) && $_GET['export'] === 'history') {
-    $hstmt = $db->prepare("SELECT leave_type, start_date, end_date, total_days, status, manager_comments FROM leave_requests WHERE employee_id = ? ORDER BY start_date");
-    $hstmt->execute([$id]);
-    $rows = $hstmt->fetchAll(PDO::FETCH_ASSOC);
-    header('Content-Type: text/csv');
-    header('Content-Disposition: attachment; filename="leave_history_' . $id . '.csv"');
-    $out = fopen('php://output','w');
-    if (count($rows) > 0) {
-        fputcsv($out, array_keys($rows[0]));
-        foreach($rows as $r) fputcsv($out, $r);
-    } else {
-        fputcsv($out, ['No records']);
-    }
-    exit();
-}
-
-$hstmt = $db->prepare("SELECT * FROM leave_requests WHERE employee_id = ? ORDER BY start_date DESC");
-$hstmt->execute([$id]);
-$history = $hstmt->fetchAll(PDO::FETCH_ASSOC);
-?>
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Employee Profile</title>
-    <link rel="stylesheet" href="../assets/css/styles.css">
-</head>
-<body>
-<?php include __DIR__ . '/partials/sidebar.php'; ?>
-
-<div class="content">
-    <div class="card">
-        <a href="manage_employees.php">&larr; Back</a>
-        <h2><?= htmlspecialchars($emp['first_name'].' '.$emp['last_name']); ?></h2>
-        <?php if(!empty($emp['profile_pic'])): ?>
-            <img src="<?= htmlspecialchars($emp['profile_pic']); ?>" alt="Profile" style="width:120px;height:120px;border-radius:8px;object-fit:cover;">
-        <?php endif; ?>
-
-        <p><strong>Email:</strong> <?= htmlspecialchars($emp['email']); ?></p>
-        <p><strong>Department:</strong> <?= htmlspecialchars($emp['department']); ?></p>
-        <p><strong>Annual balance:</strong> <?= isset($emp['annual_balance']) ? $emp['annual_balance'] : 0; ?> days</p>
-        <p><strong>Sick balance:</strong> <?= isset($emp['sick_balance']) ? $emp['sick_balance'] : 0; ?> days</p>
-        <p><strong>Force balance:</strong> <?= isset($emp['force_balance']) ? $emp['force_balance'] : 0; ?> days</p>
-
-        <div style="margin-top:12px;">
-            <a href="edit_employee.php?id=<?= $emp['id']; ?>">Edit Profile</a>
-            &nbsp;|&nbsp;
-            <a href="employee_profile.php?id=<?= $emp['id']; ?>&export=history">Export Leave History</a>
-        </div>
-    </div>
-
-    <div class="card" style="margin-top:20px;">
-        <h3>Leave History</h3>
-        <table>
-            <tr><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Comments</th></tr>
-            <?php foreach($history as $h): ?>
-            <tr>
-                <td><?= htmlspecialchars($h['leave_type']); ?></td>
-                <td><?= htmlspecialchars($h['start_date']); ?></td>
-                <td><?= htmlspecialchars($h['end_date']); ?></td>
-                <td><?= htmlspecialchars($h['total_days']); ?></td>
-                <td><?= htmlspecialchars(ucfirst($h['status'])); ?></td>
-                <td><?= htmlspecialchars($h['manager_comments'] ?? ''); ?></td>
-            </tr>
-            <?php endforeach; ?>
-        </table>
-    </div>
 </div>
 </body>
 </html>

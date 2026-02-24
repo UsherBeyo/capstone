@@ -76,24 +76,60 @@ if ($role === 'employee') {
             <?php if(empty($ownRequests)): ?>
                 <p>No leave requests submitted yet.</p>
             <?php else: ?>
-                <table border="1" width="100%">
-                    <tr>
-                        <th>Type</th>
-                        <th>Dates</th>
-                        <th>Days</th>
-                        <th>Status</th>
-                        <th>Manager Notes</th>
-                    </tr>
-                    <?php foreach($ownRequests as $r): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($r['leave_type']); ?></td>
-                        <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
-                        <td><?= $r['total_days']; ?></td>
-                        <td><?= ucfirst($r['status']); ?></td>
-                        <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </table>
+                <?php 
+                $pending = array_filter($ownRequests, function($r) { return $r['status'] === 'pending'; });
+                $archived = array_filter($ownRequests, function($r) { return $r['status'] !== 'pending'; });
+                ?>
+                
+                <?php if(!empty($pending)): ?>
+                <div style="margin-bottom:20px;">
+                    <h4>Pending Requests</h4>
+                    <table border="1" width="100%" style="margin-bottom:10px;">
+                        <tr>
+                            <th>Type</th>
+                            <th>Dates</th>
+                            <th>Days</th>
+                            <th>Status</th>
+                            <th>Manager Notes</th>
+                        </tr>
+                        <?php foreach($pending as $r): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($r['leave_type']); ?></td>
+                            <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
+                            <td><?= $r['total_days']; ?></td>
+                            <td><?= ucfirst($r['status']); ?></td>
+                            <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </table>
+                </div>
+                <?php endif; ?>
+                
+                <?php if(!empty($archived)): ?>
+                <div>
+                    <h4><a href="#" onclick="document.getElementById('archiveSection').style.display = document.getElementById('archiveSection').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (?? records)</a></h4>
+                    <div id="archiveSection" style="display:none;margin-top:10px;">
+                        <table border="1" width="100%">
+                            <tr>
+                                <th>Type</th>
+                                <th>Dates</th>
+                                <th>Days</th>
+                                <th>Status</th>
+                                <th>Manager Notes</th>
+                            </tr>
+                            <?php foreach($archived as $r): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($r['leave_type']); ?></td>
+                                <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
+                                <td><?= $r['total_days']; ?></td>
+                                <td><?= ucfirst($r['status']); ?></td>
+                                <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </table>
+                    </div>
+                </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
 
@@ -119,6 +155,28 @@ if ($role === 'employee') {
             $stmt->execute();
         }
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // fetch archived requests
+        if ($role === 'manager') {
+            $stmt = $db->prepare("
+                SELECT lr.*, e.first_name, e.last_name
+                FROM leave_requests lr
+                JOIN employees e ON lr.employee_id = e.id
+                WHERE lr.status IN ('approved', 'rejected') AND e.manager_id = ?
+                ORDER BY lr.created_at DESC LIMIT 50
+            ");
+            $stmt->execute([$_SESSION['emp_id']]);
+        } else {
+            $stmt = $db->prepare("
+                SELECT lr.*, e.first_name, e.last_name
+                FROM leave_requests lr
+                JOIN employees e ON lr.employee_id = e.id
+                WHERE lr.status IN ('approved', 'rejected')
+                ORDER BY lr.created_at DESC LIMIT 100
+            ");
+            $stmt->execute();
+        }
+        $archived = $stmt->fetchAll(PDO::FETCH_ASSOC);
         ?>
 
         <script>
@@ -171,6 +229,34 @@ if ($role === 'employee') {
 
             </table>
         </div>
+        
+        <?php if(!empty($archived)): ?>
+        <div class="card" style="margin-top:20px;">
+            <h3><a href="#" onclick="document.getElementById('archivePanel').style.display = document.getElementById('archivePanel').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (<?= count($archived); ?> records)</a></h3>
+            <div id="archivePanel" style="display:none;margin-top:10px;">
+                <table border="1" width="100%" style="font-size:12px;">
+                    <tr>
+                        <th>Employee</th>
+                        <th>Type</th>
+                        <th>Dates</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                        <th>Reason</th>
+                    </tr>
+                    <?php foreach($archived as $r): ?>
+                    <tr>
+                        <td><?= $r['first_name']." ".$r['last_name']; ?></td>
+                        <td><?= htmlspecialchars($r['leave_type']); ?></td>
+                        <td><?= $r['start_date']." to ".$r['end_date']; ?></td>
+                        <td><?= $r['total_days']; ?></td>
+                        <td><?= ucfirst($r['status']); ?></td>
+                        <td><?= htmlspecialchars($r['manager_comments'] ?? $r['reason'] ?? ''); ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
 
     <?php elseif($role == 'admin'): ?>
 

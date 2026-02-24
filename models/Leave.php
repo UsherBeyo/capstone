@@ -48,9 +48,12 @@ class Leave {
             return "Insufficient $type leave balance.";
         }
 
+        // get current snapshots of all three balance types
+        $snapshots = $this->getBalanceSnapshots($employee_id);
+
         $query = "INSERT INTO leave_requests 
-                  (employee_id, leave_type, start_date, end_date, total_days, reason)
-                  VALUES (:eid, :type, :start, :end, :days, :reason)";
+                  (employee_id, leave_type, start_date, end_date, total_days, reason, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance)
+                  VALUES (:eid, :type, :start, :end, :days, :reason, :snap_annual, :snap_sick, :snap_force)";
         $stmt = $this->conn->prepare($query);
 
         $stmt->execute([
@@ -59,10 +62,22 @@ class Leave {
             ':start' => $start,
             ':end' => $end,
             ':days' => $days,
-            ':reason' => $reason
+            ':reason' => $reason,
+            ':snap_annual' => $snapshots['annual_balance'],
+            ':snap_sick' => $snapshots['sick_balance'],
+            ':snap_force' => $snapshots['force_balance']
         ]);
 
         return "Leave submitted successfully.";
+    }
+
+    /**
+     * Retrieve all three balance snapshots for an employee
+     */
+    public function getBalanceSnapshots($employee_id) {
+        $stmt = $this->conn->prepare("SELECT annual_balance, sick_balance, force_balance FROM employees WHERE id = :id");
+        $stmt->execute([':id' => $employee_id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     /**
@@ -182,6 +197,16 @@ class Leave {
                     ':days' => $leave['total_days'],
                     ':employee_id' => $leave['employee_id']
                 ]);
+                
+                // get updated snapshots of all three balance types
+                $snapshots = $this->getBalanceSnapshots($leave['employee_id']);
+                
+                // update leave record with approved snapshots
+                $this->conn->prepare(
+                    "UPDATE leave_requests 
+                     SET snapshot_annual_balance = ?, snapshot_sick_balance = ?, snapshot_force_balance = ? 
+                     WHERE id = ?"
+                )->execute([$snapshots['annual_balance'], $snapshots['sick_balance'], $snapshots['force_balance'], $leave_id]);
                 
                 // record in budget history
                 $newBalance = max(0, $oldBalance - $leave['total_days']);

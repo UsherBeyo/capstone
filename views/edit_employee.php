@@ -2,7 +2,11 @@
 session_start();
 require_once '../config/database.php';
 
-if ($_SESSION['role'] !== 'admin') {
+// admin can edit any employee, employees can edit their own profile
+$role = $_SESSION['role'] ?? '';
+$emp_id = $_SESSION['emp_id'] ?? 0;
+
+if ($role !== 'admin' && $role !== 'hr' && $role !== 'manager') {
     die("Access denied");
 }
 
@@ -11,9 +15,20 @@ if (!isset($_GET['id'])) {
     exit();
 }
 
+$id_to_edit = intval($_GET['id']);
+
+// if employee, check they're editing their own profile
+if ($role === 'employee') {
+    if ($emp_id !== $id_to_edit) {
+        die("You can only edit your own profile");
+    }
+} elseif (!in_array($role, ['admin','hr','manager'])) {
+    die("Access denied");
+}
+
 $db = (new Database())->connect();
 $stmt = $db->prepare("SELECT * FROM employees WHERE id = ?");
-$stmt->execute([$_GET['id']]);
+$stmt->execute([$id_to_edit]);
 $e = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$e) {
     header("Location: manage_employees.php");
@@ -28,6 +43,7 @@ $managers = $db->query("SELECT e.id, e.first_name, e.last_name
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+$is_own_profile = ($role === 'employee');
 ?>
 <!DOCTYPE html>
 <html>
@@ -57,6 +73,8 @@ if (empty($_SESSION['csrf_token'])) {
             <input type="text" name="last_name" value="<?= htmlspecialchars($e['last_name']); ?>" required>
             <label>Department</label>
             <input type="text" name="department" value="<?= htmlspecialchars($e['department']); ?>" required>
+            
+            <?php if(!$is_own_profile): ?>
             <label>Annual Balance</label>
             <input type="number" step="0.01" name="annual_balance" value="<?= $e['annual_balance']; ?>">
             <label>Sick Balance</label>
@@ -72,6 +90,7 @@ if (empty($_SESSION['csrf_token'])) {
                     </option>
                 <?php endforeach; ?>
             </select>
+            <?php endif; ?>
 
             <button type="submit">Save changes</button>
         </form>

@@ -26,6 +26,9 @@ try {
     $db->exec("ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS approved_by INT NULL");
     $db->exec("ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS manager_comments TEXT NULL");
     $db->exec("ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    $db->exec("ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS snapshot_annual_balance DECIMAL(6,2) NULL");
+    $db->exec("ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS snapshot_sick_balance DECIMAL(6,2) NULL");
+    $db->exec("ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS snapshot_force_balance INT NULL");
 
     // holidays table for calendar
     $db->exec("CREATE TABLE IF NOT EXISTS holidays (
