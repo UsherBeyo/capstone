@@ -39,6 +39,12 @@ if (empty($_SESSION['csrf_token'])) {
 $stmt = $db->prepare("SELECT * FROM leave_requests WHERE employee_id = ? ORDER BY start_date DESC");
 $stmt->execute([$id]);
 $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// fetch budget history
+$budgetHistory = [];
+$stmtBudget = $db->prepare("SELECT * FROM budget_history WHERE employee_id = ? ORDER BY created_at DESC LIMIT 30");
+$stmtBudget->execute([$id]);
+$budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html>
@@ -137,6 +143,27 @@ $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </tr>
             <?php endforeach; ?>
         </table>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+        <h3>Budget History</h3>
+        <?php if(empty($budgetHistory)): ?>
+            <p>No budget change history available.</p>
+        <?php else: ?>
+        <table style="font-size:13px;">
+            <tr><th>Leave Type</th><th>Action</th><th>Old Balance</th><th>New Balance</th><th>Date</th><th>Notes</th></tr>
+            <?php foreach($budgetHistory as $bh): ?>
+            <tr>
+                <td><?= htmlspecialchars($bh['leave_type'] ?? ''); ?></td>
+                <td><?= htmlspecialchars($bh['action'] ?? ''); ?></td>
+                <td><?= $bh['old_balance'] ?? ''; ?></td>
+                <td><?= $bh['new_balance'] ?? ''; ?></td>
+                <td><?= !empty($bh['created_at']) ? date('M d, Y H:i', strtotime($bh['created_at'])) : ''; ?></td>
+                <td><?= htmlspecialchars($bh['notes'] ?? ''); ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+        <?php endif; ?>
     </div>
 
 </div>

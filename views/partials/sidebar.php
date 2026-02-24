@@ -20,7 +20,11 @@ $role = $_SESSION['role'] ?? '';
     <?php if(in_array($role,['admin','manager','hr'])): ?>
         <a href="holidays.php">Manage Holidays</a><br><br>
     <?php endif; ?>
+    <?php if(in_array($role,['admin','hr'])): ?>
+        <a href="reports.php">Reports</a><br><br>
+    <?php endif; ?>
     <?php if($role == 'admin'): ?>
+        <a href="manage_accruals.php">Manage Accruals</a><br><br>
         <a href="leave_requests.php">Leave Requests</a><br><br>
     <?php endif; ?>
     <a href="../controllers/logout.php">Logout</a>

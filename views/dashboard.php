@@ -177,6 +177,8 @@ if ($role === 'employee') {
         <?php
         // general counts
         $count = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
+        $pendingCount = $db->query("SELECT COUNT(*) FROM leave_requests WHERE status = 'pending'")->fetchColumn();
+        $approvedCount = $db->query("SELECT COUNT(*) FROM leave_requests WHERE status = 'approved'")->fetchColumn();
         // by department
         $deptStmt = $db->query("SELECT department, COUNT(*) as cnt FROM employees GROUP BY department");
         $deptData = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -191,9 +193,19 @@ if ($role === 'employee') {
         $roleCounts = array_column($roleData,'cnt');
         ?>
 
-        <div class="card">
-            <h3>Total Employees</h3>
-            <p><?= $count ?></p>
+        <div style="display:flex;gap:20px;margin-bottom:20px;">
+            <div class="card" style="flex:1;">
+                <h3>Total Employees</h3>
+                <p style="font-size:24px;color:#00c6ff;"><?= $count ?></p>
+            </div>
+            <div class="card" style="flex:1;border-left:4px solid #ff6b6b;">
+                <h3>Pending Requests</h3>
+                <p style="font-size:24px;color:#ff6b6b;"><?= $pendingCount ?></p>
+            </div>
+            <div class="card" style="flex:1;border-left:4px solid #28a745;">
+                <h3>Approved Requests</h3>
+                <p style="font-size:24px;color:#28a745;"><?= $approvedCount ?></p>
+            </div>
         </div>
 
         <div class="card" style="margin-top:20px;">

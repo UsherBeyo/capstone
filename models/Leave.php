@@ -102,6 +102,17 @@ class Leave {
     }
 
     /**
+     * Log a budget change to budget_history table
+     */
+    public function logBudgetChange($employee_id, $leave_type, $old_balance, $new_balance, $action, $leave_request_id = null, $notes = null) {
+        $stmt = $this->conn->prepare(
+            "INSERT INTO budget_history (employee_id, leave_type, old_balance, new_balance, action, leave_request_id, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        );
+        return $stmt->execute([$employee_id, $leave_type, $old_balance, $new_balance, $action, $leave_request_id, $notes]);
+    }
+
+    /**
      * General manager response for a pending leave request.
      * action should be either 'approve' or 'reject'.
      * comments can contain optional reasoning.
@@ -141,7 +152,7 @@ class Leave {
                 ':id' => $leave_id
             ]);
 
-            // if approved, deduct from balance
+            // if approved, deduct from balance and log change
             if ($action === 'approve') {
                 $col = 'leave_balance';
                 switch (strtolower($leave['leave_type'])) {
@@ -155,6 +166,13 @@ class Leave {
                         $col = 'force_balance';
                         break;
                 }
+                
+                // get old balance before update
+                $stmt = $this->conn->prepare("SELECT $col FROM employees WHERE id = ?");
+                $stmt->execute([$leave['employee_id']]);
+                $oldBalance = floatval($stmt->fetchColumn());
+                
+                // update balance
                 $stmt = $this->conn->prepare(
                     "UPDATE employees 
                      SET $col = $col - :days 
@@ -164,6 +182,10 @@ class Leave {
                     ':days' => $leave['total_days'],
                     ':employee_id' => $leave['employee_id']
                 ]);
+                
+                // record in budget history
+                $newBalance = max(0, $oldBalance - $leave['total_days']);
+                $this->logBudgetChange($leave['employee_id'], $leave['leave_type'], $oldBalance, $newBalance, 'deduction', $leave_id, 'Leave approved');
             }
 
             $this->conn->commit();

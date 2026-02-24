@@ -115,14 +115,17 @@ $days = days_in_month($month,$year);
         echo "</tr>";
         ?>
     </table>
+
     <div id="sidePanel" class="side-panel" aria-hidden="true">
-        <button id="closePanel" style="float:right;background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;">Close</button>
+        <button id="closeSidePanel" style="float:right;background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;">×</button>
         <div id="panelContent"></div>
     </div>
 
     <script>
         var _events = <?= json_encode($events); ?>;
+        
         document.querySelectorAll('td[data-date]').forEach(function(td){
+            td.style.cursor = 'pointer';
             td.addEventListener('click', function(){
                 var d = this.getAttribute('data-date');
                 var evs = _events[d] || [];
@@ -139,46 +142,14 @@ $days = days_in_month($month,$year);
                 panel.classList.add('open');
             });
         });
-        document.getElementById('closePanel').addEventListener('click', function(){ document.getElementById('sidePanel').classList.remove('open'); });
-    </script>
-
-    <div id="dayPanel" class="side-panel" aria-hidden="true">
-        <button id="closePanel" class="close" style="float:right;border:none;background:transparent;color:#fff;font-size:18px;cursor:pointer;">&times;</button>
-        <h3 id="panelDate"></h3>
-        <ul id="panelList" class="panel-list"></ul>
-    </div>
-
-    <script>
-        var events = <?= json_encode($events); ?>;
-        document.querySelectorAll('td[data-date]').forEach(function(td){
-            td.addEventListener('click', function(){
-                var date = td.getAttribute('data-date');
-                if(!events.hasOwnProperty(date)) return;
-                var panel = document.getElementById('dayPanel');
-                document.getElementById('panelDate').textContent = date;
-                var list = document.getElementById('panelList');
-                list.innerHTML = '';
-                events[date].forEach(function(ev){
-                    var li = document.createElement('li');
-                    var dot = document.createElement('span');
-                    dot.className = 'event-dot dot-' + ev.type;
-                    li.appendChild(dot);
-                    var strong = document.createElement('strong');
-                    var short = ev.desc.length > 40 ? ev.desc.substr(0,40) + '...' : ev.desc;
-                    strong.textContent = short;
-                    li.appendChild(strong);
-                    var p = document.createElement('div');
-                    p.style.fontSize = '12px';
-                    p.style.opacity = 0.9;
-                    p.textContent = ev.desc;
-                    li.appendChild(p);
-                    list.appendChild(li);
-                });
-                panel.classList.add('open');
-            });
+        
+        document.getElementById('closeSidePanel').addEventListener('click', function(){
+            document.getElementById('sidePanel').classList.remove('open');
         });
-        document.getElementById('closePanel').addEventListener('click', function(){
-            document.getElementById('dayPanel').classList.remove('open');
+        
+        window.addEventListener('click', function(e){
+            var panel = document.getElementById('sidePanel');
+            if(e.target === panel) panel.classList.remove('open');
         });
     </script>
 </div>

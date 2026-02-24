@@ -3,6 +3,7 @@ session_start();
 
 require_once '../config/database.php';
 require_once '../models/User.php';
+require_once '../models/Leave.php';
 
 if ($_SESSION['role'] !== 'admin') {
     die("Access denied");
@@ -10,6 +11,7 @@ if ($_SESSION['role'] !== 'admin') {
 
 $db = (new Database())->connect();
 $userModel = new User($db);
+$leaveModel = new Leave($db);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -30,6 +32,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sick   = floatval($_POST['sick_balance']);
         $force  = intval($_POST['force_balance']);
 
+        // get old balances to log changes
+        $oldStmt = $db->prepare("SELECT annual_balance, sick_balance, force_balance FROM employees WHERE id = ?");
+        $oldStmt->execute([$empId]);
+        $oldBalances = $oldStmt->fetch(PDO::FETCH_ASSOC);
+
         // handle picture upload if provided
         $picPath = null;
         if (!empty($_FILES['profile_pic']['name'])) {
@@ -45,6 +52,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, manager_id=?, annual_balance=?, sick_balance=?, force_balance=? WHERE id=?");
             $stmt->execute([$first_name,$last_name,$department,$manager_id,$annual,$sick,$force,$empId]);
         }
+
+        // log budget changes
+        if ($oldBalances['annual_balance'] != $annual) {
+            $leaveModel->logBudgetChange($empId, 'Annual', $oldBalances['annual_balance'], $annual, 'adjustment', null, 'Admin manual adjustment');
+        }
+        if ($oldBalances['sick_balance'] != $sick) {
+            $leaveModel->logBudgetChange($empId, 'Sick', $oldBalances['sick_balance'], $sick, 'adjustment', null, 'Admin manual adjustment');
+        }
+        if ($oldBalances['force_balance'] != $force) {
+            $leaveModel->logBudgetChange($empId, 'Force', $oldBalances['force_balance'], $force, 'adjustment', null, 'Admin manual adjustment');
+        }
+
         header("Location: ../views/manage_employees.php?updated=1");
         exit();
     }
@@ -62,14 +81,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, total_days, reason, status, approved_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([$empId, $type, $start, $end, $days, $reason, $status, $approved_by]);
+        $leave_id = $db->lastInsertId();
 
-        // deduct from corresponding balance
+        // deduct from corresponding balance and log change
+        $col = 'annual_balance';
         switch (strtolower($type)) {
             case 'sick': $col='sick_balance'; break;
             case 'force': $col='force_balance'; break;
-            default: $col='annual_balance';
         }
+        
+        // get old balance
+        $oldStmt = $db->prepare("SELECT $col FROM employees WHERE id = ?");
+        $oldStmt->execute([$empId]);
+        $oldBalance = floatval($oldStmt->fetchColumn());
+        
+        // update balance
         $db->prepare("UPDATE employees SET $col = GREATEST(0, $col - ?) WHERE id = ?")->execute([$days, $empId]);
+        
+        // log to budget history
+        $newBalance = max(0, $oldBalance - $days);
+        $leaveModel->logBudgetChange($empId, ucfirst($type), $oldBalance, $newBalance, 'deduction', $leave_id, 'Historical leave entry added by admin');
 
         header("Location: ../views/employee_profile.php?id=$empId&added_history=1");
         exit();
