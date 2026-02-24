@@ -6,7 +6,7 @@ This project now supports a more complete leave policy:
 
 * **Multiple leave types** – annual, sick and force leave are tracked separately.
 * **Monthly accrual** – employees earn **1.25 days of annual leave per month**. Run `php scripts/accrue.php` (via cron) to apply.
-* **Force leave quota** – every month each employee receives **5 force leave days** which must be taken during that month (un‑used days are reset on accrual).
+* **Force leave quota** – every month each employee receives **5 force leave days** which are tracked separately and can be used at the employee's discretion; unused days are reset on accrual.
 * **Sick balance** – tracked separately; can be adjusted by admin.
 * **New database columns**:
   * `annual_balance` (decimal)

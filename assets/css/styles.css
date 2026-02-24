@@ -222,6 +222,20 @@ tr:hover {
     overflow-x: hidden;
 }
 
+/* scrollable tables to prevent long pages */
+.table-container {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+}
+.table-container table {
+    table-layout: fixed;
+    width: 100%;
+}
+.table-container th, .table-container td {
+    word-wrap: break-word;
+}
+
 .side-panel.open {
     left: 0;
 }

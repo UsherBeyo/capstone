@@ -44,16 +44,8 @@ if (empty($_SESSION['csrf_token'])) {
         window.addEventListener('load', function(){
             updateBalanceInfo();
             var select = document.getElementById('leave_type');
-            var forceBal = <?= json_encode(floatval($balances['force_balance'])); ?>;
             if(select){
                 select.addEventListener('change', function(){
-                    var val = this.value;
-                    if(forceBal > 0 && val !== 'Force'){
-                        var ok = confirm('You have ' + forceBal + ' force leave day(s) remaining which should be used before requesting other leave types. Continue selecting '+val+'?');
-                        if(!ok){
-                            this.value = 'Force';
-                        }
-                    }
                     updateBalanceInfo();
                 });
             }
@@ -67,9 +59,7 @@ if (empty($_SESSION['csrf_token'])) {
 <div class="content">
     <div class="card">
         <h2>Apply for Leave</h2>
-        <?php if ($balances['force_balance'] > 0): ?>
-            <p style="color:darkred;">You currently have <?= $balances['force_balance']; ?> force leave day(s) that must be used before submitting other leave types.</p>
-        <?php endif; ?>
+
 
         <form method="POST" action="../controllers/LeaveController.php">
 
@@ -78,9 +68,9 @@ if (empty($_SESSION['csrf_token'])) {
 
             <label>Leave Type</label>
             <select name="leave_type" id="leave_type">
-                <option value="Annual" <?= ($balances['force_balance'] == 0) ? 'selected' : ''; ?>>Annual</option>
+                <option value="Annual">Annual</option>
                 <option value="Sick">Sick</option>
-                <option value="Force" <?= ($balances['force_balance'] > 0) ? 'selected' : ''; ?>>Force</option>
+                <option value="Force">Force</option>
             </select>
 
             <div id="balance-info" style="margin-top:8px;font-weight:bold;">

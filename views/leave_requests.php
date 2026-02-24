@@ -8,22 +8,23 @@ if ($_SESSION['role'] !== 'admin') {
 $db = (new Database())->connect();
 
 // split the requests into pending/approved/rejected
+// use LEFT JOIN on users so that a missing user_id on an employee doesn't hide the request
 $pending = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
-    JOIN users u ON e.user_id = u.id
+    LEFT JOIN users u ON e.user_id = u.id
     WHERE lr.status = 'pending'
     ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
 $approved = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
-    JOIN users u ON e.user_id = u.id
+    LEFT JOIN users u ON e.user_id = u.id
     WHERE lr.status = 'approved'
     ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
 $rejected = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
-    JOIN users u ON e.user_id = u.id
+    LEFT JOIN users u ON e.user_id = u.id
     WHERE lr.status = 'rejected'
     ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -43,11 +44,13 @@ if (empty($_SESSION['csrf_token'])) {
 <div class="content">
     <h2>All Leave Requests</h2>
 
-    <h3>Pending</h3>
-    <?php if(empty($pending)): ?>
-        <p>No pending requests.</p>
-    <?php else: ?>
-    <table border="1" width="100%">
+    <div class="card">
+        <h3>Pending</h3>
+        <?php if(empty($pending)): ?>
+            <p>No pending requests.</p>
+        <?php else: ?>
+        <div class="table-container">
+        <table border="1" width="100%">
         <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Action</th></tr>
         <?php foreach($pending as $r): ?>
         <tr>
@@ -75,12 +78,16 @@ if (empty($_SESSION['csrf_token'])) {
         </tr>
         <?php endforeach; ?>
     </table>
+    </div>
     <?php endif; ?>
+    </div> <!-- end card -->
 
-    <h3 style="margin-top:20px;">Approved</h3>
+    <div class="card">
+        <h3 style="margin-top:20px;">Approved</h3>
     <?php if(empty($approved)): ?>
         <p>No approved requests.</p>
     <?php else: ?>
+    <div class="table-container">
     <table border="1" width="100%">
         <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Comments</th></tr>
         <?php foreach($approved as $r): ?>
@@ -94,12 +101,16 @@ if (empty($_SESSION['csrf_token'])) {
         </tr>
         <?php endforeach; ?>
     </table>
+    </div>
     <?php endif; ?>
+    </div> <!-- end card -->
 
-    <h3 style="margin-top:20px;">Rejected</h3>
+    <div class="card">
+        <h3 style="margin-top:20px;">Rejected</h3>
     <?php if(empty($rejected)): ?>
         <p>No rejected requests.</p>
     <?php else: ?>
+    <div class="table-container">
     <table border="1" width="100%">
         <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Comments</th></tr>
         <?php foreach($rejected as $r): ?>
@@ -113,7 +124,9 @@ if (empty($_SESSION['csrf_token'])) {
         </tr>
         <?php endforeach; ?>
     </table>
+    </div>
     <?php endif; ?>
+    </div> <!-- end card -->
 </div>
 </body>
 </html>​

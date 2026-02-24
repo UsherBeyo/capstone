@@ -34,13 +34,6 @@ class Leave {
             return "Overlapping leave exists.";
         }
 
-        // enforce use of force leave first
-        if (strtolower($type) !== 'force') {
-            $forceBal = $this->getBalanceByType($employee_id, 'force');
-            if ($forceBal > 0) {
-                return "You have $forceBal force leave day(s) left which must be taken before requesting other leave types.";
-            }
-        }
 
         $balance = $this->getBalanceByType($employee_id, $type);
 
@@ -52,8 +45,8 @@ class Leave {
         $snapshots = $this->getBalanceSnapshots($employee_id);
 
         $query = "INSERT INTO leave_requests 
-                  (employee_id, leave_type, start_date, end_date, total_days, reason, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance)
-                  VALUES (:eid, :type, :start, :end, :days, :reason, :snap_annual, :snap_sick, :snap_force)";
+                  (employee_id, leave_type, start_date, end_date, total_days, reason, status, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance)
+                  VALUES (:eid, :type, :start, :end, :days, :reason, 'pending', :snap_annual, :snap_sick, :snap_force)";
         $stmt = $this->conn->prepare($query);
 
         $stmt->execute([
