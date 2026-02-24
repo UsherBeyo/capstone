@@ -1,0 +1,186 @@
+<?php
+session_start();
+require_once '../config/database.php';
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+$db = (new Database())->connect();
+
+// calculate month/year from query or default to current
+$month = isset($_GET['m']) ? intval($_GET['m']) : date('n');
+$year  = isset($_GET['y']) ? intval($_GET['y']) : date('Y');
+
+// fetch holidays and leaves for the month
+$start = "$year-".str_pad($month,2,'0',STR_PAD_LEFT)."-01";
+$end = date('Y-m-t', strtotime($start));
+
+$holidays = $db->prepare("SELECT * FROM holidays WHERE holiday_date BETWEEN ? AND ?");
+$holidays->execute([$start, $end]);
+$hols = $holidays->fetchAll(PDO::FETCH_ASSOC);
+
+$leaves = $db->prepare("SELECT lr.*, e.first_name, e.last_name
+                       FROM leave_requests lr
+                       JOIN employees e ON lr.employee_id = e.id
+                       WHERE lr.status='approved' 
+                         AND lr.start_date <= ?
+                         AND lr.end_date >= ?");
+$leaves->execute([$end, $start]);
+$lv = $leaves->fetchAll(PDO::FETCH_ASSOC);
+
+// build map of date -> events
+$events = [];
+foreach($hols as $h) {
+    $events[$h['holiday_date']][] = ['type'=>'holiday','desc'=>$h['description']];
+}
+foreach($lv as $l) {
+    $d1 = $l['start_date'];
+    $d2 = $l['end_date'];
+    $current = $d1;
+    while($current <= $d2) {
+        if($current >= $start && $current <= $end) {
+            $events[$current][] = [
+                'type'=>'leave',
+                'desc'=> $l['first_name'].' '.$l['last_name'].' ('.$l['leave_type'].')'
+            ];
+        }
+        $current = date('Y-m-d', strtotime($current.' +1 day'));
+    }
+}
+
+function days_in_month($m,$y){return cal_days_in_month(CAL_GREGORIAN,$m,$y);} 
+$firstDow = date('N', strtotime("$year-$month-01"));
+$days = days_in_month($month,$year);
+
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leave Calendar</title>
+    <link rel="stylesheet" href="../assets/css/styles.css">
+    <style>
+    table.calendar {border-collapse:collapse; width:100%;}
+    table.calendar td {border:1px solid #ccc; vertical-align:top; height:70px; padding:6px; overflow:hidden;}
+    .day-number { font-size:14px; }
+    .day-dots { margin-top:6px; }
+    .holiday { }
+    .leave { }
+    </style>
+</head>
+<body>
+<?php include __DIR__ . '/partials/sidebar.php'; ?>
+
+<div class="content">
+    <h2>Calendar for <?= date('F Y', strtotime($start)); ?></h2>
+    <a href="?m=<?= ($month==1?12:$month-1); ?>&y=<?= ($month==1?$year-1:$year); ?>">&lt; Prev</a>
+    <a href="?m=<?= ($month==12?1:$month+1); ?>&y=<?= ($month==12?$year+1:$year); ?>">Next &gt;</a>
+
+    <table class="calendar">
+        <tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr>
+        <?php
+        $day=1; $dow=1;
+        echo "<tr>";
+        // empty cells before first day
+        for($i=1;$i<$firstDow;$i++){ echo "<td></td>"; $dow++; }
+        while($day<=$days) {
+            if($dow>7){ echo "</tr><tr>"; $dow=1; }
+            $date = sprintf("%04d-%02d-%02d",$year,$month,$day);
+            $cellClass='';
+            if(isset($events[$date])){
+                foreach($events[$date] as $e){
+                    if($e['type']=='holiday'){$cellClass='holiday'; break;}
+                }
+            }
+            echo "<td class='$cellClass' data-date='$date'><strong>$day</strong><br>";
+            if(isset($events[$date])){
+                $count = 0;
+                foreach($events[$date] as $e){
+                    $label = htmlspecialchars($e['desc']);
+                    $cls = ($e['type']=='holiday' ? 'cal-bullet evt-holiday' : ($e['type']=='leave' ? 'cal-bullet evt-leave' : 'cal-bullet evt-other'));
+                    echo "<span class='$cls' title='$label'></span>";
+                    $count++;
+                    if($count >= 3) break;
+                }
+                if(count($events[$date]) > 3){
+                    echo "<span style='font-size:12px;color:#fff'>+".(count($events[$date]) - 3)."</span>";
+                }
+            }
+            echo "</td>";
+            $day++; $dow++;
+        }
+        // trailing empty cells
+        while($dow<=7){ echo "<td></td>"; $dow++; }
+        echo "</tr>";
+        ?>
+    </table>
+    <div id="sidePanel" class="side-panel" aria-hidden="true">
+        <button id="closePanel" style="float:right;background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;">Close</button>
+        <div id="panelContent"></div>
+    </div>
+
+    <script>
+        var _events = <?= json_encode($events); ?>;
+        document.querySelectorAll('td[data-date]').forEach(function(td){
+            td.addEventListener('click', function(){
+                var d = this.getAttribute('data-date');
+                var evs = _events[d] || [];
+                if(evs.length === 0) return;
+                var panel = document.getElementById('sidePanel');
+                var content = document.getElementById('panelContent');
+                var html = '<h3>' + d + '</h3><ul>';
+                evs.forEach(function(e){
+                    var cls = e.type == 'holiday' ? 'evt-holiday' : (e.type == 'leave' ? 'evt-leave' : 'evt-other');
+                    html += '<li><span class="cal-bullet ' + cls + '"></span> ' + (e.desc || '') + '</li>';
+                });
+                html += '</ul>';
+                content.innerHTML = html;
+                panel.classList.add('open');
+            });
+        });
+        document.getElementById('closePanel').addEventListener('click', function(){ document.getElementById('sidePanel').classList.remove('open'); });
+    </script>
+
+    <div id="dayPanel" class="side-panel" aria-hidden="true">
+        <button id="closePanel" class="close" style="float:right;border:none;background:transparent;color:#fff;font-size:18px;cursor:pointer;">&times;</button>
+        <h3 id="panelDate"></h3>
+        <ul id="panelList" class="panel-list"></ul>
+    </div>
+
+    <script>
+        var events = <?= json_encode($events); ?>;
+        document.querySelectorAll('td[data-date]').forEach(function(td){
+            td.addEventListener('click', function(){
+                var date = td.getAttribute('data-date');
+                if(!events.hasOwnProperty(date)) return;
+                var panel = document.getElementById('dayPanel');
+                document.getElementById('panelDate').textContent = date;
+                var list = document.getElementById('panelList');
+                list.innerHTML = '';
+                events[date].forEach(function(ev){
+                    var li = document.createElement('li');
+                    var dot = document.createElement('span');
+                    dot.className = 'event-dot dot-' + ev.type;
+                    li.appendChild(dot);
+                    var strong = document.createElement('strong');
+                    var short = ev.desc.length > 40 ? ev.desc.substr(0,40) + '...' : ev.desc;
+                    strong.textContent = short;
+                    li.appendChild(strong);
+                    var p = document.createElement('div');
+                    p.style.fontSize = '12px';
+                    p.style.opacity = 0.9;
+                    p.textContent = ev.desc;
+                    li.appendChild(p);
+                    list.appendChild(li);
+                });
+                panel.classList.add('open');
+            });
+        });
+        document.getElementById('closePanel').addEventListener('click', function(){
+            document.getElementById('dayPanel').classList.remove('open');
+        });
+    </script>
+</div>
+</body>
+</html>

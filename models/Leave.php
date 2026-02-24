@@ -34,10 +34,18 @@ class Leave {
             return "Overlapping leave exists.";
         }
 
-        $balance = $this->getBalance($employee_id);
+        // enforce use of force leave first
+        if (strtolower($type) !== 'force') {
+            $forceBal = $this->getBalanceByType($employee_id, 'force');
+            if ($forceBal > 0) {
+                return "You have $forceBal force leave day(s) left which must be taken before requesting other leave types.";
+            }
+        }
+
+        $balance = $this->getBalanceByType($employee_id, $type);
 
         if ($balance < $days) {
-            return "Insufficient leave balance.";
+            return "Insufficient $type leave balance.";
         }
 
         $query = "INSERT INTO leave_requests 
@@ -57,56 +65,118 @@ class Leave {
         return "Leave submitted successfully.";
     }
 
-    private function getBalance($employee_id) {
-        $stmt = $this->conn->prepare("SELECT leave_balance FROM employees WHERE id = :id");
+    /**
+     * Retrieve a balance depending on leave type.
+     */
+    private function getBalanceByType($employee_id, $type) {
+        switch (strtolower($type)) {
+            case 'annual':
+                $col = 'annual_balance';
+                break;
+            case 'sick':
+                $col = 'sick_balance';
+                break;
+            case 'force':
+                $col = 'force_balance';
+                break;
+            default:
+                // fallback to the old generic column
+                $col = 'leave_balance';
+        }
+        $stmt = $this->conn->prepare("SELECT $col FROM employees WHERE id = :id");
         $stmt->execute([':id' => $employee_id]);
         return $stmt->fetchColumn();
     }
 
-    public function approveLeave($leave_id, $manager_id) {
+    /**
+     * Perform monthly accrual: each employee gains 1.25 days annual
+     * and resets force leave quota to 5 for the new month.
+     *
+     * This method can be invoked from a cron job or administration script.
+     */
+    public function accrueMonthly() {
+        $query = "UPDATE employees 
+                  SET annual_balance = annual_balance + 1.25,
+                      force_balance = 5";
+        return $this->conn->exec($query) !== false;
+    }
 
-    try {
-        $this->conn->beginTransaction();
+    /**
+     * General manager response for a pending leave request.
+     * action should be either 'approve' or 'reject'.
+     * comments can contain optional reasoning.
+     */
+    public function respondToLeave($leave_id, $manager_id, $action, $comments = '') {
 
-        // Get leave details
-        $stmt = $this->conn->prepare(
-            "SELECT employee_id, total_days 
-             FROM leave_requests 
-             WHERE id = :id AND status = 'pending'"
-        );
-        $stmt->execute([':id' => $leave_id]);
-        $leave = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$leave) {
+        if (!in_array($action, ['approve','reject'])) {
             return false;
         }
 
-        // Update leave status
-        $this->conn->prepare(
-            "UPDATE leave_requests 
-             SET status='approved', approved_by=:manager 
-             WHERE id=:id"
-        )->execute([
-            ':manager' => $manager_id,
-            ':id' => $leave_id
-        ]);
+        try {
+            $this->conn->beginTransaction();
 
-        // Deduct leave balance
-        $this->conn->prepare(
-            "UPDATE employees 
-             SET leave_balance = leave_balance - :days 
-             WHERE id=:employee_id"
-        )->execute([
-            ':days' => $leave['total_days'],
-            ':employee_id' => $leave['employee_id']
-        ]);
+            // Get leave details
+            $stmt = $this->conn->prepare(
+                "SELECT employee_id, total_days, leave_type 
+                 FROM leave_requests 
+                 WHERE id = :id AND status = 'pending'"
+            );
+            $stmt->execute([':id' => $leave_id]);
+            $leave = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $this->conn->commit();
-        return true;
+            if (!$leave) {
+                return false;
+            }
 
-    } catch (Exception $e) {
-        $this->conn->rollBack();
-        return false;
+            // Update leave status and comments
+            $status = $action === 'approve' ? 'approved' : 'rejected';
+            $this->conn->prepare(
+                "UPDATE leave_requests 
+                 SET status=:status, approved_by=:manager, manager_comments=:comments 
+                 WHERE id=:id"
+            )->execute([
+                ':status' => $status,
+                ':manager' => $manager_id,
+                ':comments' => $comments,
+                ':id' => $leave_id
+            ]);
+
+            // if approved, deduct from balance
+            if ($action === 'approve') {
+                $col = 'leave_balance';
+                switch (strtolower($leave['leave_type'])) {
+                    case 'annual':
+                        $col = 'annual_balance';
+                        break;
+                    case 'sick':
+                        $col = 'sick_balance';
+                        break;
+                    case 'force':
+                        $col = 'force_balance';
+                        break;
+                }
+                $stmt = $this->conn->prepare(
+                    "UPDATE employees 
+                     SET $col = $col - :days 
+                     WHERE id=:employee_id"
+                );
+                $stmt->execute([
+                    ':days' => $leave['total_days'],
+                    ':employee_id' => $leave['employee_id']
+                ]);
+            }
+
+            $this->conn->commit();
+            return true;
+
+        } catch (Exception $e) {
+            $this->conn->rollBack();
+            return false;
+        }
     }
-}
+
+    // keep the old helper around for backwards compatibility
+    public function approveLeave($leave_id, $manager_id) {
+        return $this->respondToLeave($leave_id, $manager_id, 'approve');
+    }
 }

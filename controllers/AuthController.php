@@ -12,6 +12,11 @@ $userModel = new User($db);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
+    // CSRF validation
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        die("CSRF validation failed.");
+    }
+
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
 
@@ -25,6 +30,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['role']    = $user['role'];
         $_SESSION['email']   = $user['email'];
+
+        // if there is an employee record linked, store its id too
+        $stmt = $db->prepare("SELECT id FROM employees WHERE user_id = ?");
+        $stmt->execute([$user['id']]);
+        $emp = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($emp) {
+            $_SESSION['emp_id'] = $emp['id'];
+        }
 
         header("Location: ../views/dashboard.php");
         exit();

@@ -6,6 +6,15 @@ if ($_SESSION['role'] != 'employee') {
     die("Access denied");
 }
 
+$db = (new Database())->connect();
+$emp_id = $_SESSION['emp_id'] ?? null;
+$balances = ['annual_balance'=>0,'sick_balance'=>0,'force_balance'=>0];
+if ($emp_id) {
+    $stmt = $db->prepare("SELECT annual_balance, sick_balance, force_balance FROM employees WHERE id = ?");
+    $stmt->execute([$emp_id]);
+    $balances = $stmt->fetch(PDO::FETCH_ASSOC) ?: $balances;
+}
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -16,16 +25,51 @@ if (empty($_SESSION['csrf_token'])) {
     <title>Apply Leave</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <script src="../assets/js/script.js"></script>
+    <script>
+        // helper to show balance for chosen leave type
+        function updateBalanceInfo() {
+            var typeElem = document.getElementById('leave_type');
+            if(!typeElem) return;
+            var type = typeElem.value;
+            var info = document.getElementById('balance-info');
+            var bal = {
+                'Annual': <?= json_encode($balances['annual_balance']); ?>,
+                'Sick': <?= json_encode($balances['sick_balance']); ?>,
+                'Force': <?= json_encode($balances['force_balance']); ?>
+            };
+            var val = (typeof bal[type] !== 'undefined') ? bal[type] : 0;
+            info.innerHTML = type + ' balance: ' + val + ' days';
+        }
+
+        window.addEventListener('load', function(){
+            updateBalanceInfo();
+            var select = document.getElementById('leave_type');
+            var forceBal = <?= json_encode(floatval($balances['force_balance'])); ?>;
+            if(select){
+                select.addEventListener('change', function(){
+                    var val = this.value;
+                    if(forceBal > 0 && val !== 'Force'){
+                        var ok = confirm('You have ' + forceBal + ' force leave day(s) remaining which should be used before requesting other leave types. Continue selecting '+val+'?');
+                        if(!ok){
+                            this.value = 'Force';
+                        }
+                    }
+                    updateBalanceInfo();
+                });
+            }
+        });
+    </script>
 </head>
 <body>
 
-<div class="sidebar">
-    <a href="dashboard.php">Back to Dashboard</a>
-</div>
+<?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="content">
     <div class="card">
         <h2>Apply for Leave</h2>
+        <?php if ($balances['force_balance'] > 0): ?>
+            <p style="color:darkred;">You currently have <?= $balances['force_balance']; ?> force leave day(s) that must be used before submitting other leave types.</p>
+        <?php endif; ?>
 
         <form method="POST" action="../controllers/LeaveController.php">
 
@@ -33,11 +77,17 @@ if (empty($_SESSION['csrf_token'])) {
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
 
             <label>Leave Type</label>
-            <select name="leave_type">
-                <option value="Annual">Annual</option>
+            <select name="leave_type" id="leave_type">
+                <option value="Annual" <?= ($balances['force_balance'] == 0) ? 'selected' : ''; ?>>Annual</option>
                 <option value="Sick">Sick</option>
-                <option value="Emergency">Emergency</option>
+                <option value="Force" <?= ($balances['force_balance'] > 0) ? 'selected' : ''; ?>>Force</option>
             </select>
+
+            <div id="balance-info" style="margin-top:8px;font-weight:bold;">
+                Annual: <?= $balances['annual_balance']; ?> days<br>
+                Sick: <?= $balances['sick_balance']; ?> days<br>
+                Force: <?= $balances['force_balance']; ?> days
+            </div>
 
             <label>Start Date</label>
             <input type="date" name="start_date" id="start_date" onchange="calculateDays()" required>

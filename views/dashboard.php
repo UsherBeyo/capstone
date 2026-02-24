@@ -10,60 +10,125 @@ if (!isset($_SESSION['user_id'])) {
 $db = (new Database())->connect();
 $role = $_SESSION['role'];
 $user_id = $_SESSION['user_id'];
+
+// fetch user's first and last name from employee record
+$userName = $_SESSION['email'];
+if ($role === 'employee') {
+    $stmt = $db->prepare("SELECT first_name, last_name FROM employees WHERE user_id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($user && !empty($user['first_name'])) {
+        $userName = $user['first_name'] . ' ' . $user['last_name'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html>
 <head>
     <title>Dashboard</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
-<div class="sidebar">
-    <h3>Leave System</h3>
-    <p><?= strtoupper($role); ?></p>
-
-    <a href="dashboard.php">Dashboard</a><br><br>
-
-    <?php if($role == 'employee'): ?>
-        <a href="apply_leave.php">Apply Leave</a><br><br>
-    <?php endif; ?>
-
-    <?php if($role == 'admin'): ?>
-        <a href="manage_employees.php">Manage Employees</a><br><br>
-    <?php endif; ?>
-
-    <a href="../controllers/logout.php">Logout</a>
-</div>
+<?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="content">
-    <h2>Welcome <?= $_SESSION['email']; ?></h2>
+    <h2>Welcome <?= htmlspecialchars($userName); ?></h2>
+
+    <?php if(!empty($_SESSION['message'])): ?>
+        <div class="card" style="background:#eef; padding:10px;">
+            <?= htmlspecialchars($_SESSION['message']); ?>
+        </div>
+        <?php unset($_SESSION['message']); ?>
+    <?php endif; ?>
 
     <?php if($role == 'employee'): ?>
 
         <?php
-        $stmt = $db->prepare("SELECT leave_balance FROM employees WHERE user_id = ?");
+        // fetch each balance column and employee id
+        $stmt = $db->prepare("SELECT id, annual_balance, sick_balance, force_balance FROM employees WHERE user_id = ?");
         $stmt->execute([$user_id]);
-        $balance = $stmt->fetchColumn();
+        $balances = $stmt->fetch(PDO::FETCH_ASSOC);
+        $annual = $balances['annual_balance'] ?? 0;
+        $sick = $balances['sick_balance'] ?? 0;
+        $force = $balances['force_balance'] ?? 0;
+        $my_emp_id = $balances['id'] ?? null;
+
+        // fetch this employee's own leave requests
+        $ownRequests = [];
+        if ($my_emp_id) {
+            $reqStmt = $db->prepare("SELECT * FROM leave_requests WHERE employee_id = ? ORDER BY start_date DESC");
+            $reqStmt->execute([$my_emp_id]);
+            $ownRequests = $reqStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
         ?>
 
         <div class="card">
-            <h3>Leave Balance</h3>
-            <p><?= $balance ?> Days</p>
+            <h3>Leave Balances</h3>
+            <p>Annual: <?= $annual ?> days</p>
+            <p>Sick: <?= $sick ?> days</p>
+            <p>Force: <?= $force ?> days</p>
         </div>
 
-    <?php elseif($role == 'manager'): ?>
+        <div class="card" style="margin-top:20px;">
+            <h3>My Leave Requests</h3>
+            <?php if(empty($ownRequests)): ?>
+                <p>No leave requests submitted yet.</p>
+            <?php else: ?>
+                <table border="1" width="100%">
+                    <tr>
+                        <th>Type</th>
+                        <th>Dates</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                        <th>Manager Notes</th>
+                    </tr>
+                    <?php foreach($ownRequests as $r): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($r['leave_type']); ?></td>
+                        <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
+                        <td><?= $r['total_days']; ?></td>
+                        <td><?= ucfirst($r['status']); ?></td>
+                        <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </table>
+            <?php endif; ?>
+        </div>
+
+    <?php elseif($role == 'manager' || $role == 'hr'): ?>
 
         <?php
-        $stmt = $db->prepare("
-            SELECT lr.*, e.first_name, e.last_name
-            FROM leave_requests lr
-            JOIN employees e ON lr.employee_id = e.id
-            WHERE lr.status = 'pending'
-        ");
-        $stmt->execute();
+        if ($role === 'manager') {
+            $stmt = $db->prepare("
+                SELECT lr.*, e.first_name, e.last_name
+                FROM leave_requests lr
+                JOIN employees e ON lr.employee_id = e.id
+                WHERE lr.status = 'pending' AND e.manager_id = ?
+            ");
+            $stmt->execute([$_SESSION['emp_id']]);
+        } else {
+            // hr sees all pending
+            $stmt = $db->prepare("
+                SELECT lr.*, e.first_name, e.last_name
+                FROM leave_requests lr
+                JOIN employees e ON lr.employee_id = e.id
+                WHERE lr.status = 'pending'
+            ");
+            $stmt->execute();
+        }
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
         ?>
+
+        <script>
+            function askRejectReason(form) {
+                var reason = prompt('Please enter a reason for rejection:');
+                if (reason === null) return false;
+                form.comments.value = reason;
+                return true;
+            }
+        </script>
 
         <div class="card">
             <h3>Pending Leave Requests</h3>
@@ -71,21 +136,34 @@ $user_id = $_SESSION['user_id'];
             <table border="1" width="100%">
                 <tr>
                     <th>Employee</th>
+                    <th>Type</th>
                     <th>Dates</th>
                     <th>Days</th>
+                    <th>Reason</th>
                     <th>Action</th>
                 </tr>
 
                 <?php foreach($requests as $r): ?>
                 <tr>
                     <td><?= $r['first_name']." ".$r['last_name']; ?></td>
+                    <td><?= htmlspecialchars($r['leave_type']); ?></td>
                     <td><?= $r['start_date']." to ".$r['end_date']; ?></td>
                     <td><?= $r['total_days']; ?></td>
+                    <td><?= htmlspecialchars($r['reason']); ?></td>
                     <td>
-                        <form method="POST" action="../controllers/LeaveController.php">
+                        <form method="POST" action="../controllers/LeaveController.php" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                             <input type="hidden" name="action" value="approve">
                             <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
                             <button type="submit">Approve</button>
+                        </form>
+                        &nbsp;
+                        <form method="POST" action="../controllers/LeaveController.php" style="display:inline;" onsubmit="return askRejectReason(this);">
+                            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                            <input type="hidden" name="action" value="reject">
+                            <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
+                            <input type="hidden" name="comments" value="">
+                            <button type="submit">Reject</button>
                         </form>
                     </td>
                 </tr>
@@ -97,13 +175,64 @@ $user_id = $_SESSION['user_id'];
     <?php elseif($role == 'admin'): ?>
 
         <?php
+        // general counts
         $count = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
+        // by department
+        $deptStmt = $db->query("SELECT department, COUNT(*) as cnt FROM employees GROUP BY department");
+        $deptData = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
+        $deptLabels = array_column($deptData,'department');
+        $deptCounts = array_column($deptData,'cnt');
+        // by role via users join
+        $roleStmt = $db->query("SELECT u.role, COUNT(*) as cnt FROM users u
+                               JOIN employees e ON e.user_id = u.id
+                               GROUP BY u.role");
+        $roleData = $roleStmt->fetchAll(PDO::FETCH_ASSOC);
+        $roleLabels = array_column($roleData,'role');
+        $roleCounts = array_column($roleData,'cnt');
         ?>
 
         <div class="card">
             <h3>Total Employees</h3>
             <p><?= $count ?></p>
         </div>
+
+        <div class="card" style="margin-top:20px;">
+            <h3>Employees by Department</h3>
+            <canvas id="deptChart"></canvas>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+            <h3>Employees by Role</h3>
+            <canvas id="roleChart"></canvas>
+        </div>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function(){
+            var ctx1 = document.getElementById('deptChart').getContext('2d');
+            new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: <?= json_encode($deptLabels); ?>,
+                    datasets: [{
+                        label: 'Employees',
+                        data: <?= json_encode($deptCounts); ?>,
+                        backgroundColor: 'rgba(0, 123, 255, 0.5)'
+                    }]
+                }
+            });
+            var ctx2 = document.getElementById('roleChart').getContext('2d');
+            new Chart(ctx2, {
+                type: 'pie',
+                data: {
+                    labels: <?= json_encode($roleLabels); ?>,
+                    datasets: [{
+                        data: <?= json_encode($roleCounts); ?>,
+                        backgroundColor: ['#007bff','#28a745','#ffc107','#dc3545']
+                    }]
+                }
+            });
+        });
+        </script>
 
     <?php endif; ?>
 

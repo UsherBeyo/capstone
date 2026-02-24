@@ -101,6 +101,42 @@ tr:hover {
     background: rgba(255,255,255,0.2);
 }
 
+/* Dropdown action menu */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropbtn {
+    background: transparent;
+    color: #fff;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: rgba(0,0,0,0.8);
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+}
+
+.dropdown-content a {
+    color: #fff;
+    padding: 8px 12px;
+    text-decoration: none;
+    display: block;
+}
+
+.dropdown-content a:hover {background-color: rgba(255,255,255,0.2);}
+
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+
 /* Animations */
 @keyframes fadeIn {
     from {opacity:0;}
@@ -111,3 +147,77 @@ tr:hover {
     from {transform:translateY(20px); opacity:0;}
     to {transform:translateY(0); opacity:1;}
 }
+
+/* Modal (small) */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal-content {
+    background: rgba(255,255,255,0.06);
+    padding: 20px;
+    border-radius: 12px;
+    width: 600px;
+    max-width: 95%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.modal-content.small {
+    width: 420px;
+    padding: 16px;
+}
+.modal-close {
+    float: right;
+    font-size: 20px;
+    cursor: pointer;
+    color: #fff;
+}
+
+/* Side panel for calendar details */
+.side-panel {
+    position: fixed;
+    left: -360px;
+    top: 0;
+    width: 340px;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 20px;
+    transition: left 0.25s ease;
+    z-index: 1100;
+    overflow-y: auto;
+}
+.side-panel.open {
+    left: 0;
+}
+.side-panel h3 {
+    margin-bottom: 12px;
+}
+.cal-bullet {
+    display:inline-block;
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    margin-right:6px;
+    vertical-align:middle;
+}
+.evt-holiday { background: #ff6b6b; }
+.evt-leave { background: #4da6ff; }
+.evt-other { background: #ffd166; }
+.side-panel ul { list-style:none; padding-left:0; margin-top:12px; }
+.side-panel li { padding:8px 6px; border-bottom:1px solid rgba(255,255,255,0.04); }
+.profile-link { color: #fff; text-decoration:none; font-size:18px; display:inline-block; padding:6px; }
+
+/* Compact modal for small forms */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:999; }
+.modal.open { display:flex; }
+.modal .modal-content { background: rgba(255,255,255,0.06); padding:18px; border-radius:12px; width:460px; max-width:92%; position:relative; }
+.modal .modal-content.small { width:420px; }
+.modal .close { position:absolute; top:8px; right:10px; background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; }

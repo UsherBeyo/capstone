@@ -25,7 +25,7 @@ if (empty($_SESSION['csrf_token'])) {
         <p style="color:red;">Invalid credentials</p>
     <?php endif; ?>
 
-    <form action="../controllers/AuthController.php" method="POST">
+    <form action="../controllers/AuthController.php" method="POST" onsubmit="return validateLogin();">
         <input type="hidden" name="action" value="login">
         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
 
@@ -35,10 +35,76 @@ if (empty($_SESSION['csrf_token'])) {
         <label>Password</label>
         <input type="password" name="password" required>
 
+        <div style="margin:16px 0;">
+            <input type="checkbox" id="agreePrivacy" name="agree_privacy" required>
+            <label for="agreePrivacy" style="display:inline;margin:0;">I agree to the <a href="#" onclick="openPrivacyModal(event)" style="color:#00c6ff;text-decoration:underline;">Data Privacy and Terms</a></label>
+        </div>
+
         <br><br>
         <button type="submit">Login</button>
     </form>
 </div>
+
+<!-- Privacy/Terms Modal -->
+<div id="privacyModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="modal-close" id="closePrivacyModal">&times;</span>
+        <h3>Data Privacy & Terms of Service</h3>
+        <div style="max-height:400px;overflow-y:auto;font-size:13px;line-height:1.6;">
+            <h4>1. Data Privacy Notice</h4>
+            <p>We collect and process personal information including your name, email, and employment details. This information is used solely for leave management and HR administration purposes.</p>
+            
+            <h4>2. Data Protection</h4>
+            <p>Your data is protected with industry-standard security measures. We do not share your personal information with third parties without your consent, except as required by law.</p>
+            
+            <h4>3. Use of Information</h4>
+            <p>Leave records, including dates and reasons, are maintained for business and regulatory compliance purposes. Leave balances and history are accessible to authorized HR and management personnel only.</p>
+            
+            <h4>4. Retention</h4>
+            <p>Employment and leave records are retained for the duration of your employment and for a period thereafter as required by applicable laws.</p>
+            
+            <h4>5. Your Rights</h4>
+            <p>You have the right to access, correct, or request deletion of your personal data, subject to legal and contractual obligations.</p>
+            
+            <h4>6. Terms of Use</h4>
+            <p>By logging in, you agree to use this system in accordance with company policies and applicable laws. Unauthorized access, data tampering, or misuse is prohibited.</p>
+            
+            <h4>7. Disclaimer</h4>
+            <p>The leave management system is provided on an "as-is" basis. We are not liable for any data loss or system downtime beyond our control.</p>
+            
+            <h4>8. Changes to Policy</h4>
+            <p>We reserve the right to update this policy. Continued use of the system constitutes acceptance of any changes.</p>
+        </div>
+        <div style="text-align:right;margin-top:16px;">
+            <button type="button" id="closePrivacyBtn" style="padding:8px 16px;">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openPrivacyModal(e) {
+        e.preventDefault();
+        document.getElementById('privacyModal').style.display = 'flex';
+    }
+    document.getElementById('closePrivacyModal').addEventListener('click', function(){
+        document.getElementById('privacyModal').style.display = 'none';
+    });
+    document.getElementById('closePrivacyBtn').addEventListener('click', function(){
+        document.getElementById('privacyModal').style.display = 'none';
+    });
+    window.addEventListener('click', function(e){
+        var modal = document.getElementById('privacyModal');
+        if(e.target === modal) modal.style.display = 'none';
+    });
+
+    function validateLogin() {
+        if (!document.getElementById('agreePrivacy').checked) {
+            alert('You must agree to the Data Privacy and Terms to login.');
+            return false;
+        }
+        return true;
+    }
+</script>
 
 </body>
 </html>
