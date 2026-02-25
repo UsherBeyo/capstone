@@ -1,5 +1,3 @@
-nya nya nya
-
 ## Leave Management Enhancements
 
 This project now supports a more complete leave policy:
