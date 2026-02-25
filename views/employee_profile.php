@@ -21,7 +21,7 @@ if (!in_array($role, ['admin','manager','hr']) && ($_SESSION['emp_id'] ?? 0) != 
 }
 
 // export leave history CSV
-if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role']==='hr')) {
+if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role']==='hr' || ($_SESSION['emp_id'] ?? 0) == $id)) {
     $stmt = $db->prepare("SELECT COALESCE(lt.name, lr.leave_type) AS leave_type_name, lr.start_date, lr.end_date, lr.total_days, lr.status, lr.created_at as 'submitted_date', lr.reason, lr.snapshot_annual_balance, lr.snapshot_sick_balance, lr.snapshot_force_balance FROM leave_requests lr LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.employee_id = ? ORDER BY lr.start_date");
     $stmt->execute([$id]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -29,6 +29,11 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     header('Content-Disposition: attachment; filename="leave_history_'.$id.'.xls"');
     echo "<table border=1>\n";
+    // Add employee information header
+    echo "<tr><td colspan='10' style='font-weight:bold;background-color:#e0e0e0;'><strong>Employee Information</strong></td></tr>\n";
+    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($e['first_name'].' '.$e['last_name'])."</td><td><strong>Email</strong></td><td>".htmlspecialchars($e['email'])."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
+    echo "<tr><td colspan='10'>&nbsp;</td></tr>\n";
+    echo "<tr><td colspan='10' style='font-weight:bold;background-color:#e0e0e0;'><strong>Leave History</strong></td></tr>\n";
     // header row with some width hints
     echo "<tr>";
     $headers = $rows[0] ? array_keys($rows[0]) : ['leave_type_name','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance'];
@@ -83,7 +88,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
         <div class="profile-header">
             <div>
                 <?php if(!empty($e['profile_pic'])): ?>
-                    <img src="<?= htmlspecialchars($e['profile_pic']); ?>" class="profile-pic">
+                    <img src="<?= htmlspecialchars($e['profile_pic']); ?>" class="profile-pic" style="cursor:pointer;" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars($e['first_name'].' '.$e['last_name']); ?>')">
                 <?php else: ?>
                     <div style="width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;">👤</div>
                 <?php endif; ?>
@@ -96,6 +101,9 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                 <p>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
                         <a href="edit_employee.php?id=<?= $e['id']; ?>">Edit profile</a>
+                    <?php endif; ?>
+                    <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
+                        &nbsp;| <a href="#" onclick="openPasswordModal(); return false;">Change Password</a>
                     <?php endif; ?>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])): ?>
                         &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1">Export history</a>
@@ -207,5 +215,56 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
 </div>
+
+<div id="imageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:2000;justify-content:center;align-items:center;flex-direction:column;">
+    <span style="color:white;font-size:20px;margin-bottom:20px;" id="modalImageName"></span>
+    <img id="modalImage" style="max-width:80%;max-height:80%;border-radius:8px;">
+    <button onclick="closeImageModal()" style="margin-top:20px;padding:10px 20px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">Close</button>
+</div>
+
+<div id="passwordModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:center;">
+    <div style="background:white;padding:30px;border-radius:8px;width:90%;max-width:400px;">
+        <h3>Change Password</h3>
+        <form method="POST" action="../controllers/UserController.php">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? ''; ?>">
+            <input type="hidden" name="action" value="change_password">
+            <label>Current Password</label>
+            <input type="password" name="current" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;">
+            <label>New Password</label>
+            <input type="password" name="new" required minlength="6" style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;">
+            <button type="submit" style="background:#007bff;color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;">Update Password</button>
+            <button type="button" onclick="closePasswordModal()" style="margin-left:10px;background:#6c757d;color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function openImageModal(src, name) {
+    document.getElementById('modalImage').src = src;
+    document.getElementById('modalImageName').textContent = name;
+    document.getElementById('imageModal').style.display = 'flex';
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').style.display = 'none';
+}
+
+function openPasswordModal() {
+    document.getElementById('passwordModal').style.display = 'flex';
+}
+
+function closePasswordModal() {
+    document.getElementById('passwordModal').style.display = 'none';
+}
+
+document.getElementById('imageModal').addEventListener('click', function(e) {
+    if(e.target === this) closeImageModal();
+});
+
+document.getElementById('passwordModal').addEventListener('click', function(e) {
+    if(e.target === this) closePasswordModal();
+});
+</script>
+
 </body>
 </html>

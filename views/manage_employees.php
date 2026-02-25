@@ -125,7 +125,7 @@ if (isset($_GET['export_budget'])) {
 
             <?php foreach($employees as $e): ?>
             <tr>
-                <td><?php if(!empty($e['profile_pic'])) echo "<img src='".$e['profile_pic']."' style='width:40px;height:40px;border-radius:50%;'>"; ?></td>
+                <td><?php if(!empty($e['profile_pic'])) echo "<img src='".$e['profile_pic']."' style='width:40px;height:40px;border-radius:50%;cursor:pointer;' onclick=\"openImageModal('".$e['profile_pic']."', '".htmlspecialchars($e['first_name'].' '.$e['last_name'])."')\">"; ?></td>
                 <td><?= $e['first_name']." ". $e['last_name']; ?></td>
                 <td><?= $e['email']; ?></td>
                 <td><?= $e['department']; ?></td>
@@ -174,7 +174,27 @@ if (isset($_GET['export_budget'])) {
             row.style.display = text.indexOf(filter) > -1 ? '' : 'none';
         });
     });
+
+    function openImageModal(src, name) {
+        document.getElementById('modalImage').src = src;
+        document.getElementById('modalImageName').textContent = name;
+        document.getElementById('imageModal').style.display = 'flex';
+    }
+
+    function closeImageModal() {
+        document.getElementById('imageModal').style.display = 'none';
+    }
+
+    document.getElementById('imageModal').addEventListener('click', function(e) {
+        if(e.target === this) closeImageModal();
+    });
 </script>
+
+<div id="imageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:2000;justify-content:center;align-items:center;flex-direction:column;">
+    <span style="color:white;font-size:20px;;margin-bottom:20px;" id="modalImageName"></span>
+    <img id="modalImage" style="max-width:80%;max-height:80%;border-radius:8px;">
+    <button onclick="closeImageModal()" style="margin-top:20px;padding:10px 20px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">Close</button>
+</div>
 
 </body>
 </html>

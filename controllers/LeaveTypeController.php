@@ -32,4 +32,25 @@ if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     exit();
 }
 
-// other actions such as edit/delete could be added later
+if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = intval($_POST['type_id']);
+    $stmt = $db->prepare("UPDATE leave_types SET name=?, deduct_balance=?, requires_approval=?, max_days_per_year=?, auto_approve=? WHERE id=?");
+    $stmt->execute([
+        trim($_POST['name']),
+        isset($_POST['deduct_balance']) ? 1 : 0,
+        isset($_POST['requires_approval']) ? 1 : 0,
+        $_POST['max_days_per_year'] ?: null,
+        isset($_POST['auto_approve']) ? 1 : 0,
+        $id
+    ]);
+    header('Location: ../controllers/LeaveTypeController.php');
+    exit();
+}
+
+if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = intval($_POST['type_id']);
+    $stmt = $db->prepare("DELETE FROM leave_types WHERE id=?");
+    $stmt->execute([$id]);
+    header('Location: ../controllers/LeaveTypeController.php');
+    exit();
+}

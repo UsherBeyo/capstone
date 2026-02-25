@@ -69,9 +69,17 @@ if ($role === 'employee') {
 
         <div class="card">
             <h3>Leave Balances</h3>
-            <p>Annual: <?= $annual ?> days</p>
-            <p>Sick: <?= $sick ?> days</p>
-            <p>Force: <?= $force ?> days</p>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:100%;align-items:center;">
+                <div style="flex:1;min-width:250px;max-width:300px;height:200px;">
+                    <canvas id="annualChart"></canvas>
+                </div>
+                <div style="flex:1;min-width:250px;max-width:300px;height:200px;">
+                    <canvas id="sickChart"></canvas>
+                </div>
+                <div style="flex:1;min-width:250px;max-width:300px;height:200px;">
+                    <canvas id="forceChart"></canvas>
+                </div>
+            </div>
         </div>
 
         <div class="card" style="margin-top:20px;">
@@ -136,6 +144,99 @@ if ($role === 'employee') {
             <?php endif; ?>
         </div>
 
+        <script>
+            // Employee balance charts
+            var ctx1 = document.getElementById('annualChart');
+            if (ctx1) {
+                var annualContext = ctx1.getContext('2d');
+                new Chart(annualContext, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Used', 'Remaining'],
+                        datasets: [{
+                            data: [<?= $annual > 0 ? max(0, 20 - $annual) : 0 ?>, <?= $annual ?>],
+                            backgroundColor: ['#ff6384', '#36a2eb']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {position: 'bottom'},
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.label + ': ' + context.parsed + ' days';
+                                    }
+                                }
+                            },
+                            title: {display: true, text: 'Annual Leave'}
+                        }
+                    }
+                });
+            }
+
+            var ctx2 = document.getElementById('sickChart');
+            if (ctx2) {
+                var sickContext = ctx2.getContext('2d');
+                new Chart(sickContext, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Used', 'Remaining'],
+                        datasets: [{
+                            data: [<?= $sick > 0 ? max(0, 10 - $sick) : 0 ?>, <?= $sick ?>],
+                            backgroundColor: ['#ffc107', '#28a745']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {position: 'bottom'},
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.label + ': ' + context.parsed + ' days';
+                                    }
+                                }
+                            },
+                            title: {display: true, text: 'Sick Leave'}
+                        }
+                    }
+                });
+            }
+
+            var ctx3 = document.getElementById('forceChart');
+            if (ctx3) {
+                var forceContext = ctx3.getContext('2d');
+                new Chart(forceContext, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Used', 'Remaining'],
+                        datasets: [{
+                            data: [<?= $force > 0 ? max(0, 5 - $force) : 0 ?>, <?= $force ?>],
+                            backgroundColor: ['#dc3545', '#20c997']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {position: 'bottom'},
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.label + ': ' + context.parsed + ' days';
+                                    }
+                                }
+                            },
+                            title: {display: true, text: 'Force Leave'}
+                        }
+                    }
+                });
+            }
+        </script>
+
     <?php elseif(in_array($role, ['manager','hr','admin'])): ?>
 
         <?php
@@ -165,9 +266,13 @@ if ($role === 'employee') {
             <?php if($mostAbsent): ?>
                 <p><strong>Most absent employee:</strong> <?= htmlspecialchars($mostAbsentName); ?> (<?= $mostAbsent['cnt']; ?> days)</p>
             <?php endif; ?>
-            <div style="display:flex;gap:20px;flex-wrap:wrap;">
-                <canvas id="monthlyChart" width="300" height="150"></canvas>
-                <canvas id="deptChart" width="300" height="150"></canvas>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:100%;">
+                <div style="flex:1;min-width:350px;max-width:600px;">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+                <div style="flex:1;min-width:350px;max-width:400px;">
+                    <canvas id="deptChart"></canvas>
+                </div>
             </div>
         </div>
         <script>
@@ -183,6 +288,8 @@ if ($role === 'employee') {
                     }]
                 },
                 options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
                     scales: {
                         x: {title: {display:true, text:'Month'}},
                         y: {beginAtZero:true}
@@ -201,7 +308,8 @@ if ($role === 'employee') {
                     }]
                 },
                 options: {
-                    responsive: true
+                    responsive: true,
+                    maintainAspectRatio: true
                 }
             });
         </script>
