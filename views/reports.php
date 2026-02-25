@@ -12,8 +12,9 @@ $db = (new Database())->connect();
 $reportType = $_GET['type'] ?? 'summary';
 $departmentFilter = $_GET['dept'] ?? '';
 
-// Export to CSV if requested
+// Export handling (csv/excel/pdf)
 if (isset($_GET['export']) && $_GET['export'] === '1') {
+    $format = $_GET['format'] ?? 'csv';
     $rows = [];
     $headers = [];
 
@@ -30,30 +31,76 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
         }
         $headers = ['ID', 'First Name', 'Last Name', 'Department', 'Annual Balance', 'Sick Balance', 'Force Balance'];
     } elseif ($reportType === 'usage') {
-        $query = "SELECT e.department, lr.leave_type, COUNT(*) as request_count, SUM(lr.total_days) as total_days 
+        $query = "SELECT e.department, COALESCE(lt.name, lr.leave_type) as leave_type, COUNT(*) as request_count, SUM(lr.total_days) as total_days 
                   FROM leave_requests lr 
                   JOIN employees e ON lr.employee_id = e.id 
+                  LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id 
                   WHERE lr.status = 'approved'";
         if ($departmentFilter) {
-            $stmt = $db->prepare("SELECT e.department, lr.leave_type, COUNT(*) as request_count, SUM(lr.total_days) as total_days FROM leave_requests lr JOIN employees e ON lr.employee_id = e.id WHERE lr.status = 'approved' AND e.department = ? GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type");
+            $stmt = $db->prepare("SELECT e.department, COALESCE(lt.name, lr.leave_type) as leave_type, COUNT(*) as request_count, SUM(lr.total_days) as total_days FROM leave_requests lr JOIN employees e ON lr.employee_id = e.id LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.status = 'approved' AND e.department = ? GROUP BY e.department, leave_type ORDER BY e.department, leave_type");
             $stmt->execute([$departmentFilter]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
-            $query .= " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type";
+            $query .= " GROUP BY e.department, leave_type ORDER BY e.department, leave_type";
             $rows = $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
         }
         $headers = ['Department', 'Leave Type', 'Request Count', 'Total Days'];
     }
 
-    // Always export, even if empty
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="leave_report_' . date('Y-m-d') . '.csv"');
-    $out = fopen('php://output', 'w');
-    fputcsv($out, $headers);
-    foreach ($rows as $row) {
-        fputcsv($out, array_values($row));
+    // deliver according to requested format
+    if ($format === 'excel' && class_exists('PhpOffice\PhpSpreadsheet\Spreadsheet')) {
+        // basic PhpSpreadsheet export
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $col = 1;
+        foreach ($headers as $h) {
+            $sheet->setCellValueByColumnAndRow($col++, 1, $h);
+        }
+        $rownum = 2;
+        foreach ($rows as $row) {
+            $col = 1;
+            foreach ($row as $val) {
+                $sheet->setCellValueByColumnAndRow($col++, $rownum, $val);
+            }
+            $rownum++;
+        }
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="leave_report_' . date('Y-m-d') . '.xlsx"');
+        $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+        $writer->save('php://output');
+        exit();
+    } elseif ($format === 'pdf' && class_exists('TCPDF')) {
+        // simple TCPDF usage - requires library included separately
+        $pdf = new TCPDF();
+        $pdf->AddPage();
+        $html = '<h2>' . htmlspecialchars($reportTitle) . '</h2><table border="1" cellpadding="4">';
+        $html .= '<tr>';
+        foreach ($headers as $h) {
+            $html .= '<th>' . htmlspecialchars($h) . '</th>';
+        }
+        $html .= '</tr>';
+        foreach ($rows as $row) {
+            $html .= '<tr>';
+            foreach ($row as $val) {
+                $html .= '<td>' . htmlspecialchars($val) . '</td>';
+            }
+            $html .= '</tr>';
+        }
+        $html .= '</table>';
+        $pdf->writeHTML($html);
+        $pdf->Output('leave_report_' . date('Y-m-d') . '.pdf', 'D');
+        exit();
+    } else {
+        // default to csv
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="leave_report_' . date('Y-m-d') . '.csv"');
+        $out = fopen('php://output', 'w');
+        fputcsv($out, $headers);
+        foreach ($rows as $row) {
+            fputcsv($out, array_values($row));
+        }
+        exit();
     }
-    exit();
 }
 
 // Get departments for filter
@@ -76,16 +123,17 @@ if ($reportType === 'balance') {
     $reportData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $reportTitle = "Leave Balance Report";
 } elseif ($reportType === 'usage') {
-    $query = "SELECT e.department, lr.leave_type, COUNT(*) as count, SUM(lr.total_days) as total_days 
+    $query = "SELECT e.department, COALESCE(lt.name, lr.leave_type) as leave_type, COUNT(*) as count, SUM(lr.total_days) as total_days 
               FROM leave_requests lr 
               JOIN employees e ON lr.employee_id = e.id 
+              LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id 
               WHERE lr.status = 'approved'";
     if ($departmentFilter) {
         $query .= " AND e.department = ?";
-        $stmt = $db->prepare($query . " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type");
+        $stmt = $db->prepare($query . " GROUP BY e.department, leave_type ORDER BY e.department, leave_type");
         $stmt->execute([$departmentFilter]);
     } else {
-        $query .= " GROUP BY e.department, lr.leave_type ORDER BY e.department, lr.leave_type";
+        $query .= " GROUP BY e.department, leave_type ORDER BY e.department, leave_type";
         $stmt = $db->prepare($query);
         $stmt->execute();
     }

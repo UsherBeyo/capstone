@@ -9,22 +9,25 @@ $db = (new Database())->connect();
 
 // split the requests into pending/approved/rejected
 // use LEFT JOIN on users so that a missing user_id on an employee doesn't hide the request
-$pending = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
+$pending = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email, COALESCE(lt.name, lr.leave_type) AS leave_type_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
     LEFT JOIN users u ON e.user_id = u.id
+    LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
     WHERE lr.status = 'pending'
     ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
-$approved = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
+$approved = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email, COALESCE(lt.name, lr.leave_type) AS leave_type_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
     LEFT JOIN users u ON e.user_id = u.id
+    LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
     WHERE lr.status = 'approved'
     ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
-$rejected = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email
+$rejected = $db->query("SELECT lr.*, e.first_name, e.last_name, u.email, COALESCE(lt.name, lr.leave_type) AS leave_type_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
     LEFT JOIN users u ON e.user_id = u.id
+    LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
     WHERE lr.status = 'rejected'
     ORDER BY lr.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -56,7 +59,7 @@ if (empty($_SESSION['csrf_token'])) {
         <tr>
             <td><?= htmlspecialchars($r['first_name'].' '.$r['last_name']); ?></td>
             <td><?= htmlspecialchars($r['email']); ?></td>
-            <td><?= htmlspecialchars($r['leave_type']); ?></td>
+            <td><?= htmlspecialchars($r['leave_type_name']); ?></td>
             <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
             <td><?= intval($r['total_days']); ?></td>
             <td><?= htmlspecialchars($r['reason'] ?? ''); ?></td>
@@ -94,7 +97,7 @@ if (empty($_SESSION['csrf_token'])) {
         <tr>
             <td><?= htmlspecialchars($r['first_name'].' '.$r['last_name']); ?></td>
             <td><?= htmlspecialchars($r['email']); ?></td>
-            <td><?= htmlspecialchars($r['leave_type']); ?></td>
+            <td><?= htmlspecialchars($r['leave_type_name']); ?></td>
             <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
             <td><?= intval($r['total_days']); ?></td>
             <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
@@ -117,7 +120,7 @@ if (empty($_SESSION['csrf_token'])) {
         <tr>
             <td><?= htmlspecialchars($r['first_name'].' '.$r['last_name']); ?></td>
             <td><?= htmlspecialchars($r['email']); ?></td>
-            <td><?= htmlspecialchars($r['leave_type']); ?></td>
+            <td><?= htmlspecialchars($r['leave_type_name']); ?></td>
             <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
             <td><?= intval($r['total_days']); ?></td>
             <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
@@ -128,5 +131,25 @@ if (empty($_SESSION['csrf_token'])) {
     <?php endif; ?>
     </div> <!-- end card -->
 </div>
+
+<script>
+// intercept approve/reject forms and send via fetch
+Array.from(document.querySelectorAll('form')).forEach(function(form){
+    if(form.querySelector('button[name="action"][value="approve"]')) {
+        form.addEventListener('submit', function(e){
+            e.preventDefault();
+            var data = new FormData(form);
+            fetch(form.action, { method: 'POST', body: data })
+                .then(res => res.text())
+                .then(() => {
+                    // simple strategy: reload row by removing it
+                    var tr = form.closest('tr');
+                    if (tr) tr.remove();
+                });
+            return false;
+        });
+    }
+});
+</script>
 </body>
 </html>​

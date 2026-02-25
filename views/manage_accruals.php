@@ -23,14 +23,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
     $employee_id = intval($_POST['employee_id']);
     $amount = floatval($_POST['amount']);
     $month = $_POST['month'];
+    $today = date('Y-m-d H:i:s');
 
-    $stmt = $db->prepare("INSERT INTO accruals (employee_id, amount, created_at) VALUES (?, ?, ?)");
-    if ($stmt->execute([$employee_id, $amount, $month])) {
-        // Update annual balance
-        $updateStmt = $db->prepare("UPDATE employees SET annual_balance = annual_balance + ? WHERE id = ?");
-        $updateStmt->execute([$amount, $employee_id]);
+    // update balance first
+    $updateStmt = $db->prepare("UPDATE employees SET annual_balance = annual_balance + ? WHERE id = ?");
+    $updateStmt->execute([$amount, $employee_id]);
 
-        // Get old balance for logging
+    // record history
+    $histStmt = $db->prepare("INSERT INTO accrual_history (employee_id, amount, date_accrued, month_reference) VALUES (?, ?, ?, ?)");
+    if ($histStmt->execute([$employee_id, $amount, $today, $month])) {
+        // Get old/new balance for logging
         $balStmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
         $balStmt->execute([$employee_id]);
         $newBal = floatval($balStmt->fetchColumn());
@@ -47,12 +49,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
 // Get employees for dropdown (only from employees table)
 $employees = $db->query("SELECT id, first_name, last_name, annual_balance FROM employees ORDER BY first_name")->fetchAll(PDO::FETCH_ASSOC);
 
-// Get accruals history (with error handling)
+// Get accruals history (with fallback to old table for backwards compatibility)
 $accruals = [];
 try {
-    $accruals = $db->query("SELECT a.id, a.employee_id, a.amount, a.created_at, e.first_name, e.last_name FROM accruals a JOIN employees e ON a.employee_id = e.id ORDER BY a.created_at DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+    $accruals = $db->query("SELECT a.id, a.employee_id, a.amount, a.date_accrued AS created_at, e.first_name, e.last_name FROM accrual_history a JOIN employees e ON a.employee_id = e.id ORDER BY a.date_accrued DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $ex) {
-    // table might not exist yet
+    // try old table if present
+    try {
+        $accruals = $db->query("SELECT a.id, a.employee_id, a.amount, a.created_at, e.first_name, e.last_name FROM accruals a JOIN employees e ON a.employee_id = e.id ORDER BY a.created_at DESC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $ex2) {
+        // nothing available
+    }
 }
 ?>
 

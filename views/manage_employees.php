@@ -20,7 +20,7 @@ $managers = $db->query("SELECT e.id, e.first_name, e.last_name FROM employees e 
 $historyEmployee = null;
 if (isset($_GET['view_history'])) {
     $eid = intval($_GET['view_history']);
-    $stmt = $db->prepare("SELECT lr.*, e.first_name, e.last_name FROM leave_requests lr JOIN employees e ON lr.employee_id = e.id WHERE lr.employee_id = ?");
+    $stmt = $db->prepare("SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name FROM leave_requests lr JOIN employees e ON lr.employee_id = e.id LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.employee_id = ?");
     $stmt->execute([$eid]);
     $historyEmployee = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -150,7 +150,7 @@ if (isset($_GET['export_budget'])) {
             <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Comments</th></tr>
             <?php foreach($historyEmployee as $h): ?>
             <tr>
-                <td><?= htmlspecialchars($h['leave_type']); ?></td>
+                <td><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type']); ?></td>
                 <td><?= $h['start_date'].' to '.$h['end_date']; ?></td>
                 <td><?= intval($h['total_days']); ?></td>
                 <td><?= ucfirst($h['status']); ?></td>

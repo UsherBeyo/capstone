@@ -19,12 +19,6 @@ if (!empty($leftovers)) {
 
 if ($leave->accrueMonthly()) {
     echo "Monthly accrual completed.\n";
-    
-    // log the accrual
-    $stmt = $db->prepare("INSERT INTO accruals (employee_id, amount) SELECT id, 1.25 FROM employees");
-    if ($stmt->execute()) {
-        echo "Accrual log recorded.\n";
-    }
 } else {
     echo "Failed to perform accrual.\n";
 }

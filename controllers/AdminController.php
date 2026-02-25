@@ -36,9 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die("Access denied");
         }
 
-        $first_name = trim($_POST['first_name']);
-        $last_name = trim($_POST['last_name']);
-        $department = trim($_POST['department']);
+        // load existing values so we can preserve when not provided
+        $rowStmt = $db->prepare("SELECT first_name, last_name, department FROM employees WHERE id = ?");
+        $rowStmt->execute([$empId]);
+        $existing = $rowStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $first_name = isset($_POST['first_name']) ? trim($_POST['first_name']) : ($existing['first_name'] ?? '');
+        $last_name = isset($_POST['last_name']) ? trim($_POST['last_name']) : ($existing['last_name'] ?? '');
+        $department = isset($_POST['department']) ? trim($_POST['department']) : ($existing['department'] ?? '');
         
         // only admins/hr can update balances and manager
         $manager_id = NULL;
@@ -46,11 +51,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sick = null;
         $force = null;
         
-        if (in_array($role, ['admin','hr','manager'])) {
+        if (in_array($role, ['admin','hr'])) {
             $manager_id = !empty($_POST['manager_id']) ? $_POST['manager_id'] : NULL;
-            $annual = floatval($_POST['annual_balance']);
-            $sick = floatval($_POST['sick_balance']);
-            $force = intval($_POST['force_balance']);
+            $annual = isset($_POST['annual_balance']) ? floatval($_POST['annual_balance']) : null;
+            $sick = isset($_POST['sick_balance']) ? floatval($_POST['sick_balance']) : null;
+            $force = isset($_POST['force_balance']) ? intval($_POST['force_balance']) : null;
         }
 
         // get old balances to log changes
@@ -107,13 +112,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // admin adding historical leave entry for employee
     if (isset($_POST['add_history'])) {
         $empId = intval($_POST['employee_id']);
-        $type = trim($_POST['leave_type']);
+        $typeId = intval($_POST['leave_type_id']);
         $start = $_POST['start_date'];
         $end = $_POST['end_date'];
         $days = floatval($_POST['total_days']);
         $reason = trim($_POST['reason'] ?? '');
         $status = 'approved';
         $approved_by = $_SESSION['user_id'];
+
+        // resolve leave type name for compatibility
+        $ltStmt = $db->prepare("SELECT * FROM leave_types WHERE id = ?");
+        $ltStmt->execute([$typeId]);
+        $ltInfo = $ltStmt->fetch(PDO::FETCH_ASSOC);
+        $typeName = $ltInfo ? $ltInfo['name'] : '';
 
         // get balance snapshots before deduction, allow override via form
         $snapshots = $leaveModel->getBalanceSnapshots($empId);
@@ -127,28 +138,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $snapshots['force_balance'] = intval($_POST['snapshot_force_balance']);
         }
 
-        $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, total_days, reason, status, approved_by, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$empId, $type, $start, $end, $days, $reason, $status, $approved_by, $snapshots['annual_balance'], $snapshots['sick_balance'], $snapshots['force_balance']]);
+        $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, approved_by, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$empId, $typeName, $typeId, $start, $end, $days, $reason, $status, $approved_by, $snapshots['annual_balance'], $snapshots['sick_balance'], $snapshots['force_balance']]);
         $leave_id = $db->lastInsertId();
 
-        // deduct from corresponding balance and log change
-        $col = 'annual_balance';
-        switch (strtolower($type)) {
-            case 'sick': $col='sick_balance'; break;
-            case 'force': $col='force_balance'; break;
+        // if this type deducts balance
+        if ($ltInfo && $ltInfo['deduct_balance']) {
+            // choose correct column
+            $col = 'annual_balance';
+            switch (strtolower($ltInfo['name'])) {
+                case 'sick': $col='sick_balance'; break;
+                case 'force': $col='force_balance'; break;
+            }
+            // get old balance
+            $oldStmt = $db->prepare("SELECT $col FROM employees WHERE id = ?");
+            $oldStmt->execute([$empId]);
+            $oldBalance = floatval($oldStmt->fetchColumn());
+            // update balance
+            $db->prepare("UPDATE employees SET $col = GREATEST(0, $col - ?) WHERE id = ?")->execute([$days, $empId]);
+            // log to budget history and leave_balance_logs
+            $newBalance = max(0, $oldBalance - $days);
+            $leaveModel->logBudgetChange($empId, $ltInfo['name'], $oldBalance, $newBalance, 'deduction', $leave_id, 'Historical leave entry added by admin');
+            $stmtLog = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason, leave_id) VALUES (?, ?, ?, ?)");
+            $stmtLog->execute([$empId, -1 * $days, 'deduction', $leave_id]);
         }
-        
-        // get old balance
-        $oldStmt = $db->prepare("SELECT $col FROM employees WHERE id = ?");
-        $oldStmt->execute([$empId]);
-        $oldBalance = floatval($oldStmt->fetchColumn());
-        
-        // update balance
-        $db->prepare("UPDATE employees SET $col = GREATEST(0, $col - ?) WHERE id = ?")->execute([$days, $empId]);
-        
-        // log to budget history
-        $newBalance = max(0, $oldBalance - $days);
-        $leaveModel->logBudgetChange($empId, ucfirst($type), $oldBalance, $newBalance, 'deduction', $leave_id, 'Historical leave entry added by admin');
 
         header("Location: ../views/employee_profile.php?id=$empId&added_history=1");
         exit();

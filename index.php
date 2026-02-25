@@ -1,12 +1,26 @@
 <?php
+// simple front controller with rudimentary router
+require_once __DIR__ . '/core/Router.php';
 
-echo 'Hello World!';
+// sample routes (expand as needed)
+Router::get('/login', function() {
+    include __DIR__ . '/views/login.php';
+});
 
-echo 'Report Kadita';
+Router::post('/login', function() {
+    require_once __DIR__ . '/controllers/AuthController.php';
+});
 
-# yahoo
+// leave routes
+Router::post('/leave', function() {
+    require_once __DIR__ . '/controllers/LeaveController.php';
+});
 
-echo 'echo echo echo try';
-#gitigtigtigtit
+// default catch-all could redirect to dashboard if authenticated
+Router::get('/', function() {
+    header('Location: views/dashboard.php');
+});
 
+// dispatch the requested URI
+Router::dispatch();
 ?>

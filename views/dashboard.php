@@ -58,7 +58,10 @@ if ($role === 'employee') {
         // fetch this employee's own leave requests
         $ownRequests = [];
         if ($my_emp_id) {
-            $reqStmt = $db->prepare("SELECT * FROM leave_requests WHERE employee_id = ? ORDER BY start_date DESC");
+            $reqStmt = $db->prepare("SELECT lr.*, COALESCE(lt.name, lr.leave_type) AS leave_type_name
+                FROM leave_requests lr
+                LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+                WHERE employee_id = ? ORDER BY start_date DESC");
             $reqStmt->execute([$my_emp_id]);
             $ownRequests = $reqStmt->fetchAll(PDO::FETCH_ASSOC);
         }
@@ -94,7 +97,7 @@ if ($role === 'employee') {
                         </tr>
                         <?php foreach($pending as $r): ?>
                         <tr>
-                            <td><?= htmlspecialchars($r['leave_type']); ?></td>
+                            <td><?= htmlspecialchars($r['leave_type_name'] ?? $r['leave_type']); ?></td>
                             <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
                             <td><?= $r['total_days']; ?></td>
                             <td><?= ucfirst($r['status']); ?></td>
@@ -119,7 +122,7 @@ if ($role === 'employee') {
                             </tr>
                             <?php foreach($archived as $r): ?>
                             <tr>
-                                <td><?= htmlspecialchars($r['leave_type']); ?></td>
+                                <td><?= htmlspecialchars($r['leave_type_name'] ?? $r['leave_type']); ?></td>
                                 <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
                                 <td><?= $r['total_days']; ?></td>
                                 <td><?= ucfirst($r['status']); ?></td>
@@ -133,23 +136,94 @@ if ($role === 'employee') {
             <?php endif; ?>
         </div>
 
-    <?php elseif($role == 'manager' || $role == 'hr'): ?>
+    <?php elseif(in_array($role, ['manager','hr','admin'])): ?>
+
+        <?php
+        // analytics: most absent employee
+        $mostAbsent = $db->query("SELECT employee_id, COUNT(*) AS cnt FROM leave_requests WHERE status='approved' GROUP BY employee_id ORDER BY cnt DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        $mostAbsentName = '';
+        if ($mostAbsent) {
+            $stmt2 = $db->prepare("SELECT first_name, last_name FROM employees WHERE id = ?");
+            $stmt2->execute([$mostAbsent['employee_id']]);
+            $e = $stmt2->fetch(PDO::FETCH_ASSOC);
+            if ($e) {
+                $mostAbsentName = $e['first_name'].' '.$e['last_name'];
+            }
+        }
+
+        // monthly trends
+        $monthlyStmt = $db->query("SELECT MONTH(start_date) as m, COUNT(*) as cnt FROM leave_requests WHERE status='approved' GROUP BY MONTH(start_date)");
+        $monthlyData = $monthlyStmt->fetchAll(PDO::FETCH_ASSOC);
+        $phpMonthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+        // department counts for chart
+        $deptChartStmt = $db->query("SELECT department, COUNT(*) AS cnt FROM employees GROUP BY department");
+        $deptChartData = $deptChartStmt->fetchAll(PDO::FETCH_ASSOC);
+        ?>
+        <div class="card" style="margin-bottom:20px;">
+            <h3>Analytics</h3>
+            <?php if($mostAbsent): ?>
+                <p><strong>Most absent employee:</strong> <?= htmlspecialchars($mostAbsentName); ?> (<?= $mostAbsent['cnt']; ?> days)</p>
+            <?php endif; ?>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                <canvas id="monthlyChart" width="300" height="150"></canvas>
+                <canvas id="deptChart" width="300" height="150"></canvas>
+            </div>
+        </div>
+        <script>
+            var ctx = document.getElementById('monthlyChart').getContext('2d');
+            var chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [<?php foreach($monthlyData as $row){ $m = intval($row['m']); echo '"' . ($phpMonthNames[$m-1] ?? $m) . '",'; } ?>],
+                    datasets: [{
+                        label: 'Approved leaves by month',
+                        data: [<?php foreach($monthlyData as $row){ echo ($row['cnt'] . ','); } ?>],
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)'
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {title: {display:true, text:'Month'}},
+                        y: {beginAtZero:true}
+                    }
+                }
+            });
+
+            var ctx2 = document.getElementById('deptChart').getContext('2d');
+            var deptChart = new Chart(ctx2, {
+                type: 'pie',
+                data: {
+                    labels: [<?php foreach($deptChartData as $d){ echo '"'.htmlspecialchars($d['department']).'",'; } ?>],
+                    datasets: [{
+                        data: [<?php foreach($deptChartData as $d){ echo ($d['cnt'].','); } ?>],
+                        backgroundColor: ['#ff6384','#36a2eb','#ffcd56','#4bc0c0','#9966ff','#ff9f40']
+                    }]
+                },
+                options: {
+                    responsive: true
+                }
+            });
+        </script>
+
 
         <?php
         if ($role === 'manager') {
             $stmt = $db->prepare("
-                SELECT lr.*, e.first_name, e.last_name
+                SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
                 FROM leave_requests lr
                 JOIN employees e ON lr.employee_id = e.id
+                LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
                 WHERE lr.status = 'pending' AND e.manager_id = ?
             ");
             $stmt->execute([$_SESSION['emp_id']]);
         } else {
             // hr sees all pending
             $stmt = $db->prepare("
-                SELECT lr.*, e.first_name, e.last_name
+                SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
                 FROM leave_requests lr
                 JOIN employees e ON lr.employee_id = e.id
+                LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
                 WHERE lr.status = 'pending'
             ");
             $stmt->execute();
@@ -159,18 +233,20 @@ if ($role === 'employee') {
         // fetch archived requests
         if ($role === 'manager') {
             $stmt = $db->prepare("
-                SELECT lr.*, e.first_name, e.last_name
+                SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
                 FROM leave_requests lr
                 JOIN employees e ON lr.employee_id = e.id
+                LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
                 WHERE lr.status IN ('approved', 'rejected') AND e.manager_id = ?
                 ORDER BY lr.created_at DESC LIMIT 50
             ");
             $stmt->execute([$_SESSION['emp_id']]);
         } else {
             $stmt = $db->prepare("
-                SELECT lr.*, e.first_name, e.last_name
+                SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
                 FROM leave_requests lr
                 JOIN employees e ON lr.employee_id = e.id
+                LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
                 WHERE lr.status IN ('approved', 'rejected')
                 ORDER BY lr.created_at DESC LIMIT 100
             ");
@@ -246,7 +322,7 @@ if ($role === 'employee') {
                     <?php foreach($archived as $r): ?>
                     <tr>
                         <td><?= $r['first_name']." ".$r['last_name']; ?></td>
-                        <td><?= htmlspecialchars($r['leave_type']); ?></td>
+                        <td><?= htmlspecialchars($r['leave_type_name'] ?? $r['leave_type']); ?></td>
                         <td><?= $r['start_date']." to ".$r['end_date']; ?></td>
                         <td><?= $r['total_days']; ?></td>
                         <td><?= ucfirst($r['status']); ?></td>
@@ -259,7 +335,9 @@ if ($role === 'employee') {
         <?php endif; ?>
 
     <?php elseif($role == 'admin'): ?>
-
+        <div class="card" style="margin-bottom:20px;">
+            <a href="change_password.php" class="btn">Change Password</a>
+        </div>
         <?php
         // general counts
         $count = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();

@@ -4,15 +4,17 @@ nya nya nya
 
 This project now supports a more complete leave policy:
 
-* **Multiple leave types** – annual, sick and force leave are tracked separately.
-* **Monthly accrual** – employees earn **1.25 days of annual leave per month**. Run `php scripts/accrue.php` (via cron) to apply.
-* **Force leave quota** – every month each employee receives **5 force leave days** which are tracked separately and can be used at the employee's discretion; unused days are reset on accrual.
-* **Sick balance** – tracked separately; can be adjusted by admin.
-* **New database columns**:
-  * `annual_balance` (decimal)
-  * `sick_balance`   (decimal)
-  * `force_balance`  (int)
-
+* **Multiple leave types** – defined in a new `leave_types` table with configurable rules (deduct balance, auto-approve, max per year, etc.). Built-in types include Vacation, Sick, Emergency and Special; admins can add/edit types in the UI.
+* **Type-aware balance tracking** – balances for annual/sick/force (and a legacy generic column) are stored on the employee record and each leave request now carries snapshots for auditing.
+* **Auto-approval rules** – the system evaluates criteria such as short sick leaves, emergency leave, or the `auto_approve` flag on a type and approves requests instantly. Negative balances are automatically rejected.
+* **Conflict detection** – overlapping requests (approved or pending) are blocked before insertion to prevent double-booking.
+* **Holiday & weekend exclusion** – leave calculations ignore weekends and entries in the `holidays` table when computing deductible days.
+* **Monthly accrual** – employees earn **1.25 days of annual leave per month**. Run `php scripts/accrue.php` (via cron) to apply; accrual history is recorded in `accrual_history`.
+* **Force leave quota** – every month each employee receives **5 force leave days** which are tracked separately; unused days are reset on accrual.
+* **Audit tables** – `accrual_history` and `leave_balance_logs` record every change so HR has a full trail.
+* **Email notifications** – leave events trigger SMTP messages via `services/Mail.php`.
+* **Dashboard analytics** – shows most absent employee and monthly trends; managers/HR see charts powered by Chart.js.
+* **Export** – CSV/Excel/PDF export options are available from the reports page (requires PhpSpreadsheet/TCPDF to enable).
 ### Database migration
 
 A helper script has been added at `scripts/migration.php` that will add the new columns and copy any existing `leave_balance` values into `annual_balance`.

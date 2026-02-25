@@ -15,6 +15,10 @@ if ($emp_id) {
     $balances = $stmt->fetch(PDO::FETCH_ASSOC) ?: $balances;
 }
 
+// fetch leave types for dropdown
+$typesStmt = $db->query("SELECT * FROM leave_types ORDER BY name");
+$leaveTypes = $typesStmt->fetchAll(PDO::FETCH_ASSOC);
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -30,15 +34,18 @@ if (empty($_SESSION['csrf_token'])) {
         function updateBalanceInfo() {
             var typeElem = document.getElementById('leave_type');
             if(!typeElem) return;
-            var type = typeElem.value;
+            var selectedId = typeElem.value;
             var info = document.getElementById('balance-info');
-            var bal = {
-                'Annual': <?= json_encode($balances['annual_balance']); ?>,
-                'Sick': <?= json_encode($balances['sick_balance']); ?>,
-                'Force': <?= json_encode($balances['force_balance']); ?>
+            var balanceMap = {
+                <?php foreach ($leaveTypes as $lt): 
+                    $col = strtolower(str_replace(' ', '_', $lt['name'])) . '_balance';
+                    // fallback if column doesn't exist
+                    echo $lt['id'] . ": " . (isset($balances[$col]) ? $balances[$col] : 0) . ",\n";
+                endforeach; ?>
             };
-            var val = (typeof bal[type] !== 'undefined') ? bal[type] : 0;
-            info.innerHTML = type + ' balance: ' + val + ' days';
+            var val = balanceMap[selectedId] !== undefined ? balanceMap[selectedId] : 0;
+            var name = typeElem.options[typeElem.selectedIndex].text;
+            info.innerHTML = name + ' balance: ' + val + ' days';
         }
 
         window.addEventListener('load', function(){
@@ -47,9 +54,26 @@ if (empty($_SESSION['csrf_token'])) {
             if(select){
                 select.addEventListener('change', function(){
                     updateBalanceInfo();
+                    calculateDays();
                 });
             }
         });
+
+        function checkBalanceWarning(days) {
+            var balanceInfo = document.getElementById('balance-info');
+            var text = balanceInfo.textContent || balanceInfo.innerText;
+            var parts = text.split(':');
+            if (parts.length >= 2) {
+                var bal = parseFloat(parts[1]);
+                if (!isNaN(bal) && days > bal) {
+                    balanceInfo.style.color = 'red';
+                    balanceInfo.innerHTML += ' <span style="font-weight:bold;">(insufficient)</span>';
+                } else {
+                    balanceInfo.style.color = '';
+                }
+            }
+        }
+
     </script>
 </head>
 <body>
@@ -67,17 +91,14 @@ if (empty($_SESSION['csrf_token'])) {
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
 
             <label>Leave Type</label>
-            <select name="leave_type" id="leave_type">
-                <option value="Annual">Annual</option>
-                <option value="Sick">Sick</option>
-                <option value="Force">Force</option>
+            <select name="leave_type_id" id="leave_type">
+                <?php foreach ($leaveTypes as $lt): ?>
+                    <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
+                <?php endforeach; ?>
             </select>
 
-            <div id="balance-info" style="margin-top:8px;font-weight:bold;">
-                Annual: <?= $balances['annual_balance']; ?> days<br>
-                Sick: <?= $balances['sick_balance']; ?> days<br>
-                Force: <?= $balances['force_balance']; ?> days
-            </div>
+            <div id="balance-info" style="margin-top:8px;font-weight:bold;">&nbsp;</div>
+
 
             <label>Start Date</label>
             <input type="date" name="start_date" id="start_date" onchange="calculateDays()" required>

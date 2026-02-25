@@ -38,6 +38,50 @@ try {
         type VARCHAR(50) NOT NULL DEFAULT 'Other'
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8");
 
+    // leave_types table holds metadata for each kind of leave
+    $db->exec("CREATE TABLE IF NOT EXISTS leave_types (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        deduct_balance TINYINT(1) NOT NULL DEFAULT 1,
+        requires_approval TINYINT(1) NOT NULL DEFAULT 1,
+        max_days_per_year DECIMAL(6,2) DEFAULT NULL,
+        auto_approve TINYINT(1) NOT NULL DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8");
+    // set up some defaults if none exist
+    $db->exec("INSERT IGNORE INTO leave_types (name, deduct_balance, requires_approval, max_days_per_year, auto_approve) VALUES
+        ('Vacation',1,1,NULL,0),
+        ('Sick',1,1,NULL,0),
+        ('Emergency',0,1,NULL,1),
+        ('Special',0,0,NULL,1)");
+
+    // ensure leave_requests stores a reference to leave_types and keep old column for backwards compatibility
+    $db->exec("ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_type_id INT NULL AFTER leave_type");
+    // try to backfill the new column for existing rows
+    $db->exec("UPDATE leave_requests lr
+                 JOIN leave_types lt ON LOWER(lr.leave_type) = LOWER(lt.name)
+                 SET lr.leave_type_id = lt.id");
+    // optionally create a foreign key once data is consistent
+    // $db->exec("ALTER TABLE leave_requests ADD CONSTRAINT fk_leave_type FOREIGN KEY (leave_type_id) REFERENCES leave_types(id)");
+
+    // new history tables for audit
+    $db->exec("CREATE TABLE IF NOT EXISTS accrual_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        amount DECIMAL(6,2) NOT NULL,
+        date_accrued DATE NOT NULL,
+        month_reference VARCHAR(7) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS leave_balance_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        change_amount DECIMAL(6,2) NOT NULL,
+        reason VARCHAR(50) NOT NULL,
+        leave_id INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8");
+
     // create accruals log table to record monthly accruals
     $db->exec("CREATE TABLE IF NOT EXISTS accruals (
         id INT AUTO_INCREMENT PRIMARY KEY,

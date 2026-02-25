@@ -1,11 +1,17 @@
 function calculateDays() {
-    const start = new Date(document.getElementById("start_date").value);
-    const end = new Date(document.getElementById("end_date").value);
-
-    if (start && end) {
-        const diff = (end - start) / (1000 * 3600 * 24) + 1;
-        document.getElementById("total_days").value = diff;
-    }
+    const start = document.getElementById("start_date").value;
+    const end = document.getElementById("end_date").value;
+    if (!start || !end) return;
+    fetch(`../api/calc_days.php?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.days !== undefined) {
+                document.getElementById("total_days").value = data.days;
+                if (typeof window.checkBalanceWarning === 'function') {
+                    window.checkBalanceWarning(data.days);
+                }
+            }
+        });
 }
 
 document.querySelector('form').addEventListener('submit', function(e){

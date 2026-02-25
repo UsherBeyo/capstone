@@ -22,7 +22,7 @@ if (!in_array($role, ['admin','manager','hr']) && ($_SESSION['emp_id'] ?? 0) != 
 
 // export leave history CSV
 if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role']==='hr')) {
-    $stmt = $db->prepare("SELECT leave_type, start_date, end_date, total_days, status, created_at as 'submitted_date', reason, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance FROM leave_requests WHERE employee_id = ? ORDER BY start_date");
+    $stmt = $db->prepare("SELECT COALESCE(lt.name, lr.leave_type) AS leave_type_name, lr.start_date, lr.end_date, lr.total_days, lr.status, lr.created_at as 'submitted_date', lr.reason, lr.snapshot_annual_balance, lr.snapshot_sick_balance, lr.snapshot_force_balance FROM leave_requests lr LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.employee_id = ? ORDER BY lr.start_date");
     $stmt->execute([$id]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     // output as simple Excel (HTML) so clients can adjust column widths
@@ -31,7 +31,7 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
     echo "<table border=1>\n";
     // header row with some width hints
     echo "<tr>";
-    $headers = $rows[0] ? array_keys($rows[0]) : ['leave_type','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance'];
+    $headers = $rows[0] ? array_keys($rows[0]) : ['leave_type_name','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance'];
     foreach($headers as $h) {
         echo "<th style='min-width:120px;'>".htmlspecialchars($h)."</th>";
     }
@@ -55,7 +55,7 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 // fetch history for display
-$stmt = $db->prepare("SELECT * FROM leave_requests WHERE employee_id = ? ORDER BY start_date DESC");
+$stmt = $db->prepare("SELECT lr.*, COALESCE(lt.name, lr.leave_type) AS leave_type_name FROM leave_requests lr LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.employee_id = ? ORDER BY lr.start_date DESC");
 $stmt->execute([$id]);
 $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -97,7 +97,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
                         <a href="edit_employee.php?id=<?= $e['id']; ?>">Edit profile</a>
                     <?php endif; ?>
-                    <?php if(in_array($_SESSION['role'], ['admin','hr'])): ?>
+                    <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])): ?>
                         &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1">Export history</a>
                     <?php endif; ?>
                 </p>
@@ -131,10 +131,14 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <input type="hidden" name="add_history" value="1">
                     <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
                     <label>Leave Type</label>
-                    <select name="leave_type">
-                        <option>Annual</option>
-                        <option>Sick</option>
-                        <option>Force</option>
+                    <?php
+                        $ltStmt = $db->query("SELECT * FROM leave_types ORDER BY name");
+                        $allTypes = $ltStmt->fetchAll(PDO::FETCH_ASSOC);
+                    ?>
+                    <select name="leave_type_id">
+                        <?php foreach($allTypes as $lt): ?>
+                            <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
+                        <?php endforeach; ?>
                     </select>
                     <label>Start Date</label>
                     <input type="date" name="start_date" required>
@@ -167,7 +171,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
             <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Submitted</th><th>Annual Bal</th><th>Sick Bal</th><th>Force Bal</th><th>Comments</th></tr>
             <?php foreach($history as $h): ?>
             <tr>
-                <td><?= htmlspecialchars($h['leave_type'] ?? ''); ?></td>
+                <td><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type'] ?? ''); ?></td>
                 <td><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
                 <td><?= isset($h['total_days']) ? intval($h['total_days']) : ''; ?></td>
                 <td><?= htmlspecialchars($h['status'] ?? ''); ?></td>
