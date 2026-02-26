@@ -33,9 +33,9 @@ if (!isset($db)) {
             }
         }
         ?>
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌓</button>
         <div class="profile-dropdown">
             <button class="topbar-profile-btn" onclick="toggleProfileMenu()" title="Profile">👤</button>
-            <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌓</button>
             <div id="profileMenu" class="profile-menu" style="display:none;">
                 <div class="profile-menu-header"><?= htmlspecialchars($displayName); ?></div>
                 <?php if ($empRecord): ?>
