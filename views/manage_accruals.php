@@ -82,10 +82,12 @@ try {
         </div>
     <?php endif; ?>
 
-    <div class="card">
-        <h3>Record Manual Accrual</h3>
-        <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.</p>
-        <form method="POST">
+    <div class="card-container" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
+        <div class="card" style="flex:1;min-width:300px;max-width:500px;">
+            <h3>Record Manual Accrual</h3>
+            <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.</p>
+            <div class="form-centered">
+            <form method="POST">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
             <input type="hidden" name="record_accrual" value="1">
 
@@ -105,11 +107,11 @@ try {
 
             <button type="submit">Record Accrual</button>
         </form>
-    </div>
-
-    <div class="card" style="margin-top:20px;">
-        <h3>Accrual History (Last 50)</h3>
-        <table style="font-size:13px;">
+        </div>
+        </div>
+        <div class="card" style="flex:1;min-width:300px;max-width:700px;">
+            <h3>Accrual History (Last 50)</h3>
+            <table style="font-size:13px;">
             <tr><th>Employee</th><th>Amount</th><th>Date</th></tr>
             <?php foreach ($accruals as $a): ?>
             <tr>
@@ -118,8 +120,9 @@ try {
                 <td><?= date('M d, Y', strtotime($a['created_at'])); ?></td>
             </tr>
             <?php endforeach; ?>
-        </table>
-    </div>
+            </table>
+        </div>
+        </div> <!-- end card-container -->
 
 </div>
 

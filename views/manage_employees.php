@@ -54,7 +54,7 @@ if (isset($_GET['export_budget'])) {
 
 <div class="content">
 
-    <button id="openCreateModal" class="btn" style="margin-bottom:20px;">+ New Employee</button>
+    <button id="openCreateModal" class="btn" style="margin:50px 0 0px 0;">+ New Employee</button>
 
     <!-- Compact modal for creating employee -->
     <div id="createModal" class="modal" style="display:none;">

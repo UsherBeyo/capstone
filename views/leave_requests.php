@@ -64,19 +64,20 @@ if (empty($_SESSION['csrf_token'])) {
             <td><?= intval($r['total_days']); ?></td>
             <td><?= htmlspecialchars($r['reason'] ?? ''); ?></td>
             <td>
-                <form method="POST" action="../controllers/LeaveController.php" style="display:inline;">
-                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-                    <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
-                    <button type="submit" name="action" value="approve">Approve</button>
-                </form>
-                &nbsp;
-                <form method="POST" action="../controllers/LeaveController.php" style="display:inline;" onsubmit="return confirm('Reject this request?');">
-                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-                    <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
-                    <input type="hidden" name="action" value="reject">
-                    <input type="text" name="comments" placeholder="Reason" required>
-                    <button type="submit">Reject</button>
-                </form>
+                <div class="action-forms">
+                    <form method="POST" action="../controllers/LeaveController.php">
+                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                        <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
+                        <button type="submit" name="action" value="approve">Approve</button>
+                    </form>
+                    <form method="POST" action="../controllers/LeaveController.php" onsubmit="return confirm('Reject this request?');">
+                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                        <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
+                        <input type="hidden" name="action" value="reject">
+                        <input type="text" name="comments" placeholder="Reason" required>
+                        <button type="submit">Reject</button>
+                    </form>
+                </div>
             </td>
         </tr>
         <?php endforeach; ?>
