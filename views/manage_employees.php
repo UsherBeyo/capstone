@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
 
 if ($_SESSION['role'] !== 'admin') {
@@ -40,6 +40,112 @@ if (isset($_GET['export_budget'])) {
         exit();
     }
 }
+
+// export employee leave card
+if (isset($_GET['export_leave_card'])) {
+    $eid = intval($_GET['export_leave_card']);
+    $empStmt = $db->prepare("SELECT * FROM employees WHERE id = ?");
+    $empStmt->execute([$eid]);
+    $emp = $empStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$emp) die("Employee not found");
+    
+    // build set of months from accruals and undertime logs
+    $months = [];
+    $stmt = $db->prepare("SELECT DISTINCT month_reference FROM accrual_history WHERE employee_id = ? ORDER BY month_reference");
+    $stmt->execute([$eid]);
+    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
+        $months[$m] = true;
+    }
+    $stmt = $db->prepare("SELECT DISTINCT DATE_FORMAT(created_at,'%Y-%m') FROM leave_balance_logs WHERE employee_id = ?");
+    $stmt->execute([$eid]);
+    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
+        $months[$m] = true;
+    }
+    ksort($months);
+    
+    // build data
+    $rows = [];
+    foreach(array_keys($months) as $m) {
+        // earned is accrual amount (annual & sick)
+        $stmt = $db->prepare("SELECT SUM(amount) FROM accrual_history WHERE employee_id=? AND month_reference=?");
+        $stmt->execute([$eid, $m]);
+        $earned = floatval($stmt->fetchColumn() ?: 0);
+        // undertime paid
+        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_paid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
+        $stmt->execute([$eid, $m]);
+        $utPaid = floatval($stmt->fetchColumn() ?: 0);
+        // undertime unpaid
+        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_unpaid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
+        $stmt->execute([$eid, $m]);
+        $utUnpaid = floatval($stmt->fetchColumn() ?: 0);
+        // calculate end-of-month balances
+        $firstDayNext = date('Y-m-d', strtotime($m . '-01 +1 month'));
+        $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Annual' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
+        $balStmt->execute([$eid, $firstDayNext]);
+        $vacBal = floatval($balStmt->fetchColumn() ?: 0);
+        $balStmt2 = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Sick' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
+        $balStmt2->execute([$eid, $firstDayNext]);
+        $sickBal = floatval($balStmt2->fetchColumn() ?: 0);
+        $rows[] = [
+            'month' => $m,
+            'earned' => $earned,
+            'ut_paid' => $utPaid,
+            'ut_unpaid' => $utUnpaid,
+            'vac_bal' => $vacBal,
+            'sick_bal' => $sickBal
+        ];
+    }
+    
+    // output as Excel (HTML)
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+    header('Content-Disposition: attachment; filename="leave_card_'.$eid.'_'.date('Y-m-d').'.xls"');
+    echo "<table border=1>\n";
+    // Add employee information header
+    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";
+    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($emp['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($emp['first_name'].' '.$emp['last_name'])."</td><td><strong>Position</strong></td><td>".htmlspecialchars($emp['position'] ?? '')."</td><td><strong>Department</strong></td><td>".htmlspecialchars($emp['department'])."</td></tr>\n";
+    echo "<tr><td><strong>Status</strong></td><td>".htmlspecialchars($emp['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($emp['civil_status'] ?? '')."</td><td><strong>Entrance to Duty</strong></td><td>".htmlspecialchars($emp['entrance_to_duty'] ?? '')."</td><td><strong>Unit</strong></td><td>".htmlspecialchars($emp['unit'] ?? '')."</td></tr>\n";
+    echo "<tr><td colspan='11'>&nbsp;</td></tr>\n";
+    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>LEAVE HISTORY</strong></td></tr>\n";
+    // header row with merged columns for Vacation and Sick
+    echo "<tr style='background-color:#e0e0e0;'>";
+    echo "<th>Period</th>";
+    echo "<th>Particulars</th>";
+    echo "<th colspan='4' style='text-align:center;'>Vacational Leave</th>";
+    echo "<th colspan='4' style='text-align:center;'>Sick Leave</th>";
+    echo "<th>Remarks</th>";
+    echo "</tr>\n";
+    // sub-header row
+    echo "<tr style='background-color:#f0f0f0;'>";
+    echo "<th></th>";
+    echo "<th></th>";
+    echo "<th>Earned</th>";
+    echo "<th>Undertime Paid</th>";
+    echo "<th>Balance</th>";
+    echo "<th>Undertime Unpaid</th>";
+    echo "<th>Earned</th>";
+    echo "<th>Undertime Paid</th>";
+    echo "<th>Balance</th>";
+    echo "<th>Undertime Unpaid</th>";
+    echo "<th></th>";
+    echo "</tr>\n";
+    foreach($rows as $r) {
+        echo "<tr>";
+        echo "<td>".htmlspecialchars($r['month'])."</td>";
+        echo "<td></td>";
+        echo "<td>".number_format($r['earned'], 2)."</td>";
+        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
+        echo "<td>".number_format($r['vac_bal'], 2)."</td>";
+        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
+        echo "<td>".number_format($r['earned'], 2)."</td>";
+        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
+        echo "<td>".number_format($r['sick_bal'], 2)."</td>";
+        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
+        echo "<td></td>";
+        echo "</tr>\n";
+    }
+    echo "</table>";
+    exit();
+}
 ?>
 
 <!DOCTYPE html>
@@ -73,6 +179,20 @@ if (isset($_GET['export_budget'])) {
                 <input type="text" name="last_name" required>
                 <label>Department</label>
                 <input type="text" name="department" required>
+                <label>Position</label>
+                <input type="text" name="position">
+                <label>Status</label>
+                <input type="text" name="status">
+                <label>Civil Status</label>
+                <input type="text" name="civil_status">
+                <label>Entrance to Duty</label>
+                <input type="date" name="entrance_to_duty">
+                <label>Unit</label>
+                <input type="text" name="unit">
+                <label>GSIS Policy No.</label>
+                <input type="text" name="gsis_policy_no">
+                <label>National Reference Card No.</label>
+                <input type="text" name="national_reference_card_no">
                 <label>Password</label>
                 <input type="password" name="password" required placeholder="Set temporary password">
                 <label>Role</label>
@@ -117,6 +237,8 @@ if (isset($_GET['export_budget'])) {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Department</th>
+                <th>Position</th>
+                <th>Status</th>
                 <th>Annual</th>
                 <th>Sick</th>
                 <th>Force</th>
@@ -129,6 +251,8 @@ if (isset($_GET['export_budget'])) {
                 <td><?= $e['first_name']." ". $e['last_name']; ?></td>
                 <td><?= $e['email']; ?></td>
                 <td><?= $e['department']; ?></td>
+                <td><?= htmlspecialchars($e['position'] ?? ''); ?></td>
+                <td><?= htmlspecialchars($e['status'] ?? ''); ?></td>
                 <td><?= isset($e['annual_balance']) ? $e['annual_balance'] : 0; ?></td>
                 <td><?= isset($e['sick_balance']) ? $e['sick_balance'] : 0; ?></td>
                 <td><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></td>
@@ -136,6 +260,8 @@ if (isset($_GET['export_budget'])) {
                     <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">&#128100;</a>
                     &nbsp;
                     <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link">✏️</a>
+                    &nbsp;
+                    <a href="manage_employees.php?export_leave_card=<?= $e['id']; ?>" title="Export leave card" class="profile-link">📊</a>
                 </td>
             </tr>
             <?php endforeach; ?>

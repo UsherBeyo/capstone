@@ -21,6 +21,50 @@ body {
     overflow-x: hidden;
 }
 
+/* Theme variables */
+:root {
+    --bg: #1a1a22;
+    --card: rgba(255,255,255,0.12);
+    --text: #ffffff;
+    --muted: rgba(255,255,255,0.6);
+}
+
+.light-theme {
+    --bg: #f5f7fb;
+    --card: rgba(0,0,0,0.04);
+    --text: #111827;
+    --muted: rgba(0,0,0,0.6);
+}
+
+body { background: var(--bg); color: var(--text); }
+.card { background: var(--card); }
+
+/* Topbar */
+.topbar {
+    position: fixed;
+    top: 8px;
+    left: 280px;
+    right: 24px;
+    height: 56px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    z-index:1500;
+}
+.topbar-left{ font-weight:700; font-size:18px; }
+.topbar-right{ display:flex; align-items:center; gap:12px; }
+.topbar-profile-btn { width:40px; height:40px; border-radius:50%; background:var(--card); border:2px solid rgba(255,255,255,0.2); color:var(--text); font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:0.3s; }
+.topbar-profile-btn:hover { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.4); }
+.profile-menu{ position:absolute; right:24px; top:56px; background:var(--card); color:var(--text); padding:8px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.4); min-width:160px; }
+.profile-menu a{ display:block; padding:8px 12px; color:var(--text); text-decoration:none; }
+.profile-menu-header{ font-weight:700; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.04); }
+.theme-toggle{ background:transparent; border:none; color:var(--text); cursor:pointer; font-size:18px; }
+
+/* small screens adjustment */
+@media (max-width:900px){
+    .topbar { left: 20px; right: 20px; }
+}
+
 /* Sidebar */
 .sidebar {
     width: 250px;

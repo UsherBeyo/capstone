@@ -1,12 +1,12 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
 
-// admin can edit any employee, employees can edit their own profile
+// admin/hr/manager can edit any employee, employees can edit their own profile
 $role = $_SESSION['role'] ?? '';
 $emp_id = $_SESSION['emp_id'] ?? 0;
 
-if ($role !== 'admin' && $role !== 'hr' && $role !== 'manager') {
+if (!in_array($role, ['admin','hr','manager','employee'])) {
     die("Access denied");
 }
 
@@ -73,6 +73,20 @@ $is_own_profile = ($role === 'employee');
             <input type="text" name="last_name" value="<?= htmlspecialchars($e['last_name']); ?>" required>
             <label>Department</label>
             <input type="text" name="department" value="<?= htmlspecialchars($e['department']); ?>" required>
+            <label>Position</label>
+            <input type="text" name="position" value="<?= htmlspecialchars($e['position'] ?? ''); ?>">
+            <label>Status</label>
+            <input type="text" name="status" value="<?= htmlspecialchars($e['status'] ?? ''); ?>">
+            <label>Civil Status</label>
+            <input type="text" name="civil_status" value="<?= htmlspecialchars($e['civil_status'] ?? ''); ?>">
+            <label>Entrance to Duty</label>
+            <input type="date" name="entrance_to_duty" value="<?= htmlspecialchars($e['entrance_to_duty'] ?? ''); ?>">
+            <label>Unit</label>
+            <input type="text" name="unit" value="<?= htmlspecialchars($e['unit'] ?? ''); ?>">
+            <label>GSIS Policy No.</label>
+            <input type="text" name="gsis_policy_no" value="<?= htmlspecialchars($e['gsis_policy_no'] ?? ''); ?>">
+            <label>National Reference Card No.</label>
+            <input type="text" name="national_reference_card_no" value="<?= htmlspecialchars($e['national_reference_card_no'] ?? ''); ?>">
             
             <?php if(!$is_own_profile): ?>
             <label>Annual Balance</label>
