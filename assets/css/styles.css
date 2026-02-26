@@ -53,7 +53,8 @@ body { background: var(--bg); color: var(--text); }
 }
 .topbar-left{ font-weight:700; font-size:18px; }
 .topbar-right{ display:flex; align-items:center; gap:12px; }
-.topbar-avatar{ width:40px; height:40px; border-radius:50%; object-fit:cover; cursor:pointer; border:2px solid rgba(255,255,255,0.06);} 
+.topbar-profile-btn { width:40px; height:40px; border-radius:50%; background:var(--card); border:2px solid rgba(255,255,255,0.2); color:var(--text); font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:0.3s; }
+.topbar-profile-btn:hover { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.4); }
 .profile-menu{ position:absolute; right:24px; top:56px; background:var(--card); color:var(--text); padding:8px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.4); min-width:160px; }
 .profile-menu a{ display:block; padding:8px 12px; color:var(--text); text-decoration:none; }
 .profile-menu-header{ font-weight:700; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.04); }

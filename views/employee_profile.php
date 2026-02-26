@@ -20,6 +20,106 @@ if (!in_array($role, ['admin','manager','hr']) && ($_SESSION['emp_id'] ?? 0) != 
     die("Access denied");
 }
 
+// export leave card - monthly accruals and undertime
+if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && ($_SESSION['role'] === 'admin' || $_SESSION['role']==='hr' || ($_SESSION['emp_id'] ?? 0) == $id)) {
+    // build set of months from accruals and undertime logs
+    $months = [];
+    $stmt = $db->prepare("SELECT DISTINCT month_reference FROM accrual_history WHERE employee_id = ? ORDER BY month_reference");
+    $stmt->execute([$id]);
+    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
+        $months[$m] = true;
+    }
+    $stmt = $db->prepare("SELECT DISTINCT DATE_FORMAT(created_at,'%Y-%m') FROM leave_balance_logs WHERE employee_id = ?");
+    $stmt->execute([$id]);
+    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
+        $months[$m] = true;
+    }
+    ksort($months);
+    
+    // build data
+    $rows = [];
+    foreach(array_keys($months) as $m) {
+        // earned is accrual amount (annual & sick)
+        $stmt = $db->prepare("SELECT SUM(amount) FROM accrual_history WHERE employee_id=? AND month_reference=?");
+        $stmt->execute([$id, $m]);
+        $earned = floatval($stmt->fetchColumn() ?: 0);
+        // undertime paid
+        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_paid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
+        $stmt->execute([$id, $m]);
+        $utPaid = floatval($stmt->fetchColumn() ?: 0);
+        // undertime unpaid
+        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_unpaid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
+        $stmt->execute([$id, $m]);
+        $utUnpaid = floatval($stmt->fetchColumn() ?: 0);
+        // calculate end-of-month balances
+        $firstDayNext = date('Y-m-d', strtotime($m . '-01 +1 month'));
+        $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Annual' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
+        $balStmt->execute([$id, $firstDayNext]);
+        $vacBal = floatval($balStmt->fetchColumn() ?: 0);
+        $balStmt2 = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Sick' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
+        $balStmt2->execute([$id, $firstDayNext]);
+        $sickBal = floatval($balStmt2->fetchColumn() ?: 0);
+        $rows[] = [
+            'month' => $m,
+            'earned' => $earned,
+            'ut_paid' => $utPaid,
+            'ut_unpaid' => $utUnpaid,
+            'vac_bal' => $vacBal,
+            'sick_bal' => $sickBal
+        ];
+    }
+    
+    // output as Excel (HTML)
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+    header('Content-Disposition: attachment; filename="leave_card_'.$id.'_'.date('Y-m-d').'.xls"');
+    echo "<table border=1>\n";
+    // Add employee information header
+    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";
+    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($e['first_name'].' '.$e['last_name'])."</td><td><strong>Position</strong></td><td>".htmlspecialchars($e['position'] ?? '')."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
+    echo "<tr><td><strong>Status</strong></td><td>".htmlspecialchars($e['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($e['civil_status'] ?? '')."</td><td><strong>Entrance to Duty</strong></td><td>".htmlspecialchars($e['entrance_to_duty'] ?? '')."</td><td><strong>Unit</strong></td><td>".htmlspecialchars($e['unit'] ?? '')."</td></tr>\n";
+    echo "<tr><td colspan='11'>&nbsp;</td></tr>\n";
+    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>LEAVE HISTORY</strong></td></tr>\n";
+    // header row with merged columns for Vacation and Sick
+    echo "<tr style='background-color:#e0e0e0;'>";
+    echo "<th>Period</th>";
+    echo "<th>Particulars</th>";
+    echo "<th colspan='4' style='text-align:center;'>Vacational Leave</th>";
+    echo "<th colspan='4' style='text-align:center;'>Sick Leave</th>";
+    echo "<th>Remarks</th>";
+    echo "</tr>\n";
+    // sub-header row
+    echo "<tr style='background-color:#f0f0f0;'>";
+    echo "<th></th>";
+    echo "<th></th>";
+    echo "<th>Earned</th>";
+    echo "<th>Undertime Paid</th>";
+    echo "<th>Balance</th>";
+    echo "<th>Undertime Unpaid</th>";
+    echo "<th>Earned</th>";
+    echo "<th>Undertime Paid</th>";
+    echo "<th>Balance</th>";
+    echo "<th>Undertime Unpaid</th>";
+    echo "<th></th>";
+    echo "</tr>\n";
+    foreach($rows as $r) {
+        echo "<tr>";
+        echo "<td>".htmlspecialchars($r['month'])."</td>";
+        echo "<td></td>";
+        echo "<td>".number_format($r['earned'], 2)."</td>";
+        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
+        echo "<td>".number_format($r['vac_bal'], 2)."</td>";
+        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
+        echo "<td>".number_format($r['earned'], 2)."</td>";
+        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
+        echo "<td>".number_format($r['sick_bal'], 2)."</td>";
+        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
+        echo "<td></td>";
+        echo "</tr>\n";
+    }
+    echo "</table>";
+    exit();
+}
+
 // export leave history CSV
 if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role']==='hr' || ($_SESSION['emp_id'] ?? 0) == $id)) {
     $stmt = $db->prepare("SELECT COALESCE(lt.name, lr.leave_type) AS leave_type_name, lr.start_date, lr.end_date, lr.total_days, lr.status, lr.created_at as 'submitted_date', lr.reason, lr.snapshot_annual_balance, lr.snapshot_sick_balance, lr.snapshot_force_balance FROM leave_requests lr LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.employee_id = ? ORDER BY lr.start_date");
@@ -115,6 +215,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <?php endif; ?>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])): ?>
                         &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1" class="light-btn">Export history</a>
+                        &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=leave_card" class="light-btn">Export leave card</a>
                     <?php endif; ?>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
                         &nbsp;| <a href="reports.php?type=leave_card&employee_id=<?= $e['id']; ?>" class="light-btn">View Leave Card</a>

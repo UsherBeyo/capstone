@@ -10,27 +10,37 @@ if (empty($_SESSION['user_id'])) {
     exit();
 }
 $role = $_SESSION['role'] ?? '';
+
+// establish database connection if not already available
+if (!isset($db)) {
+    require_once __DIR__ . '/../../config/database.php';
+    $db = (new Database())->connect();
+}
 ?>
 <div class="topbar">
     <div class="topbar-left">Leave System</div>
     <div class="topbar-right">
         <?php
-        // show small profile picture with dropdown
+        // show profile icon with dropdown
         $empRecord = null;
+        $displayName = $_SESSION['email'] ?? 'User';
         if (!empty($_SESSION['emp_id'])) {
-            $stmt = $db->prepare("SELECT id, first_name, last_name, profile_pic FROM employees WHERE id = ?");
+            $stmt = $db->prepare("SELECT id, first_name, last_name FROM employees WHERE id = ?");
             $stmt->execute([$_SESSION['emp_id']]);
             $empRecord = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($empRecord) {
+                $displayName = $empRecord['first_name'] . ' ' . $empRecord['last_name'];
+            }
         }
-        $displayPic = $empRecord['profile_pic'] ?? '';
-        $displayName = ($empRecord['first_name'] ?? $_SESSION['email']) . ' ' . ($empRecord['last_name'] ?? '');
         ?>
         <div class="profile-dropdown">
-            <img src="<?= htmlspecialchars($displayPic ?: '../assets/images/default-avatar.png'); ?>" class="topbar-avatar" onclick="toggleProfileMenu()" alt="Profile">
+            <button class="topbar-profile-btn" onclick="toggleProfileMenu()" title="Profile">👤</button>
             <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌓</button>
             <div id="profileMenu" class="profile-menu" style="display:none;">
                 <div class="profile-menu-header"><?= htmlspecialchars($displayName); ?></div>
-                <a href="employee_profile.php?id=<?= htmlspecialchars($empRecord['id'] ?? ''); ?>">My Profile</a>
+                <?php if ($empRecord): ?>
+                    <a href="employee_profile.php?id=<?= htmlspecialchars($empRecord['id']); ?>">My Profile</a>
+                <?php endif; ?>
                 <a href="#" onclick="openSettings();return false;">Settings</a>
                 <a href="../controllers/logout.php">Logout</a>
             </div>
@@ -100,8 +110,8 @@ function openSettings() {
 // close menu if clicked outside
 window.addEventListener('click', function(e){
     var menu = document.getElementById('profileMenu');
-    var avatar = document.querySelector('.topbar-avatar');
-    if(menu && avatar && !menu.contains(e.target) && !avatar.contains(e.target)) {
+    var btn = document.querySelector('.topbar-profile-btn');
+    if(menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
         menu.style.display = 'none';
     }
 });
