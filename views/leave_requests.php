@@ -61,7 +61,7 @@ if (empty($_SESSION['csrf_token'])) {
             <td><?= htmlspecialchars($r['email']); ?></td>
             <td><?= htmlspecialchars($r['leave_type_name']); ?></td>
             <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
-            <td><?= intval($r['total_days']); ?></td>
+            <td><?= number_format($r['total_days'],3); ?></td>
             <td><?= htmlspecialchars($r['reason'] ?? ''); ?></td>
             <td>
                 <div class="action-forms">
@@ -123,7 +123,7 @@ if (empty($_SESSION['csrf_token'])) {
             <td><?= htmlspecialchars($r['email']); ?></td>
             <td><?= htmlspecialchars($r['leave_type_name']); ?></td>
             <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
-            <td><?= intval($r['total_days']); ?></td>
+            <td><?= number_format($r['total_days'],3); ?></td>
             <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
         </tr>
         <?php endforeach; ?>

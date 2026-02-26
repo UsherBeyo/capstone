@@ -52,7 +52,7 @@ if (!isset($db)) {
     <h2 class="sidebar-title">Leave System</h2>
      
     <a href="dashboard.php">Dashboard</a>
-    <?php if(in_array($role,['employee','manager','hr'])): ?>
+    <?php if(in_array($role,['employee','manager','hr','admin'])): ?>
         <a href="calendar.php">Leave Calendar</a>
     <?php endif; ?>
     <?php if($role == 'employee'): ?>

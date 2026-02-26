@@ -29,7 +29,8 @@ class Leave {
             }
             $startDT->modify('+1 day');
         }
-        return $days;
+        // always count at least one day (helps when start=end even if weekend/holiday)
+        return max(1, $days);
     }
 
     /**
@@ -63,10 +64,7 @@ class Leave {
 
         $days = $this->calculateDays($start, $end);
 
-        // auto‑approve short sick leaves even if table doesn't specify it
-        if (strtolower($leaveType['name']) === 'sick' && $days <= 1) {
-            $leaveType['auto_approve'] = 1;
-        }
+        // respect the configured auto_approve flag in leave_types and do not override it here
 
         // if we are deducting balance, and balance is already negative, immediately reject
         if ($leaveType['deduct_balance']) {
@@ -176,6 +174,8 @@ class Leave {
 
         switch (strtolower($name)) {
             case 'annual':
+            case 'vacational': // synonyms for annual/vacation
+            case 'vacation':
                 $col = 'annual_balance';
                 break;
             case 'sick':
@@ -255,9 +255,9 @@ class Leave {
         try {
             $this->conn->beginTransaction();
 
-            // Get leave details
+            // Get leave details - make sure to fetch leave_type_id
             $stmt = $this->conn->prepare(
-                "SELECT employee_id, total_days, leave_type 
+                "SELECT employee_id, total_days, leave_type, leave_type_id
                  FROM leave_requests 
                  WHERE id = :id AND status = 'pending'"
             );
@@ -290,13 +290,15 @@ class Leave {
                     $col = 'leave_balance';
                             switch (strtolower($typeInfo['name'])) {
                         case 'annual':
+                        case 'vacational':
+                        case 'vacation':
                             $col = 'annual_balance';
                             break;
                         case 'sick':
                             $col = 'sick_balance';
                             break;
                         case 'force':
-                            // force leave deducts from vacation (annual) balance per policy
+                            // force leave deducts from vacational/annual balance per policy
                             $col = 'annual_balance';
                             break;
                     }

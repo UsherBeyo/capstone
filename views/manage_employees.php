@@ -80,7 +80,7 @@ if (isset($_GET['export_leave_card'])) {
         $utUnpaid = floatval($stmt->fetchColumn() ?: 0);
         // calculate end-of-month balances
         $firstDayNext = date('Y-m-d', strtotime($m . '-01 +1 month'));
-        $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Annual' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
+        $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type IN ('Annual','Vacational','Vacation') AND created_at < ? ORDER BY created_at DESC LIMIT 1");
         $balStmt->execute([$eid, $firstDayNext]);
         $vacBal = floatval($balStmt->fetchColumn() ?: 0);
         $balStmt2 = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Sick' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
@@ -132,14 +132,14 @@ if (isset($_GET['export_leave_card'])) {
         echo "<tr>";
         echo "<td>".htmlspecialchars($r['month'])."</td>";
         echo "<td></td>";
-        echo "<td>".number_format($r['earned'], 2)."</td>";
-        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
-        echo "<td>".number_format($r['vac_bal'], 2)."</td>";
-        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
-        echo "<td>".number_format($r['earned'], 2)."</td>";
-        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
-        echo "<td>".number_format($r['sick_bal'], 2)."</td>";
-        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
+        echo "<td>".number_format($r['earned'], 3)."</td>";
+        echo "<td>".number_format($r['ut_paid'], 3)."</td>";
+        echo "<td>".number_format($r['vac_bal'], 3)."</td>";
+        echo "<td>".number_format($r['ut_unpaid'], 3)."</td>";
+        echo "<td>".number_format($r['earned'], 3)."</td>";
+        echo "<td>".number_format($r['ut_paid'], 3)."</td>";
+        echo "<td>".number_format($r['sick_bal'], 3)."</td>";
+        echo "<td>".number_format($r['ut_unpaid'], 3)."</td>";
         echo "<td></td>";
         echo "</tr>\n";
     }
@@ -239,7 +239,7 @@ if (isset($_GET['export_leave_card'])) {
                 <th>Department</th>
                 <th>Position</th>
                 <th>Status</th>
-                <th>Annual</th>
+                <th>Vacational</th>
                 <th>Sick</th>
                 <th>Force</th>
                 <th>Action</th>
@@ -253,8 +253,8 @@ if (isset($_GET['export_leave_card'])) {
                 <td><?= $e['department']; ?></td>
                 <td><?= htmlspecialchars($e['position'] ?? ''); ?></td>
                 <td><?= htmlspecialchars($e['status'] ?? ''); ?></td>
-                <td><?= isset($e['annual_balance']) ? $e['annual_balance'] : 0; ?></td>
-                <td><?= isset($e['sick_balance']) ? $e['sick_balance'] : 0; ?></td>
+                <td><?= isset($e['annual_balance']) ? number_format($e['annual_balance'],3) : '0.000'; ?></td>
+                <td><?= isset($e['sick_balance']) ? number_format($e['sick_balance'],3) : '0.000'; ?></td>
                 <td><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></td>
                 <td>
                     <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">&#128100;</a>

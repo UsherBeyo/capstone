@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die("Access denied");
         }
         // compute deduction
-        $deduct = $minutes * 0.002; // per policy
+        $deduct = round($minutes * 0.002, 3); // per policy with 3‑decimal precision
         // get old balance
         $stmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
         $stmt->execute([$empId]);
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newBal = max(0, $oldBal - $deduct);
         $db->prepare("UPDATE employees SET annual_balance = ? WHERE id = ?")->execute([$newBal, $empId]);
         // log budget change and leave_balance_logs
-        $leaveModel->logBudgetChange($empId, 'Annual', $oldBal, $newBal, $withPay ? 'undertime_paid' : 'undertime_unpaid', null, 'Undertime '.$minutes.' mins');
+        $leaveModel->logBudgetChange($empId, 'Vacational', $oldBal, $newBal, $withPay ? 'undertime_paid' : 'undertime_unpaid', null, 'Undertime '.$minutes.' mins');
         $stmt2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
         $stmt2->execute([$empId, -1 * $deduct, $withPay ? 'undertime_paid' : 'undertime_unpaid']);
 

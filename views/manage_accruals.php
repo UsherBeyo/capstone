@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
         $oldBal = $newBal - $amount;
 
         // Log to budget history for both types
-        $leaveModel->logBudgetChange($employee_id, 'Annual', $oldBal, $newBal, 'accrual', null, 'Manual accrual recorded for ' . $month);
+        $leaveModel->logBudgetChange($employee_id, 'Vacational', $oldBal, $newBal, 'accrual', null, 'Manual accrual recorded for ' . $month);
         $leaveModel->logBudgetChange($employee_id, 'Sick', $oldBal, $newBal, 'accrual', null, 'Manual accrual recorded for ' . $month);
 
         header("Location: manage_accruals.php?success=1");
@@ -75,7 +75,7 @@ try {
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="content">
-    <h2>Manage Leave Accruals</h2>
+    <h2>Manage Vacational Leave Accruals</h2>
 
     <?php if(isset($_GET['success'])): ?>
         <div class="card" style="background:#d4edda;border:1px solid #c3e6cb;color:#155724;padding:12px;margin-bottom:16px;">
@@ -99,12 +99,12 @@ try {
             <select name="employee_id" required>
                 <option value="">-- Select Employee --</option>
                 <?php foreach ($employees as $e): ?>
-                    <option value="<?= $e['id']; ?>"><?= htmlspecialchars($e['first_name'] . ' ' . $e['last_name']); ?> (Current: <?= $e['annual_balance']; ?> days)</option>
+                    <option value="<?= $e['id']; ?>"><?= htmlspecialchars($e['first_name'] . ' ' . $e['last_name']); ?> (Current: <?= number_format($e['annual_balance'],3); ?> days)</option>
                 <?php endforeach; ?>
             </select>
 
             <label>Amount (days)</label>
-            <input type="number" step="0.25" name="amount" value="1.25" required>
+            <input type="number" step="0.001" name="amount" value="1.250" required>
 
             <label>For Month</label>
             <input type="month" name="month" value="<?= date('Y-m'); ?>" required>
@@ -120,7 +120,7 @@ try {
             <?php foreach ($accruals as $a): ?>
             <tr>
                 <td><?= htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?></td>
-                <td><?= $a['amount']; ?> days</td>
+                <td><?= number_format($a['amount'],3); ?> days</td>
                 <td><?= date('M d, Y', strtotime($a['created_at'])); ?></td>
             </tr>
             <?php endforeach; ?>

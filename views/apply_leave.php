@@ -19,6 +19,23 @@ if ($emp_id) {
 $typesStmt = $db->query("SELECT * FROM leave_types ORDER BY name");
 $leaveTypes = $typesStmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Helper function to map leave type name to balance column
+function getBalanceColumn($typeName) {
+    $name = strtolower($typeName);
+    switch($name) {
+        case 'vacational':
+        case 'vacation':
+        case 'annual':
+            return 'annual_balance';
+        case 'sick':
+            return 'sick_balance';
+        case 'force':
+            return 'annual_balance'; // force deducts from annual
+        default:
+            return null; // doesn't deduct
+    }
+}
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -36,16 +53,30 @@ if (empty($_SESSION['csrf_token'])) {
             if(!typeElem) return;
             var selectedId = typeElem.value;
             var info = document.getElementById('balance-info');
-            var balanceMap = {
+            
+            // Map typeId to type data
+            var typeDataMap = {
                 <?php foreach ($leaveTypes as $lt): 
-                    $col = strtolower(str_replace(' ', '_', $lt['name'])) . '_balance';
-                    // fallback if column doesn't exist
-                    echo $lt['id'] . ": " . (isset($balances[$col]) ? $balances[$col] : 0) . ",\n";
+                    $balCol = getBalanceColumn($lt['name']);
+                    $val = $balCol ? (isset($balances[$balCol]) ? $balances[$balCol] : 0) : 'N/A';
+                    if ($val === 'N/A') {
+                        echo $lt['id'] . ": {name: '" . htmlspecialchars($lt['name']) . "', balance: 'N/A', deducts: false},\n";
+                    } else {
+                        echo $lt['id'] . ": {name: '" . htmlspecialchars($lt['name']) . "', balance: " . number_format($val,3) . ", deducts: true},\n";
+                    }
                 endforeach; ?>
             };
-            var val = balanceMap[selectedId] !== undefined ? balanceMap[selectedId] : 0;
-            var name = typeElem.options[typeElem.selectedIndex].text;
-            info.innerHTML = name + ' balance: ' + val + ' days';
+            
+            var data = typeDataMap[selectedId];
+            if (data) {
+                if (data.deducts) {
+                    info.innerHTML = data.name + ' balance: ' + data.balance.toFixed(3) + ' days';
+                } else {
+                    info.innerHTML = data.name + ' (no balance deduction required)';
+                }
+            } else {
+                info.innerHTML = 'Balance: 0.000 days';
+            }
         }
 
         window.addEventListener('load', function(){
@@ -62,14 +93,22 @@ if (empty($_SESSION['csrf_token'])) {
         function checkBalanceWarning(days) {
             var balanceInfo = document.getElementById('balance-info');
             var text = balanceInfo.textContent || balanceInfo.innerText;
+            // Only check balance if it shows a numeric value
+            if (text.includes('N/A') || text.includes('no balance')) {
+                balanceInfo.style.color = '';
+                return;
+            }
             var parts = text.split(':');
             if (parts.length >= 2) {
                 var bal = parseFloat(parts[1]);
                 if (!isNaN(bal) && days > bal) {
                     balanceInfo.style.color = 'red';
-                    balanceInfo.innerHTML += ' <span style="font-weight:bold;">(insufficient)</span>';
+                    if (!balanceInfo.innerHTML.includes('insufficient')) {
+                        balanceInfo.innerHTML += ' <span style="font-weight:bold;">(insufficient)</span>';
+                    }
                 } else {
                     balanceInfo.style.color = '';
+                    balanceInfo.innerHTML = balanceInfo.innerHTML.replace(' <span style="font-weight:bold;">(insufficient)</span>', '');
                 }
             }
         }

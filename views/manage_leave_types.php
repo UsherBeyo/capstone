@@ -61,7 +61,7 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
                 </div>
                 <div style="margin-top:20px; ">
                     <label for="max_days_per_year">Max days per year</label>
-                    <input id="max_days_per_year" type="number" step="0.01" name="max_days_per_year">
+                    <input id="max_days_per_year" type="number" step="0.001" name="max_days_per_year">
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
                     <input id="auto_approve" type="checkbox" name="auto_approve" style="width:auto;">
@@ -96,9 +96,7 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
 
             <div style="margin-top:20px; margin-left:24px;">
                 <label for="editMax">Max days per year</label>
-                <input type="number" step="0.01" name="max_days_per_year" id="editMax">
-            </div>
-
+                <input type="number" step="0.001" name="max_days_per_year" id="editMax">
             <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
                 <input id="editAuto" type="checkbox" name="auto_approve" style="width:auto;">
                 <label for="editAuto" style="margin:0;">Auto approve</label>

@@ -89,10 +89,10 @@ $is_own_profile = ($role === 'employee');
             <input type="text" name="national_reference_card_no" value="<?= htmlspecialchars($e['national_reference_card_no'] ?? ''); ?>">
             
             <?php if(!$is_own_profile): ?>
-            <label>Annual Balance</label>
-            <input type="number" step="0.01" name="annual_balance" value="<?= $e['annual_balance']; ?>">
+            <label>Vacational Balance</label>
+            <input type="number" step="0.001" name="annual_balance" value="<?= number_format($e['annual_balance'],3); ?>">
             <label>Sick Balance</label>
-            <input type="number" step="0.01" name="sick_balance" value="<?= $e['sick_balance']; ?>">
+            <input type="number" step="0.001" name="sick_balance" value="<?= number_format($e['sick_balance'],3); ?>">
             <label>Force Balance</label>
             <input type="number" name="force_balance" value="<?= $e['force_balance']; ?>">
             <label>Assign Manager</label>

@@ -20,100 +20,132 @@ if (!in_array($role, ['admin','manager','hr']) && ($_SESSION['emp_id'] ?? 0) != 
     die("Access denied");
 }
 
-// export leave card - monthly accruals and undertime
-if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && ($_SESSION['role'] === 'admin' || $_SESSION['role']==='hr' || ($_SESSION['emp_id'] ?? 0) == $id)) {
-    // build set of months from accruals and undertime logs
-    $months = [];
-    $stmt = $db->prepare("SELECT DISTINCT month_reference FROM accrual_history WHERE employee_id = ? ORDER BY month_reference");
-    $stmt->execute([$id]);
-    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
-        $months[$m] = true;
-    }
-    $stmt = $db->prepare("SELECT DISTINCT DATE_FORMAT(created_at,'%Y-%m') FROM leave_balance_logs WHERE employee_id = ?");
-    $stmt->execute([$id]);
-    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
-        $months[$m] = true;
-    }
-    ksort($months);
-    
-    // build data
+// export leave card - merged leave history & budget history with accurate balances
+if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
+        $_SESSION['role'] === 'admin' ||
+        $_SESSION['role'] === 'hr' ||
+        ($_SESSION['emp_id'] ?? 0) == $id
+    )) {
+    $empId = $id;
     $rows = [];
-    foreach(array_keys($months) as $m) {
-        // earned is accrual amount (annual & sick)
-        $stmt = $db->prepare("SELECT SUM(amount) FROM accrual_history WHERE employee_id=? AND month_reference=?");
-        $stmt->execute([$id, $m]);
-        $earned = floatval($stmt->fetchColumn() ?: 0);
-        // undertime paid
-        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_paid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
-        $stmt->execute([$id, $m]);
-        $utPaid = floatval($stmt->fetchColumn() ?: 0);
-        // undertime unpaid
-        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_unpaid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
-        $stmt->execute([$id, $m]);
-        $utUnpaid = floatval($stmt->fetchColumn() ?: 0);
-        // calculate end-of-month balances
-        $firstDayNext = date('Y-m-d', strtotime($m . '-01 +1 month'));
-        $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Annual' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
-        $balStmt->execute([$id, $firstDayNext]);
-        $vacBal = floatval($balStmt->fetchColumn() ?: 0);
-        $balStmt2 = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Sick' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
-        $balStmt2->execute([$id, $firstDayNext]);
-        $sickBal = floatval($balStmt2->fetchColumn() ?: 0);
+
+    // gather leave requests; use budget_history to determine balances after deduction
+    $leaveStmt = $db->prepare(
+        "SELECT lr.created_at, COALESCE(lt.name, lr.leave_type) AS leave_type, lr.status, lr.total_days
+         FROM leave_requests lr
+         LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+         WHERE lr.employee_id = ?
+         ORDER BY lr.created_at ASC"
+    );
+    $leaveStmt->execute([$empId]);
+    foreach ($leaveStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $vacDed = 0;
+        $sickDed = 0;
+        if (strtolower($r['leave_type']) !== 'sick' && $r['status'] === 'approved') {
+            $vacDed = floatval($r['total_days']);
+        } elseif (strtolower($r['leave_type']) === 'sick' && $r['status'] === 'approved') {
+            $sickDed = floatval($r['total_days']);
+        }
+        // lookup balance after this leave in budget_history
+        $vacBal = '';
+        $sickBal = '';
+        if ($vacDed || !$vacDed) {
+            $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type IN ('Annual','Vacational','Vacation') AND created_at >= ? ORDER BY created_at ASC LIMIT 1");
+            $balStmt->execute([$empId, $r['created_at']]);
+            $vacBal = floatval($balStmt->fetchColumn() ?: 0);
+        }
+        if ($sickDed || !$sickDed) {
+            $balStmt2 = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Sick' AND created_at >= ? ORDER BY created_at ASC LIMIT 1");
+            $balStmt2->execute([$empId, $r['created_at']]);
+            $sickBal = floatval($balStmt2->fetchColumn() ?: 0);
+        }
         $rows[] = [
-            'month' => $m,
-            'earned' => $earned,
-            'ut_paid' => $utPaid,
-            'ut_unpaid' => $utUnpaid,
-            'vac_bal' => $vacBal,
-            'sick_bal' => $sickBal
+            'date' => substr($r['created_at'], 0, 10),
+            'particulars' => $r['leave_type'] . ' Leave',
+            'vac_earned' => 0,
+            'vac_deducted' => $vacDed,
+            'vac_balance' => $vacBal,
+            'sick_earned' => 0,
+            'sick_deducted' => $sickDed,
+            'sick_balance' => $sickBal,
+            'status' => ucfirst($r['status'])
         ];
     }
-    
+
+    // gather budget history entries
+    $budgetStmt = $db->prepare(
+        "SELECT created_at, leave_type, action, old_balance, new_balance
+         FROM budget_history
+         WHERE employee_id = ?
+         ORDER BY created_at ASC"
+    );
+    $budgetStmt->execute([$empId]);
+    foreach ($budgetStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $vacDed = 0;
+        $sickDed = 0;
+        $vacEarn = 0;
+        $sickEarn = 0;
+
+        $part = ucfirst($r['action']) . ' ' . $r['leave_type'];
+        if (in_array(strtolower($r['leave_type']), ['annual','vacational','vacation'])) {
+            $vacEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
+            $vacDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
+            $vacBal  = floatval($r['new_balance']);
+            $sickBal = '';
+        } elseif (strtolower($r['leave_type']) === 'sick') {
+            $sickEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
+            $sickDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
+            $sickBal  = floatval($r['new_balance']);
+            $vacBal   = '';
+        } else {
+            // other types, just show balances generically
+            $vacBal = '';
+            $sickBal = '';
+        }
+
+        $rows[] = [
+            'date' => substr($r['created_at'], 0, 10),
+            'particulars' => $part,
+            'vac_earned' => $vacEarn,
+            'vac_deducted' => $vacDed,
+            'vac_balance' => isset($vacBal) ? $vacBal : '',
+            'sick_earned' => $sickEarn,
+            'sick_deducted' => $sickDed,
+            'sick_balance' => isset($sickBal) ? $sickBal : '',
+            'status' => ucfirst($r['action'])
+        ];
+    }
+
+    // sort everything by date
+    usort($rows, function($a, $b) {
+        return strtotime($a['date']) - strtotime($b['date']);
+    });
+
     // output as Excel (HTML)
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     header('Content-Disposition: attachment; filename="leave_card_'.$id.'_'.date('Y-m-d').'.xls"');
     echo "<table border=1>\n";
-    // Add employee information header
-    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";
+    echo "<tr><td colspan='9' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";
     echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($e['first_name'].' '.$e['last_name'])."</td><td><strong>Position</strong></td><td>".htmlspecialchars($e['position'] ?? '')."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
     echo "<tr><td><strong>Status</strong></td><td>".htmlspecialchars($e['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($e['civil_status'] ?? '')."</td><td><strong>Entrance to Duty</strong></td><td>".htmlspecialchars($e['entrance_to_duty'] ?? '')."</td><td><strong>Unit</strong></td><td>".htmlspecialchars($e['unit'] ?? '')."</td></tr>\n";
-    echo "<tr><td colspan='11'>&nbsp;</td></tr>\n";
-    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>LEAVE HISTORY</strong></td></tr>\n";
-    // header row with merged columns for Vacation and Sick
+    echo "<tr><td colspan='9'>&nbsp;</td></tr>\n";
+    echo "<tr><td colspan='9' style='font-weight:bold;background-color:#d3d3d3;'><strong>LEAVE CARD TRANSACTIONS</strong></td></tr>\n";
     echo "<tr style='background-color:#e0e0e0;'>";
-    echo "<th>Period</th>";
-    echo "<th>Particulars</th>";
-    echo "<th colspan='4' style='text-align:center;'>Vacational Leave</th>";
-    echo "<th colspan='4' style='text-align:center;'>Sick Leave</th>";
-    echo "<th>Remarks</th>";
+    echo "<th>Date</th><th>Particulars</th><th>Vac Earned</th><th>Vac Deducted</th><th>Vac Balance</th><th>Sick Earned</th><th>Sick Deducted</th><th>Sick Balance</th><th>Status</th>";
     echo "</tr>\n";
-    // sub-header row
-    echo "<tr style='background-color:#f0f0f0;'>";
-    echo "<th></th>";
-    echo "<th></th>";
-    echo "<th>Earned</th>";
-    echo "<th>Undertime Paid</th>";
-    echo "<th>Balance</th>";
-    echo "<th>Undertime Unpaid</th>";
-    echo "<th>Earned</th>";
-    echo "<th>Undertime Paid</th>";
-    echo "<th>Balance</th>";
-    echo "<th>Undertime Unpaid</th>";
-    echo "<th></th>";
-    echo "</tr>\n";
-    foreach($rows as $r) {
+    foreach ($rows as $row) {
         echo "<tr>";
-        echo "<td>".htmlspecialchars($r['month'])."</td>";
-        echo "<td></td>";
-        echo "<td>".number_format($r['earned'], 2)."</td>";
-        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
-        echo "<td>".number_format($r['vac_bal'], 2)."</td>";
-        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
-        echo "<td>".number_format($r['earned'], 2)."</td>";
-        echo "<td>".number_format($r['ut_paid'], 2)."</td>";
-        echo "<td>".number_format($r['sick_bal'], 2)."</td>";
-        echo "<td>".number_format($r['ut_unpaid'], 2)."</td>";
-        echo "<td></td>";
+        echo "<td>".htmlspecialchars($row['date'])."</td>";
+        echo "<td>".htmlspecialchars($row['particulars'])."</td>";
+        echo "<td>".($row['vac_earned'] != 0 ? number_format($row['vac_earned'],3) : '')."</td>";
+        echo "<td>".($row['vac_deducted'] != 0 ? number_format($row['vac_deducted'],3) : '')."</td>";
+        echo "<td>".(!
+            isset($row['vac_balance']) || $row['vac_balance'] === '' ? '' : number_format($row['vac_balance'],3))."</td>";
+        echo "<td>".($row['sick_earned'] != 0 ? number_format($row['sick_earned'],3) : '')."</td>";
+        echo "<td>".($row['sick_deducted'] != 0 ? number_format($row['sick_deducted'],3) : '')."</td>";
+        echo "<td>".(!
+            isset($row['sick_balance']) || $row['sick_balance'] === '' ? '' : number_format($row['sick_balance'],3))."</td>";
+        echo "<td>".htmlspecialchars($row['status'])."</td>";
         echo "</tr>\n";
     }
     echo "</table>";
@@ -205,7 +237,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                 <?php if(!empty($e['unit'])): ?><p>Unit: <?= htmlspecialchars($e['unit']); ?></p><?php endif; ?>
                 <?php if(!empty($e['gsis_policy_no'])): ?><p>GSIS Policy No.: <?= htmlspecialchars($e['gsis_policy_no']); ?></p><?php endif; ?>
                 <?php if(!empty($e['national_reference_card_no'])): ?><p>National Reference Card No.: <?= htmlspecialchars($e['national_reference_card_no']); ?></p><?php endif; ?>
-                <p>Annual: <?= $e['annual_balance'] ?? 0; ?> days — Sick: <?= $e['sick_balance'] ?? 0; ?> — Force: <?= $e['force_balance'] ?? 0; ?></p>
+                <p>Vacational: <?= number_format($e['annual_balance'] ?? 0,3); ?> days — Sick: <?= number_format($e['sick_balance'] ?? 0,3); ?> — Force: <?= $e['force_balance'] ?? 0; ?></p>
                 <p>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
                         <a href="edit_employee.php?id=<?= $e['id']; ?>" class="light-btn">Edit profile</a>
@@ -234,10 +266,10 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                     <input type="hidden" name="update_employee" value="1">
                     <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
-                    <label>Annual Balance</label>
-                    <input type="number" step="0.01" name="annual_balance" value="<?= $e['annual_balance'] ?? 0; ?>">
+                    <label>Vacational Balance</label>
+                    <input type="number" step="0.001" name="annual_balance" value="<?= number_format($e['annual_balance'] ?? 0,3); ?>">
                     <label>Sick Balance</label>
-                    <input type="number" step="0.01" name="sick_balance" value="<?= $e['sick_balance'] ?? 0; ?>">
+                    <input type="number" step="0.001" name="sick_balance" value="<?= number_format($e['sick_balance'] ?? 0,3); ?>">
                     <label>Force Balance</label>
                     <input type="number" name="force_balance" value="<?= $e['force_balance'] ?? 0; ?>">
                     <div style="text-align:right;">
@@ -270,8 +302,8 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <input type="text" name="reason">
                     <hr>
                     <p style="font-size:12px;opacity:0.8;">(optional) supply the leave balances that were available at the time of this historical entry.</p>
-                    <label>Annual balance at time</label>
-                    <input type="number" step="0.01" name="snapshot_annual_balance" value="">
+                    <label>Vacational balance at time</label>
+                    <input type="number" step="0.001" name="snapshot_annual_balance" value="">
                     <label>Sick balance at time</label>
                     <input type="number" step="0.01" name="snapshot_sick_balance" value="">
                     <label>Force balance at time</label>
@@ -307,17 +339,16 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
     <div class="card" style="margin-top:40px;">
         <h3>Leave History</h3>
         <table style="font-size:12px;">
-            <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Submitted</th><th>Annual Bal</th><th>Sick Bal</th><th>Force Bal</th><th>Comments</th></tr>
+            <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Submitted</th><th>Vacational Bal</th><th>Sick Bal</th><th>Force Bal</th><th>Comments</th></tr>
             <?php foreach($history as $h): ?>
             <tr>
                 <td><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type'] ?? ''); ?></td>
                 <td><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
-                <td><?= isset($h['total_days']) ? intval($h['total_days']) : ''; ?></td>
+                <td><?= isset($h['total_days']) ? number_format($h['total_days'],3) : ''; ?></td>
                 <td><?= htmlspecialchars($h['status'] ?? ''); ?></td>
                 <td><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
-                <td><?= $h['snapshot_annual_balance'] ?? '—'; ?></td>
-                <td><?= $h['snapshot_sick_balance'] ?? '—'; ?></td>
-                <td><?= $h['snapshot_force_balance'] ?? '—'; ?></td>
+                <td><?= isset($h['snapshot_annual_balance']) ? number_format($h['snapshot_annual_balance'],3) : '—'; ?></td>
+                <td><?= isset($h['snapshot_sick_balance']) ? number_format($h['snapshot_sick_balance'],3) : '—'; ?></td>                <td><?= $h['snapshot_force_balance'] ?? '—'; ?></td>
                 <td><?= htmlspecialchars($h['manager_comments'] ?? $h['reason'] ?? ''); ?></td>
             </tr>
             <?php endforeach; ?>
@@ -335,8 +366,8 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
             <tr>
                 <td><?= htmlspecialchars($bh['leave_type'] ?? ''); ?></td>
                 <td><?= htmlspecialchars($bh['action'] ?? ''); ?></td>
-                <td><?= $bh['old_balance'] ?? ''; ?></td>
-                <td><?= $bh['new_balance'] ?? ''; ?></td>
+                <td><?= isset($bh['old_balance']) ? number_format($bh['old_balance'],3) : ''; ?></td>
+                <td><?= isset($bh['new_balance']) ? number_format($bh['new_balance'],3) : ''; ?></td>
                 <td><?= !empty($bh['created_at']) ? date('M d, Y H:i', strtotime($bh['created_at'])) : ''; ?></td>
                 <td><?= htmlspecialchars($bh['notes'] ?? ''); ?></td>
             </tr>
