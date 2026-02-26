@@ -19,32 +19,32 @@ if (empty($_SESSION['csrf_token'])) {
     <title>Login - Leave System</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>
-<body style="justify-content:center;align-items:center;height:100vh;">
+<body style="display:flex;justify-content:center;align-items:center;height:100vh;">
 
 <div class="card" style="width:350px;">
-    <h2>Login</h2>
+    <h2 style="text-align:center;">Login</h2>
 
     <?php if(isset($_GET['error'])): ?>
-        <p style="color:red;">Invalid credentials</p>
+        <p style="color:red;text-align:center;">Invalid credentials</p>
     <?php endif; ?>
 
-    <form action="../controllers/AuthController.php" method="POST" onsubmit="return validateLogin();">
+    <form action="../controllers/AuthController.php" method="POST" onsubmit="return validateLogin();" style="text-align:left;">
         <input type="hidden" name="action" value="login">
         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
 
         <label>Email</label>
-        <input type="email" name="email" required>
+        <input type="email" name="email" required style="width:100%;padding:8px 12px;margin:8px 0;box-sizing:border-box;">
 
         <label>Password</label>
-        <input type="password" name="password" required>
+        <input type="password" name="password" required style="width:100%;padding:8px 12px;margin:8px 0;box-sizing:border-box;">
 
-        <div style="margin:16px 0;">
-            <input type="checkbox" id="agreePrivacy" name="agree_privacy" required>
-            <label for="agreePrivacy" style="display:inline;margin:0;">I agree to the <a href="#" onclick="openPrivacyModal(event)" style="color:#00c6ff;text-decoration:underline;">Data Privacy and Terms</a></label>
+        <div style="margin:16px 0;display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;">
+            <input type="checkbox" id="agreePrivacy" name="agree_privacy" required style="margin:0;flex-shrink:0;vertical-align:middle;width:auto;">
+            <label for="agreePrivacy" style="margin:0;font-size:14px;line-height:1;">I agree to the <a href="#" onclick="openPrivacyModal(event)" style="color:#00c6ff;text-decoration:underline;">Data Privacy and Terms</a></label>
         </div>
 
-        <br><br>
-        <button type="submit">Login</button>
+        <br>
+        <button type="submit" style="padding:12px 24px;font-size:16px;width:100%;cursor:pointer;">Login</button>
     </form>
 </div>
 

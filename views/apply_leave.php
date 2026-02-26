@@ -81,39 +81,49 @@ if (empty($_SESSION['csrf_token'])) {
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="content">
-    <div class="card">
-        <h2>Apply for Leave</h2>
+    <div class="card" style="margin:60px auto;max-width:720px;">
+        <h2 style="text-align:center;">Apply for Leave</h2>
 
-
-        <form method="POST" action="../controllers/LeaveController.php">
+        <form method="POST" action="../controllers/LeaveController.php" style="display:flex;flex-direction:column;align-items:center;gap:12px;">
 
             <input type="hidden" name="action" value="apply">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
 
-            <label>Leave Type</label>
-            <select name="leave_type_id" id="leave_type">
-                <?php foreach ($leaveTypes as $lt): ?>
-                    <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
-                <?php endforeach; ?>
-            </select>
+            <div style="width:100%;max-width:420px;">
+                <label>Leave Type</label>
+                <select name="leave_type_id" id="leave_type" style="width:100%;padding:8px 10px;box-sizing:border-box;background:#1f1f1f;color:#fff;border-radius:6px;border:1px solid rgba(255,255,255,0.08);">
+                    <?php foreach ($leaveTypes as $lt): ?>
+                        <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div id="balance-info" style="margin-top:8px;font-weight:bold;">&nbsp;</div>
+            </div>
 
-            <div id="balance-info" style="margin-top:8px;font-weight:bold;">&nbsp;</div>
+            <div style="width:100%;max-width:420px;display:flex;gap:12px;">
+                <div style="flex:1;">
+                    <label>Start Date</label>
+                    <input type="date" name="start_date" id="start_date" onchange="calculateDays()" required style="width:100%;padding:8px 10px;box-sizing:border-box;">
+                </div>
+                <div style="flex:1;">
+                    <label>End Date</label>
+                    <input type="date" name="end_date" id="end_date" onchange="calculateDays()" required style="width:100%;padding:8px 10px;box-sizing:border-box;">
+                </div>
+            </div>
 
+            <div style="width:100%;max-width:420px;">
+                <label>Total Days:</label>
+                <input type="text" id="total_days" readonly style="width:120px;padding:8px 10px;box-sizing:border-box;">
+            </div>
 
-            <label>Start Date</label>
-            <input type="date" name="start_date" id="start_date" onchange="calculateDays()" required>
+            <div style="width:100%;max-width:420px;">
+                <label>Reason:</label>
+                <textarea name="reason" required rows="5" style="width:100%;padding:8px 10px;box-sizing:border-box;min-height:120px;resize:vertical;"></textarea>
+            </div>
 
-            <label>End Date</label>
-            <input type="date" name="end_date" id="end_date" onchange="calculateDays()" required>
+            <div style="width:100%;max-width:420px;text-align:center;margin-top:6px;">
+                <button type="submit" style="padding:12px 24px;font-size:16px;">Submit Leave</button>
+            </div>
 
-            <label>Total Days</label>
-            <input type="text" id="total_days" readonly>
-
-            <label>Reason</label>
-            <textarea name="reason" required></textarea>
-
-            <br><br>
-            <button type="submit">Submit Leave</button>
         </form>
     </div>
 </div>

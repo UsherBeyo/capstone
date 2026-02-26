@@ -67,9 +67,9 @@ if ($role === 'employee') {
         }
         ?>
 
-        <div class="card">
-            <h3>Leave Balances</h3>
-            <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:100%;align-items:center;">
+        <div class="card" style="margin:20px auto;max-width:800px;">
+            <h3 style="text-align:center;">Leave Balances</h3>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:100%;align-items:center;justify-content:center;">
                 <div style="flex:1;min-width:250px;max-width:300px;height:200px;">
                     <canvas id="annualChart"></canvas>
                 </div>
@@ -118,7 +118,7 @@ if ($role === 'employee') {
                 
                 <?php if(!empty($archived)): ?>
                 <div>
-                    <h4><a href="#" onclick="document.getElementById('archiveSection').style.display = document.getElementById('archiveSection').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (?? records)</a></h4>
+                    <h4><a href="#" class="dropdown-toggle" onclick="document.getElementById('archiveSection').style.display = document.getElementById('archiveSection').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (?? records)</a></h4>
                     <div id="archiveSection" style="display:none;margin-top:10px;">
                         <table border="1" width="100%">
                             <tr>
@@ -162,7 +162,12 @@ if ($role === 'employee') {
                         responsive: true,
                         maintainAspectRatio: true,
                         plugins: {
-                            legend: {position: 'bottom'},
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#ffffff'
+                                }
+                            },
                             tooltip: {
                                 callbacks: {
                                     label: function(context) {
@@ -170,7 +175,7 @@ if ($role === 'employee') {
                                     }
                                 }
                             },
-                            title: {display: true, text: 'Annual Leave'}
+                            title: {display: true, text: 'Annual Leave', color: '#ffffff'}
                         }
                     }
                 });
@@ -192,7 +197,12 @@ if ($role === 'employee') {
                         responsive: true,
                         maintainAspectRatio: true,
                         plugins: {
-                            legend: {position: 'bottom'},
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#ffffff'
+                                }
+                            },
                             tooltip: {
                                 callbacks: {
                                     label: function(context) {
@@ -200,7 +210,7 @@ if ($role === 'employee') {
                                     }
                                 }
                             },
-                            title: {display: true, text: 'Sick Leave'}
+                            title: {display: true, text: 'Sick Leave', color: '#ffffff'}
                         }
                     }
                 });
@@ -222,7 +232,12 @@ if ($role === 'employee') {
                         responsive: true,
                         maintainAspectRatio: true,
                         plugins: {
-                            legend: {position: 'bottom'},
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#ffffff'
+                                }
+                            },
                             tooltip: {
                                 callbacks: {
                                     label: function(context) {
@@ -230,7 +245,7 @@ if ($role === 'employee') {
                                     }
                                 }
                             },
-                            title: {display: true, text: 'Force Leave'}
+                            title: {display: true, text: 'Force Leave', color: '#ffffff'}
                         }
                     }
                 });

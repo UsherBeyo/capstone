@@ -11,35 +11,35 @@ if (empty($_SESSION['user_id'])) {
 }
 $role = $_SESSION['role'] ?? '';
 ?>
+<p class="role-badge"><?= strtoupper(htmlspecialchars($role)); ?></p>
 <div class="sidebar">
     <h3>Leave System</h3>
-    <p><?= strtoupper(htmlspecialchars($role)); ?></p>
-    <a href="dashboard.php">Dashboard</a><br><br>
+    <a href="dashboard.php">Dashboard</a>
     <?php if(in_array($role,['employee','manager','hr'])): ?>
-        <a href="calendar.php">Leave Calendar</a><br><br>
+        <a href="calendar.php">Leave Calendar</a>
     <?php endif; ?>
     <?php if($role == 'employee'): ?>
-        <a href="apply_leave.php">Apply Leave</a><br><br>
+        <a href="apply_leave.php">Apply Leave</a>
     <?php endif; ?>
     <?php if($role !== 'admin'): ?>
-        <a href="employee_profile.php">My Profile</a> | <a href="change_password.php">Change Password</a><br><br>
+        <a href="employee_profile.php">My Profile</a>
     <?php endif; ?>
     <?php if($role == 'admin'): ?>
-        <a href="manage_employees.php">Manage Employees</a><br><br>
+        <a href="manage_employees.php">Manage Employees</a>
     <?php endif; ?>
     <?php if(in_array($role,['admin','manager','hr'])): ?>
-        <a href="holidays.php">Manage Holidays</a><br><br>
+        <a href="holidays.php">Manage Holidays</a>
     <?php endif; ?>
     <?php if(in_array($role,['admin','hr'])): ?>
-        <a href="reports.php">Reports</a><br><br>
+        <a href="reports.php">Reports</a>
     <?php endif; ?>
     <?php if($role == 'admin'): ?>
-        <a href="manage_accruals.php">Manage Accruals</a><br><br>
-        <a href="leave_requests.php">Leave Requests</a><br><br>
+        <a href="manage_accruals.php">Manage Accruals</a>
+        <a href="leave_requests.php">Leave Requests</a>
         <?php if(in_array(
             $_SESSION['role'], ['admin','hr']
         )): ?>
-            <a href="manage_leave_types.php">Leave Types</a><br><br>
+            <a href="manage_leave_types.php">Leave Types</a>
         <?php endif; ?>
     <?php endif; ?>
     <a href="../controllers/logout.php">Logout</a>

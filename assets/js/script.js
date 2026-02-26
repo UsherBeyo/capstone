@@ -14,10 +14,23 @@ function calculateDays() {
         });
 }
 
-document.querySelector('form').addEventListener('submit', function(e){
-    const pwd = document.querySelector('input[name="password"]').value;
-    if(pwd.length < 6){
-        alert("Password must be at least 6 characters.");
-        e.preventDefault();
-    }
+// safe form submit handler (only when a form and password field exist)
+var _form = document.querySelector('form');
+if (_form) {
+    _form.addEventListener('submit', function(e){
+        var pwdField = document.querySelector('input[name="password"]');
+        if (pwdField) {
+            var pwd = pwdField.value || '';
+            if (pwd.length > 0 && pwd.length < 6) {
+                alert("Password must be at least 6 characters.");
+                e.preventDefault();
+            }
+        }
+    });
+}
+
+// toggle shadow removal on scroll to reduce heavy background shadow when scrolled
+window.addEventListener('scroll', function() {
+    if (window.scrollY > 20) document.body.classList.add('no-shadow');
+    else document.body.classList.remove('no-shadow');
 });

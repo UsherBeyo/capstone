@@ -74,8 +74,8 @@ $days = days_in_month($month,$year);
 
 <div class="content">
     <h2>Calendar for <?= date('F Y', strtotime($start)); ?></h2>
-    <a href="?m=<?= ($month==1?12:$month-1); ?>&y=<?= ($month==1?$year-1:$year); ?>">&lt; Prev</a>
-    <a href="?m=<?= ($month==12?1:$month+1); ?>&y=<?= ($month==12?$year+1:$year); ?>">Next &gt;</a>
+    <a href="?m=<?= ($month==1?12:$month-1); ?>&y=<?= ($month==1?$year-1:$year); ?>" class="light-btn">&lt; Prev</a>
+    <a href="?m=<?= ($month==12?1:$month+1); ?>&y=<?= ($month==12?$year+1:$year); ?>" class="light-btn">Next &gt;</a>
 
     <table class="calendar">
         <tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr>

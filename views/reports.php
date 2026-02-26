@@ -185,7 +185,7 @@ if ($reportType === 'balance') {
                 </select>
             </div>
             <button type="submit">Apply Filter</button>
-            <a href="?type=<?= $reportType; ?>&dept=<?= urlencode($departmentFilter); ?>&export=1" class="btn">Export CSV</a>
+            <a href="?type=<?= $reportType; ?>&dept=<?= urlencode($departmentFilter); ?>&export=1" class="btn-export">Export CSV</a>
         </form>
     </div>
 

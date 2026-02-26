@@ -83,7 +83,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
-<div class="content">
+<div class="content" style="padding-top:80px;">
     <div class="card">
         <div class="profile-header">
             <div>
@@ -100,13 +100,13 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                 <p>Annual: <?= $e['annual_balance'] ?? 0; ?> days — Sick: <?= $e['sick_balance'] ?? 0; ?> — Force: <?= $e['force_balance'] ?? 0; ?></p>
                 <p>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
-                        <a href="edit_employee.php?id=<?= $e['id']; ?>">Edit profile</a>
+                        <a href="edit_employee.php?id=<?= $e['id']; ?>" class="light-btn">Edit profile</a>
                     <?php endif; ?>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
-                        &nbsp;| <a href="#" onclick="openPasswordModal(); return false;">Change Password</a>
+                        &nbsp;| <a href="#" class="light-btn" onclick="openPasswordModal(); return false;">Change Password</a>
                     <?php endif; ?>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])): ?>
-                        &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1">Export history</a>
+                        &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1" class="light-btn">Export history</a>
                     <?php endif; ?>
                 </p>
             </div>
@@ -114,7 +114,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <?php if(in_array($_SESSION['role'], ['admin','hr'])): ?>
-    <div class="card" style="margin-top:16px;">
+    <div class="card" style="margin-top:40px;">
         <h3>Admin actions</h3>
         <div style="display:flex;gap:16px;">
             <div style="flex:1;">
@@ -173,7 +173,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
     </div>
     <?php endif; ?>
 
-    <div class="card" style="margin-top:16px;">
+    <div class="card" style="margin-top:40px;">
         <h3>Leave History</h3>
         <table style="font-size:12px;">
             <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Submitted</th><th>Annual Bal</th><th>Sick Bal</th><th>Force Bal</th><th>Comments</th></tr>
