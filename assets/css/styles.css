@@ -157,21 +157,25 @@ button:hover {
     background: #ccc; /* darker on hover */
 }
 
-/* simple dropdown toggle link look */
+/* simple dropdown toggle link look (lighter, clickable) */
 .dropdown-toggle {
     display: inline-block;
     padding: 6px 12px;
-    background: rgba(255,255,255,0.08);
+    /* lighter for archive links */
+    background: rgba(255,255,255,0.04);
     color: #fff;
-    border-radius: 4px;
+    border-radius: 6px;
     text-decoration: none;
     cursor: pointer;
-    transition: background 0.2s;
-    border: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.15s, transform 0.08s, box-shadow 0.15s;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 
 .dropdown-toggle:hover {
-    background: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.12);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.18);
 }
 
 /* light button used for small actions (edit, change password, export) */
@@ -189,6 +193,20 @@ button:hover {
     background: rgba(255,255,255,0.22);
     transform: translateY(-1px);
 }
+
+/* centered, compact form helpers */
+.form-centered { margin: 0 auto; max-width: 520px; text-align: left; }
+.form-centered form { display:flex; flex-direction:column; gap:10px; align-items:flex-start; }
+.form-row { display:flex; gap:12px; }
+.checkbox-row { display:flex; align-items:center; gap:8px; justify-content:flex-start; }
+.form-centered input[type="checkbox"] { width: auto; margin: 0; }
+.create-btn { padding:12px 24px; font-size:16px; border-radius:8px; }
+
+/* Ensure labels inside the compact form are block-level and spaced
+    so text inputs and number labels don't look like checkbox labels */
+.form-centered label { display: block; margin-top: 10px; }
+.form-centered .checkbox-row label { display: inline-block; margin: 0; vertical-align: middle; line-height: 1.2; }
+.form-centered input[type="text"], .form-centered input[type="number"] { width: 100%; box-sizing: border-box; }
 
 
 table {
@@ -306,6 +324,20 @@ tr:hover {
 .modal-close:hover,
 .modal .close:hover {
     color: #00c6ff;
+}
+
+/* Enforce checkbox sizing/alignment inside cards and modals */
+.card input[type="checkbox"], .form-centered input[type="checkbox"], #editModal input[type="checkbox"] {
+    width: auto !important;
+    display: inline-block !important;
+    margin: 0 !important;
+    vertical-align: middle !important;
+}
+
+.card .checkbox-row label, #editModal label {
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0;
 }
 
 /* Side panel for calendar details */

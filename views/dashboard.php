@@ -431,7 +431,7 @@ if ($role === 'employee') {
         
         <?php if(!empty($archived)): ?>
         <div class="card" style="margin-top:20px;">
-            <h3><a href="#" onclick="document.getElementById('archivePanel').style.display = document.getElementById('archivePanel').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (<?= count($archived); ?> records)</a></h3>
+            <h3><a href="#" class="dropdown-toggle" onclick="document.getElementById('archivePanel').style.display = document.getElementById('archivePanel').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (<?= count($archived); ?> records)</a></h3>
             <div id="archivePanel" style="display:none;margin-top:10px;">
                 <table border="1" width="100%" style="font-size:12px;">
                     <tr>
