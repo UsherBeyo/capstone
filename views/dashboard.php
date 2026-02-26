@@ -161,10 +161,6 @@ if ($role === 'employee') {
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
-                        scales: {
-                            x: { ticks: { color: '#fff' }, title: { color: '#fff' } },
-                            y: { ticks: { color: '#fff' }, title: { color: '#fff' } }
-                        },
                         plugins: {
                             legend: {
                                 position: 'bottom',
@@ -200,10 +196,6 @@ if ($role === 'employee') {
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
-                         scales: {
-                            x: { ticks: { color: '#fff' }, title: { color: '#fff' } },
-                            y: { ticks: { color: '#fff' }, title: { color: '#fff' } }
-                        },
                         plugins: {
                             legend: {
                                 position: 'bottom',
@@ -314,11 +306,8 @@ if ($role === 'employee') {
                     responsive: true,
                     maintainAspectRatio: true,
                     scales: {
-                        x: {title: {display:true, text:'Month', color:'#fff'}, ticks:{color:'#fff'}},
-                        y: {beginAtZero:true, ticks:{color:'#fff'}, title:{color:'#fff'}}
-                    },
-                    plugins: {
-                        legend: { labels: { color: '#fff' } }
+                        x: {title: {display:true, text:'Month'}},
+                        y: {beginAtZero:true}
                     }
                 }
             });

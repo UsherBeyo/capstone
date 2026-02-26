@@ -61,12 +61,25 @@ $days = days_in_month($month,$year);
     <title>Leave Calendar</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <style>
-    table.calendar {border-collapse:collapse; width:100%;}
-    table.calendar td {border:1px solid #ccc; vertical-align:top; height:70px; padding:6px; overflow:hidden;}
+    table.calendar {border-collapse:collapse; width:100%; color: var(--text);}
+    table.calendar td {border:1px solid #ccc; vertical-align:top; height:70px; padding:6px; overflow:hidden; color: var(--text);}
     .day-number { font-size:14px; }
     .day-dots { margin-top:6px; }
     .holiday { }
     .leave { }
+    .calendar-nav a {
+        color: var(--text);
+        text-decoration: none;
+        padding: 4px 10px;
+        margin-right: 8px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 4px;
+        transition: 0.2s;
+    }
+    .calendar-nav a:hover {
+        background: rgba(255,255,255,0.2);
+        color: var(--text);
+    }
     </style>
 </head>
 <body>
@@ -74,8 +87,10 @@ $days = days_in_month($month,$year);
 
 <div class="content">
     <h2>Calendar for <?= date('F Y', strtotime($start)); ?></h2>
-    <a href="?m=<?= ($month==1?12:$month-1); ?>&y=<?= ($month==1?$year-1:$year); ?>">&lt; Prev</a>
-    <a href="?m=<?= ($month==12?1:$month+1); ?>&y=<?= ($month==12?$year+1:$year); ?>">Next &gt;</a>
+    <div class="calendar-nav">
+        <a href="?m=<?= ($month==1?12:$month-1); ?>&y=<?= ($month==1?$year-1:$year); ?>">&lt; Prev</a>
+        <a href="?m=<?= ($month==12?1:$month+1); ?>&y=<?= ($month==12?$year+1:$year); ?>">Next &gt;</a>
+    </div>
 
     <table class="calendar">
         <tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr>
@@ -104,7 +119,7 @@ $days = days_in_month($month,$year);
                     if($count >= 3) break;
                 }
                 if(count($events[$date]) > 3){
-                    echo "<span style='font-size:12px;color:#fff'>+".(count($events[$date]) - 3)."</span>";
+                    echo "<span style='font-size:12px;color:var(--text)'>+".(count($events[$date]) - 3)."</span>";
                 }
             }
             echo "</td>";
@@ -117,7 +132,7 @@ $days = days_in_month($month,$year);
     </table>
 
     <div id="sidePanel" class="side-panel" aria-hidden="true">
-        <button id="closeSidePanel" style="float:right;background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;">×</button>
+        <button id="closeSidePanel" style="float:right;background:transparent;border:none;color:var(--text);font-size:20px;cursor:pointer;">×</button>
         <div id="panelContent"></div>
     </div>
 

@@ -83,19 +83,15 @@ try {
         </div>
     <?php endif; ?>
 
-<<<<<<< HEAD
+
     <div class="card-container" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
         <div class="card" style="flex:1;min-width:300px;max-width:500px;">
             <h3>Record Manual Accrual</h3>
             <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.</p>
             <div class="form-centered">
             <form method="POST">
-=======
-    <div class="card">
-        <h3>Record Manual Accrual</h3>
-        <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.  (amount will be added to both annual and sick balances)</p>
-        <form method="POST">
->>>>>>> 2a074c714cfc0e848edd6680cc7c671aa0e01a8a
+
+
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
             <input type="hidden" name="record_accrual" value="1">
 

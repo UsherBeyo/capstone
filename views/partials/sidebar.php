@@ -18,7 +18,7 @@ if (!isset($db)) {
 }
 ?>
 <div class="topbar">
-    <div class="topbar-left">Leave System</div>
+    <div class="topbar-left"></div> <!-- title moved to sidebar -->
     <div class="topbar-right">
         <?php
         // show profile icon with dropdown
@@ -49,7 +49,8 @@ if (!isset($db)) {
 </div>
 
 <div class="sidebar">
-    <h3>Menu</h3>
+    <h2 class="sidebar-title">Leave System</h2>
+     
     <a href="dashboard.php">Dashboard</a>
     <?php if(in_array($role,['employee','manager','hr'])): ?>
         <a href="calendar.php">Leave Calendar</a>

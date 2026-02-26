@@ -91,7 +91,7 @@ if (empty($_SESSION['csrf_token'])) {
 
             <div style="width:100%;max-width:420px;">
                 <label>Leave Type</label>
-                <select name="leave_type_id" id="leave_type" style="width:100%;padding:8px 10px;box-sizing:border-box;background:#1f1f1f;color:#fff;border-radius:6px;border:1px solid rgba(255,255,255,0.08);">
+                <select name="leave_type_id" id="leave_type" style="width:100%;padding:8px 10px;box-sizing:border-box;background:#1f1f1f;color:var(--text);border-radius:6px;border:1px solid rgba(255,255,255,0.08);">
                     <?php foreach ($leaveTypes as $lt): ?>
                         <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
                     <?php endforeach; ?>

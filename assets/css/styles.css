@@ -16,7 +16,7 @@ body {
     background: #1a1a22;
     display: flex;
     min-height: 100vh;
-    color: #fff;
+    color: var(--text);
     width: 100%;
     overflow-x: hidden;
 }
@@ -74,6 +74,13 @@ body { background: var(--bg); color: var(--text); }
     transition: 0.4s;
 }
 
+.sidebar-title {
+    margin-bottom: 10px;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+}
+
 .sidebar h3 {
     margin-bottom: 30px;
     font-size: 28px;
@@ -82,7 +89,7 @@ body { background: var(--bg); color: var(--text); }
 
 .sidebar a {
     display: block;
-    color: #fff;
+    color: var(--text);
     text-decoration: none;
     margin-bottom: 15px;
     padding: 15px;
@@ -128,7 +135,7 @@ input, select {
     border: none;
     outline: none;
     background: rgba(255,255,255,0.1);
-    color: #fff;
+    color: var(--text);
 }
 
 button {
@@ -136,7 +143,7 @@ button {
     border: none;
     border-radius: 8px;
     background: #00c6ff;
-    color: #fff;
+    color: var(--text);
     cursor: pointer;
     transition: 0.3s;
 }
@@ -167,7 +174,7 @@ button:hover {
     padding: 6px 12px;
     /* lighter for archive links */
     background: rgba(255,255,255,0.04);
-    color: #fff;
+    color: var(--text);
     border-radius: 6px;
     text-decoration: none;
     cursor: pointer;
@@ -187,7 +194,7 @@ button:hover {
     display:inline-block;
     padding:6px 10px;
     background: rgba(255,255,255,0.12);
-    color: #ffffff;
+    color: var(--text);
     border-radius:6px;
     text-decoration:none;
     border:1px solid rgba(255,255,255,0.06);
@@ -196,17 +203,17 @@ button:hover {
 
 /* ensure card headers are visible on dark background */
 .card h3 {
-    color: #fff;
+    color: var(--text);
 }
 
-/* make all heading tags white for better contrast */
+/* make all heading tags adapt to theme */
 h1, h2, h3, h4, h5, h6 {
-    color: #fff;
+    color: var(--text);
 }
 
-/* table header text white for labels */
+/* table header text follows theme */
 table th {
-    color: #fff;
+    color: var(--text);
 }
 .light-btn:hover {
     background: rgba(255,255,255,0.22);
@@ -262,7 +269,7 @@ tr:hover {
 
 .dropbtn {
     background: transparent;
-    color: #fff;
+    color: var(--text);
     border: none;
     font-size: 18px;
     cursor: pointer;
@@ -278,7 +285,7 @@ tr:hover {
 }
 
 .dropdown-content a {
-    color: #fff;
+    color: var(--text);
     padding: 8px 12px;
     text-decoration: none;
     display: block;
@@ -341,7 +348,7 @@ tr:hover {
     float: none;
     font-size: 20px;
     cursor: pointer;
-    color: #fff;
+    color: var(--text);
     background: transparent;
     border: none;
 }
@@ -381,7 +388,7 @@ input::-webkit-outer-spin-button {
     width: 340px;
     height: 100%;
     background: rgba(0,0,0,0.8);
-    color: #fff;
+    color: var(--text);
     padding: 20px;
     transition: left 0.25s ease;
     z-index: 1100;
@@ -437,7 +444,7 @@ input::-webkit-outer-spin-button {
 }
 
 .profile-link { 
-    color: #fff; 
+    color: var(--text); 
     text-decoration:none; 
     font-size:18px; 
     display:inline-block; 
@@ -454,6 +461,6 @@ input::-webkit-outer-spin-button {
     background: rgba(0,0,0,0.5);
     border-radius: 20px;
     font-weight: bold;
-    color: #ffffff;
+    color: var(--text);
     z-index: 999;
 }
