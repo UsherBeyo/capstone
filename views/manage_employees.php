@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
 
 if ($_SESSION['role'] !== 'admin') {
@@ -73,6 +73,20 @@ if (isset($_GET['export_budget'])) {
                 <input type="text" name="last_name" required>
                 <label>Department</label>
                 <input type="text" name="department" required>
+                <label>Position</label>
+                <input type="text" name="position">
+                <label>Status</label>
+                <input type="text" name="status">
+                <label>Civil Status</label>
+                <input type="text" name="civil_status">
+                <label>Entrance to Duty</label>
+                <input type="date" name="entrance_to_duty">
+                <label>Unit</label>
+                <input type="text" name="unit">
+                <label>GSIS Policy No.</label>
+                <input type="text" name="gsis_policy_no">
+                <label>National Reference Card No.</label>
+                <input type="text" name="national_reference_card_no">
                 <label>Password</label>
                 <input type="password" name="password" required placeholder="Set temporary password">
                 <label>Role</label>
@@ -117,6 +131,8 @@ if (isset($_GET['export_budget'])) {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Department</th>
+                <th>Position</th>
+                <th>Status</th>
                 <th>Annual</th>
                 <th>Sick</th>
                 <th>Force</th>
@@ -129,6 +145,8 @@ if (isset($_GET['export_budget'])) {
                 <td><?= $e['first_name']." ". $e['last_name']; ?></td>
                 <td><?= $e['email']; ?></td>
                 <td><?= $e['department']; ?></td>
+                <td><?= htmlspecialchars($e['position'] ?? ''); ?></td>
+                <td><?= htmlspecialchars($e['status'] ?? ''); ?></td>
                 <td><?= isset($e['annual_balance']) ? $e['annual_balance'] : 0; ?></td>
                 <td><?= isset($e['sick_balance']) ? $e['sick_balance'] : 0; ?></td>
                 <td><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></td>

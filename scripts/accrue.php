@@ -1,5 +1,5 @@
 <?php
-// Run this script at the start of every month (via cron or manually)
+// Run this script at the end of every month (via cron or manually)
 // to update leave balances according to policy.
 
 require_once __DIR__ . '/../config/database.php';

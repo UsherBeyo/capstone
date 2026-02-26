@@ -5,7 +5,8 @@ require_once '../config/database.php';
 require_once '../models/User.php';
 require_once '../models/Leave.php';
 
-if ($_SESSION['role'] !== 'admin') {
+// ensure user is logged in
+if (empty($_SESSION['role'])) {
     die("Access denied");
 }
 
@@ -19,6 +20,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || 
         $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         die("CSRF validation failed.");
+    }
+
+    // handle undertime recording (employee or admin)
+    if (isset($_POST['record_undertime'])) {
+        $empId = intval($_POST['employee_id']);
+        $date = $_POST['date'];
+        $minutes = floatval($_POST['minutes']);
+        $withPay = isset($_POST['with_pay']) ? 1 : 0;
+        // permission: employee can only log for self
+        if ($_SESSION['role'] === 'employee' && ($_SESSION['emp_id'] ?? 0) != $empId) {
+            die("Access denied");
+        }
+        // compute deduction
+        $deduct = $minutes * 0.002; // per policy
+        // get old balance
+        $stmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
+        $stmt->execute([$empId]);
+        $oldBal = floatval($stmt->fetchColumn());
+        $newBal = max(0, $oldBal - $deduct);
+        $db->prepare("UPDATE employees SET annual_balance = ? WHERE id = ?")->execute([$newBal, $empId]);
+        // log budget change and leave_balance_logs
+        $leaveModel->logBudgetChange($empId, 'Annual', $oldBal, $newBal, $withPay ? 'undertime_paid' : 'undertime_unpaid', null, 'Undertime '.$minutes.' mins');
+        $stmt2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
+        $stmt2->execute([$empId, -1 * $deduct, $withPay ? 'undertime_paid' : 'undertime_unpaid']);
+
+        header("Location: ../views/employee_profile.php?id=$empId&undertime=1");
+        exit();
     }
 
     // handle update of existing employee record
@@ -37,14 +65,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // load existing values so we can preserve when not provided
-        $rowStmt = $db->prepare("SELECT first_name, last_name, department FROM employees WHERE id = ?");
+        $rowStmt = $db->prepare("SELECT first_name, last_name, department, position, status, civil_status, entrance_to_duty, unit, gsis_policy_no, national_reference_card_no FROM employees WHERE id = ?");
         $rowStmt->execute([$empId]);
         $existing = $rowStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         $first_name = isset($_POST['first_name']) ? trim($_POST['first_name']) : ($existing['first_name'] ?? '');
         $last_name = isset($_POST['last_name']) ? trim($_POST['last_name']) : ($existing['last_name'] ?? '');
         $department = isset($_POST['department']) ? trim($_POST['department']) : ($existing['department'] ?? '');
-        
+        $position = isset($_POST['position']) ? trim($_POST['position']) : ($existing['position'] ?? null);
+        $statusField = isset($_POST['status']) ? trim($_POST['status']) : ($existing['status'] ?? null);
+        $civil_status = isset($_POST['civil_status']) ? trim($_POST['civil_status']) : ($existing['civil_status'] ?? null);
+        $entrance_to_duty = isset($_POST['entrance_to_duty']) ? trim($_POST['entrance_to_duty']) : ($existing['entrance_to_duty'] ?? null);
+        $unit = isset($_POST['unit']) ? trim($_POST['unit']) : ($existing['unit'] ?? null);
+        $gsis_policy_no = isset($_POST['gsis_policy_no']) ? trim($_POST['gsis_policy_no']) : ($existing['gsis_policy_no'] ?? null);
+        $national_ref = isset($_POST['national_reference_card_no']) ? trim($_POST['national_reference_card_no']) : ($existing['national_reference_card_no'] ?? null);
+
         // only admins/hr can update balances and manager
         $manager_id = NULL;
         $annual = null;
@@ -75,11 +110,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (in_array($role, ['admin','hr','manager'])) {
             // full update for admins/hr
             if ($picPath) {
-                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, manager_id=?, annual_balance=?, sick_balance=?, force_balance=?, profile_pic=? WHERE id=?");
-                $stmt->execute([$first_name,$last_name,$department,$manager_id,$annual,$sick,$force,$picPath,$empId]);
+                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=?, manager_id=?, annual_balance=?, sick_balance=?, force_balance=?, profile_pic=? WHERE id=?");
+                $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$manager_id,$annual,$sick,$force,$picPath,$empId]);
             } else {
-                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, manager_id=?, annual_balance=?, sick_balance=?, force_balance=? WHERE id=?");
-                $stmt->execute([$first_name,$last_name,$department,$manager_id,$annual,$sick,$force,$empId]);
+                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=?, manager_id=?, annual_balance=?, sick_balance=?, force_balance=? WHERE id=?");
+                $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$manager_id,$annual,$sick,$force,$empId]);
             }
 
             // log budget changes
@@ -97,11 +132,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             // employees can only update profile info
             if ($picPath) {
-                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, profile_pic=? WHERE id=?");
-                $stmt->execute([$first_name,$last_name,$department,$picPath,$empId]);
+                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=?, profile_pic=? WHERE id=?");
+                $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$picPath,$empId]);
             } else {
-                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=? WHERE id=?");
-                $stmt->execute([$first_name,$last_name,$department,$empId]);
+                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=? WHERE id=?");
+                $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$empId]);
             }
             
             header("Location: ../views/employee_profile.php?id=$empId&updated=1");
@@ -168,6 +203,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // otherwise create a new employee
+    // only admin may create new employees
+    if ($_SESSION['role'] !== 'admin') {
+        die("Access denied");
+    }
+
     $email = trim($_POST['email']);
     $first_name = trim($_POST['first_name']);
     $last_name = trim($_POST['last_name']);
@@ -196,14 +236,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $picPath = $dest;
         }
         $stmt = $db->prepare("INSERT INTO employees 
-            (user_id, first_name, last_name, department, manager_id, 
+            (user_id, first_name, last_name, department, position, status, civil_status, entrance_to_duty, unit, gsis_policy_no, national_reference_card_no, manager_id, 
              annual_balance, sick_balance, force_balance, profile_pic) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $user_id,
             $first_name,
             $last_name,
             $department,
+            $_POST['position'] ?? null,
+            $_POST['status'] ?? null,
+            $_POST['civil_status'] ?? null,
+            $_POST['entrance_to_duty'] ?? null,
+            $_POST['unit'] ?? null,
+            $_POST['gsis_policy_no'] ?? null,
+            $_POST['national_reference_card_no'] ?? null,
             $manager_id,
             0,
             0,

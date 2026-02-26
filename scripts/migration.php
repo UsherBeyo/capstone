@@ -16,6 +16,15 @@ try {
     // new profile picture path
     $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS profile_pic VARCHAR(255) NULL");
 
+    // new employee metadata fields requested by client
+    $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS position VARCHAR(128) NULL");
+    $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS status VARCHAR(64) NULL");
+    $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS civil_status VARCHAR(64) NULL");
+    $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entrance_to_duty DATE NULL");
+    $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS unit VARCHAR(128) NULL");
+    $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS gsis_policy_no VARCHAR(128) NULL");
+    $db->exec("ALTER TABLE employees ADD COLUMN IF NOT EXISTS national_reference_card_no VARCHAR(128) NULL");
+
     // you may keep leave_balance for backwards compatibility but treat it as alias
     // some earlier code still references leave_balance; you can copy values over
     $db->exec("UPDATE employees SET annual_balance = leave_balance WHERE annual_balance = 0");

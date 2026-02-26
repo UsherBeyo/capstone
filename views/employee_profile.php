@@ -1,6 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    if (session_status() === PHP_SESSION_NONE) session_start();
 }
 require_once '../config/database.php';
 
@@ -32,6 +32,7 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
     // Add employee information header
     echo "<tr><td colspan='10' style='font-weight:bold;background-color:#e0e0e0;'><strong>Employee Information</strong></td></tr>\n";
     echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($e['first_name'].' '.$e['last_name'])."</td><td><strong>Email</strong></td><td>".htmlspecialchars($e['email'])."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
+    echo "<tr><td><strong>Position</strong></td><td>".htmlspecialchars($e['position'] ?? '')."</td><td><strong>Status</strong></td><td>".htmlspecialchars($e['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($e['civil_status'] ?? '')."</td><td><strong>Entrance</strong></td><td>".htmlspecialchars($e['entrance_to_duty'] ?? '')."</td></tr>\n";
     echo "<tr><td colspan='10'>&nbsp;</td></tr>\n";
     echo "<tr><td colspan='10' style='font-weight:bold;background-color:#e0e0e0;'><strong>Leave History</strong></td></tr>\n";
     // header row with some width hints
@@ -94,9 +95,16 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                 <?php endif; ?>
             </div>
             <div>
-                <h2><?= htmlspecialchars($e['first_name'].' '.$e['last_name']); ?></h2>
+                <h2><?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name'])); ?></h2>
                 <p><?= htmlspecialchars($e['email']); ?></p>
                 <p>Department: <?= htmlspecialchars($e['department']); ?></p>
+                <p>Position: <?= htmlspecialchars($e['position'] ?? ''); ?></p>
+                <?php if(!empty($e['status'])): ?><p>Status: <?= htmlspecialchars($e['status']); ?></p><?php endif; ?>
+                <?php if(!empty($e['civil_status'])): ?><p>Civil Status: <?= htmlspecialchars($e['civil_status']); ?></p><?php endif; ?>
+                <?php if(!empty($e['entrance_to_duty'])): ?><p>Entrance to Duty: <?= htmlspecialchars($e['entrance_to_duty']); ?></p><?php endif; ?>
+                <?php if(!empty($e['unit'])): ?><p>Unit: <?= htmlspecialchars($e['unit']); ?></p><?php endif; ?>
+                <?php if(!empty($e['gsis_policy_no'])): ?><p>GSIS Policy No.: <?= htmlspecialchars($e['gsis_policy_no']); ?></p><?php endif; ?>
+                <?php if(!empty($e['national_reference_card_no'])): ?><p>National Reference Card No.: <?= htmlspecialchars($e['national_reference_card_no']); ?></p><?php endif; ?>
                 <p>Annual: <?= $e['annual_balance'] ?? 0; ?> days — Sick: <?= $e['sick_balance'] ?? 0; ?> — Force: <?= $e['force_balance'] ?? 0; ?></p>
                 <p>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
@@ -107,6 +115,9 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <?php endif; ?>
                     <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])): ?>
                         &nbsp;| <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1" class="light-btn">Export history</a>
+                    <?php endif; ?>
+                    <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
+                        &nbsp;| <a href="reports.php?type=leave_card&employee_id=<?= $e['id']; ?>" class="light-btn">View Leave Card</a>
                     <?php endif; ?>
                 </p>
             </div>
@@ -170,6 +181,25 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                 </form>
             </div>
         </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if((($_SESSION['emp_id'] ?? 0) == $id) || in_array($_SESSION['role'], ['admin','hr'])): ?>
+    <div class="card" style="margin-top:40px;">
+        <h3>Record Undertime</h3>
+        <form method="POST" action="../controllers/AdminController.php" class="small-form">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+            <input type="hidden" name="record_undertime" value="1">
+            <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
+            <label>Date</label>
+            <input type="date" name="date" required>
+            <label>Minutes</label>
+            <input type="number" step="0.01" name="minutes" required>
+            <label><input type="checkbox" name="with_pay" value="1"> With pay</label>
+            <div style="text-align:right;">
+                <button type="submit">Apply Deduction</button>
+            </div>
+        </form>
     </div>
     <?php endif; ?>
 

@@ -200,21 +200,24 @@ class Leave {
      * This method can be invoked from a cron job or administration script.
      */
     public function accrueMonthly() {
-        // each employee gains 1.25 annual days and force leave resets to 5
+        // each employee gains 1.25 days for both annual and sick at end of month;
+        // force leave resets to 5
         try {
             $this->conn->beginTransaction();
             $stmt = $this->conn->prepare("UPDATE employees 
                   SET annual_balance = annual_balance + 1.25,
+                      sick_balance = sick_balance + 1.25,
                       force_balance = 5");
             $stmt->execute();
 
             // log accruals for each user (could also be done in trigger)
             $insert = $this->conn->prepare("INSERT INTO accrual_history (employee_id, amount, date_accrued, month_reference) VALUES (?, ?, ?, ?)");
             $monthRef = date('Y-m');
-            $today = date('Y-m-d');
+            // use month end date as the accrual date
+            $accrualDate = date('Y-m-t');
             $empStmt = $this->conn->query("SELECT id FROM employees");
             while ($row = $empStmt->fetch(PDO::FETCH_ASSOC)) {
-                $insert->execute([$row['id'], 1.25, $today, $monthRef]);
+                $insert->execute([$row['id'], 1.25, $accrualDate, $monthRef]);
             }
 
             $this->conn->commit();
@@ -285,7 +288,7 @@ class Leave {
                 if ($typeInfo && $typeInfo['deduct_balance']) {
                     // choose the correct employee column based on type name
                     $col = 'leave_balance';
-                    switch (strtolower($typeInfo['name'])) {
+                            switch (strtolower($typeInfo['name'])) {
                         case 'annual':
                             $col = 'annual_balance';
                             break;
@@ -293,7 +296,8 @@ class Leave {
                             $col = 'sick_balance';
                             break;
                         case 'force':
-                            $col = 'force_balance';
+                            // force leave deducts from vacation (annual) balance per policy
+                            $col = 'annual_balance';
                             break;
                     }
 

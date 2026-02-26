@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
 require_once '../models/Leave.php';
 
@@ -25,9 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
     $month = $_POST['month'];
     $today = date('Y-m-d H:i:s');
 
-    // update balance first
-    $updateStmt = $db->prepare("UPDATE employees SET annual_balance = annual_balance + ? WHERE id = ?");
-    $updateStmt->execute([$amount, $employee_id]);
+    // update balances (annual and sick) first
+    $updateStmt = $db->prepare("UPDATE employees SET annual_balance = annual_balance + ?, sick_balance = sick_balance + ? WHERE id = ?");
+    $updateStmt->execute([$amount, $amount, $employee_id]);
 
     // record history
     $histStmt = $db->prepare("INSERT INTO accrual_history (employee_id, amount, date_accrued, month_reference) VALUES (?, ?, ?, ?)");
@@ -38,8 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
         $newBal = floatval($balStmt->fetchColumn());
         $oldBal = $newBal - $amount;
 
-        // Log to budget history
+        // Log to budget history for both types
         $leaveModel->logBudgetChange($employee_id, 'Annual', $oldBal, $newBal, 'accrual', null, 'Manual accrual recorded for ' . $month);
+        $leaveModel->logBudgetChange($employee_id, 'Sick', $oldBal, $newBal, 'accrual', null, 'Manual accrual recorded for ' . $month);
 
         header("Location: manage_accruals.php?success=1");
         exit();
@@ -84,7 +85,7 @@ try {
 
     <div class="card">
         <h3>Record Manual Accrual</h3>
-        <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.</p>
+        <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.  (amount will be added to both annual and sick balances)</p>
         <form method="POST">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
             <input type="hidden" name="record_accrual" value="1">
