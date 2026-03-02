@@ -40,7 +40,7 @@ if (empty($_SESSION['csrf_token'])) {
 
         <div style="margin:16px 0;display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;">
             <input type="checkbox" id="agreePrivacy" name="agree_privacy" required style="margin:0;flex-shrink:0;vertical-align:middle;width:auto;">
-            <label for="agreePrivacy" style="margin:0;font-size:14px;line-height:1;">I agree to the <a href="#" onclick="openPrivacyModal(event)" style="color:#00c6ff;text-decoration:underline;">Data Privacy and Terms</a></label>
+            <label for="agreePrivacy" style="margin:0;font-size:14px;line-height:1;">I agree to the <a href="#" onclick="openPrivacyModal(event)" style="color:var(--primary);text-decoration:underline;">Data Privacy and Terms</a></label>
         </div>
 
         <br>

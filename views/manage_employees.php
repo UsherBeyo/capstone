@@ -160,7 +160,7 @@ if (isset($_GET['export_leave_card'])) {
 
 <div class="content">
 
-    <button id="openCreateModal" class="btn" style="margin:50px 0 0px 0;">+ New Employee</button>
+    <button id="openCreateModal" class="btn" style="margin:48px 0 0 0;">+ New Employee</button>
 
     <!-- Compact modal for creating employee -->
     <div id="createModal" class="modal" style="display:none;">
@@ -317,9 +317,9 @@ if (isset($_GET['export_leave_card'])) {
 </script>
 
 <div id="imageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:2000;justify-content:center;align-items:center;flex-direction:column;">
-    <span style="color:white;font-size:20px;;margin-bottom:20px;" id="modalImageName"></span>
+    <span style="color:white;font-size:20px;;margin-bottom:24px;" id="modalImageName"></span>
     <img id="modalImage" style="max-width:80%;max-height:80%;border-radius:8px;">
-    <button onclick="closeImageModal()" style="margin-top:20px;padding:10px 20px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">Close</button>
+    <button onclick="closeImageModal()" style="margin-top:20px;padding:10px 20px;background:var(--primary);color:white;border:none;border-radius:4px;cursor:pointer;">Close</button>
 </div>
 
 </body>

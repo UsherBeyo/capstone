@@ -61,24 +61,25 @@ $days = days_in_month($month,$year);
     <title>Leave Calendar</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <style>
-    table.calendar {border-collapse:collapse; width:100%; color: var(--text);}
-    table.calendar td {border:1px solid #ccc; vertical-align:top; height:70px; padding:6px; overflow:hidden; color: var(--text);}
+    table.calendar {border-collapse:collapse; width:100%; color: var(--text); border:1px solid var(--border);}
+    table.calendar td {border:1px solid var(--border); vertical-align:top; height:70px; padding:6px; overflow:hidden; color: var(--secondary-text); background: #ffffff;}
     .day-number { font-size:14px; }
     .day-dots { margin-top:6px; }
-    .holiday { }
-    .leave { }
+    .holiday { background-color: #ffe4e6; }
+    .leave { background-color: #e0f2fe; }
     .calendar-nav a {
-        color: var(--text);
+        color: var(--primary);
         text-decoration: none;
         padding: 4px 10px;
-        margin-right: 8px;
-        background: rgba(255,255,255,0.08);
+        margin-right: 16px;
+        background: var(--bg);
         border-radius: 4px;
         transition: 0.2s;
+        border: 1px solid var(--border);
     }
     .calendar-nav a:hover {
-        background: rgba(255,255,255,0.2);
-        color: var(--text);
+        background: var(--border);
+        color: var(--primary-hover);
     }
     </style>
 </head>
@@ -119,7 +120,7 @@ $days = days_in_month($month,$year);
                     if($count >= 3) break;
                 }
                 if(count($events[$date]) > 3){
-                    echo "<span style='font-size:12px;color:var(--text)'>+".(count($events[$date]) - 3)."</span>";
+                    echo "<span style='font-size:12px;color:var(--secondary-text)'>+".(count($events[$date]) - 3)."</span>";
                 }
             }
             echo "</td>";

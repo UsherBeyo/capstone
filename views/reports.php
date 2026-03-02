@@ -594,9 +594,9 @@ if ($reportType === 'balance') {
 <div class="content">
     <h2><?= htmlspecialchars($reportTitle); ?></h2>
 
-    <div class="card" style="margin-bottom:20px;">
+    <div class="card" style="margin-bottom:24px;">
         <h3>Report Filter</h3>
-        <form method="GET" style="display:flex;gap:10px;align-items:center;">
+        <form method="GET" style="display:flex;gap:16px;align-items:center;">
             <?php if($_SESSION['role'] !== 'employee'): ?>
             <div>
                 <label>Report Type:</label>

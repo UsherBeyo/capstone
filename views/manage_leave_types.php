@@ -44,8 +44,34 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
             <?php endforeach; ?>
         </table>
     </div>
-    <div style="margin-top:20px;">
-        <button onclick="openCreateModal()" style="padding:10px 16px;font-size:15px;cursor:pointer;">+ Add New Type</button>
+    <div class="card" style="margin-top:20px;">
+        <h3>Add New Type</h3>
+        <form method="POST" action="../controllers/LeaveTypeController.php">
+            <input type="hidden" name="action" value="create">
+            <div style="max-width:420px;text-align:left;">
+                <label for="name">Name</label>
+                <input id="name" type="text" name="name" required>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                    <input id="deduct_balance" type="checkbox" name="deduct_balance" checked style="width:auto;">
+                    <label for="deduct_balance" style="margin:0;">Deduct balance</label>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                    <input id="requires_approval" type="checkbox" name="requires_approval" checked style="width:auto;">
+                    <label for="requires_approval" style="margin:0;">Requires approval</label>
+                </div>
+                <div style="margin-top:20px; ">
+                    <label for="max_days_per_year">Max days per year</label>
+                    <input id="max_days_per_year" type="number" step="0.001" name="max_days_per_year">
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                    <input id="auto_approve" type="checkbox" name="auto_approve" style="width:auto;">
+                    <label for="auto_approve" style="margin:0;">Auto approve</label>
+                </div>
+                <div style="margin-top:12px;">
+                    <button type="submit" style="padding:10px 16px;font-size:15px;">Create</button>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 

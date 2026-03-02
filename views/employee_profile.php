@@ -209,23 +209,236 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
     <title>Employee Profile</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <style>
-        .profile-header { display:flex; gap:20px; align-items:center; }
+        .profile-header { display:flex; gap:16px; align-items:center; }
         .profile-pic { width:96px; height:96px; border-radius:50%; object-fit:cover; }
         .small-form input, .small-form select { width: 100%; padding:8px; margin-bottom:8px; border-radius:6px; }
     </style>
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
-<div class="content" style="padding-top:80px;">
+<div class="content">
+    
+    <!-- 1. Employee Header Card -->
     <div class="card">
-        <div class="profile-header">
+        <div style="display:flex;gap:24px;align-items:flex-start;">
             <div>
                 <?php if(!empty($e['profile_pic'])): ?>
-                    <img src="<?= htmlspecialchars($e['profile_pic']); ?>" class="profile-pic" style="cursor:pointer;" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars($e['first_name'].' '.$e['last_name']); ?>')">
+                    <img src="<?= htmlspecialchars($e['profile_pic']); ?>" alt="Profile" style="width:80px;height:80px;border-radius:50%;object-fit:cover;cursor:pointer;border:2px solid var(--border);" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars($e['first_name'].' '.$e['last_name']); ?>')">
                 <?php else: ?>
-                    <div style="width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;">👤</div>
+                    <div style="width:80px;height:80px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:32px;border:2px solid var(--border);">👤</div>
                 <?php endif; ?>
             </div>
+            <div style="flex:1;">
+                <h2 style="margin:0 0 8px 0;"><?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name'])); ?></h2>
+                <p style="margin:0 0 4px 0;font-size:14px;color:#6b7280;"><?= htmlspecialchars($e['email']); ?></p>
+                <p style="margin:0 0 12px 0;font-size:14px;">Department: <strong><?= htmlspecialchars($e['department']); ?></strong></p>
+                <p style="margin:0 0 12px 0;font-size:14px;">Position: <strong><?= htmlspecialchars($e['position'] ?? '—'); ?></strong></p>
+                <p style="margin:0 0 12px 0;font-size:14px;">Entrance to Duty: <strong><?= htmlspecialchars($e['entrance_to_duty'] ?? '0000-00-00'); ?></strong></p>
+                <div style="display:flex;gap:8px;padding:12px;background:#f8fafc;border-radius:8px;font-size:14px;">
+                    <span>Vacational: <strong><?= number_format($e['annual_balance'] ?? 0,3); ?> days</strong></span>
+                    <span style="color:#d1d5db;">|</span>
+                    <span>Sick: <strong><?= number_format($e['sick_balance'] ?? 0,3); ?></strong></span>
+                    <span style="color:#d1d5db;">|</span>
+                    <span>Force: <strong><?= $e['force_balance'] ?? 0; ?></strong></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Action Links Row -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin:24px 0;">
+        <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
+            <a href="edit_employee.php?id=<?= $e['id']; ?>" class="action-btn">Edit profile</a>
+        <?php endif; ?>
+        <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
+            <a href="#" onclick="openPasswordModal(); return false;" class="action-btn">Change Password</a>
+        <?php endif; ?>
+        <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])): ?>
+            <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1" class="action-btn">Export history</a>
+            <a href="employee_profile.php?id=<?= $e['id']; ?>&export=leave_card" class="action-btn">Export leave card</a>
+        <?php endif; ?>
+        <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
+            <a href="reports.php?type=leave_card&employee_id=<?= $e['id']; ?>" class="action-btn">View Leave Card</a>
+        <?php endif; ?>
+    </div>
+
+    <!-- 3. Record Undertime Card -->
+    <?php if((($_SESSION['emp_id'] ?? 0) == $id) || in_array($_SESSION['role'], ['admin','hr'])): ?>
+    <div class="card">
+        <h3>Record Undertime</h3>
+        <form method="POST" action="../controllers/AdminController.php" style="max-width:500px;">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+            <input type="hidden" name="record_undertime" value="1">
+            <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
+            
+            <div class="form-group">
+                <label for="date">Date</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="minutes">Minutes</label>
+                <input type="number" id="minutes" name="minutes" step="0.01" required>
+            </div>
+            
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;margin:0;">
+                    <input type="checkbox" name="with_pay" value="1" style="width:auto;margin:0;">
+                    <span>With pay</span>
+                </label>
+            </div>
+            
+            <button type="submit" style="margin-top:12px;">Apply Deduction</button>
+        </form>
+    </div>
+    <?php endif; ?>
+
+    <!-- 4. Admin Actions (if admin/hr) -->
+    <?php if(in_array($_SESSION['role'], ['admin','hr'])): ?>
+    <div class="card" style="margin-top:24px;">
+        <h3>Admin Actions</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+            <div>
+                <h4 style="margin-top:0;margin-bottom:16px;font-size:14px;font-weight:600;">Update Balances</h4>
+                <form method="POST" action="../controllers/AdminController.php">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                    <input type="hidden" name="update_employee" value="1">
+                    <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
+                    
+                    <div class="form-group">
+                        <label for="annual_balance">Vacational Balance</label>
+                        <input type="number" id="annual_balance" step="0.001" name="annual_balance" value="<?= number_format($e['annual_balance'] ?? 0,3); ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sick_balance">Sick Balance</label>
+                        <input type="number" id="sick_balance" step="0.001" name="sick_balance" value="<?= number_format($e['sick_balance'] ?? 0,3); ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="force_balance">Force Balance</label>
+                        <input type="number" id="force_balance" name="force_balance" value="<?= $e['force_balance'] ?? 0; ?>">
+                    </div>
+                    
+                    <button type="submit">Update balances</button>
+                </form>
+            </div>
+            <div>
+                <h4 style="margin-top:0;margin-bottom:16px;font-size:14px;font-weight:600;">Add Leave History Entry</h4>
+                <form method="POST" action="../controllers/AdminController.php">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                    <input type="hidden" name="add_history" value="1">
+                    <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
+                    
+                    <div class="form-group">
+                        <label for="leave_type_id">Leave Type</label>
+                        <select id="leave_type_id" name="leave_type_id">
+                            <?php
+                                $ltStmt = $db->query("SELECT * FROM leave_types ORDER BY name");
+                                $allTypes = $ltStmt->fetchAll(PDO::FETCH_ASSOC);
+                                foreach($allTypes as $lt): 
+                            ?>
+                                <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="start_date">Start Date</label>
+                        <input type="date" id="start_date" name="start_date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="end_date">End Date</label>
+                        <input type="date" id="end_date" name="end_date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="total_days">Total Days</label>
+                        <input type="number" id="total_days" step="0.01" name="total_days" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="reason">Comments</label>
+                        <input type="text" id="reason" name="reason">
+                    </div>
+                    
+                    <button type="submit">Add history entry</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- 5. Leave History Table -->
+    <div class="card" style="margin-top:24px;">
+        <h3>Leave History</h3>
+        <?php if(empty($history)): ?>
+            <p>No leave history available.</p>
+        <?php else: ?>
+        <div style="overflow-x:auto;">
+            <table style="width:100%;font-size:13px;">
+                <tr style="background:#f8fafc;border-bottom:2px solid var(--border);">
+                    <th style="padding:12px;text-align:left;font-weight:600;">Type</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Dates</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Days</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Status</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Submitted</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Vacational Bal</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Sick Bal</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Force Bal</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Comments</th>
+                </tr>
+                <?php foreach($history as $h): ?>
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:10px 12px;"><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type'] ?? ''); ?></td>
+                    <td style="padding:10px 12px;"><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
+                    <td style="padding:10px 12px;"><?= isset($h['total_days']) ? number_format($h['total_days'],3) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= htmlspecialchars($h['status'] ?? ''); ?></td>
+                    <td style="padding:10px 12px;"><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($h['snapshot_annual_balance']) ? number_format($h['snapshot_annual_balance'],3) : '—'; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($h['snapshot_sick_balance']) ? number_format($h['snapshot_sick_balance'],3) : '—'; ?></td>
+                    <td style="padding:10px 12px;"><?= $h['snapshot_force_balance'] ?? '—'; ?></td>
+                    <td style="padding:10px 12px;"><?= htmlspecialchars($h['manager_comments'] ?? $h['reason'] ?? ''); ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- 6. Budget History Table -->
+    <div class="card" style="margin-top:24px;">
+        <h3>Budget History</h3>
+        <?php if(empty($budgetHistory)): ?>
+            <p>No budget change history available.</p>
+        <?php else: ?>
+        <div style="overflow-x:auto;">
+            <table style="width:100%;font-size:13px;">
+                <tr style="background:#f8fafc;border-bottom:2px solid var(--border);">
+                    <th style="padding:12px;text-align:left;font-weight:600;">Leave Type</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Action</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Old Balance</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">New Balance</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Date</th>
+                    <th style="padding:12px;text-align:left;font-weight:600;">Notes</th>
+                </tr>
+                <?php foreach($budgetHistory as $bh): ?>
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:10px 12px;"><?= htmlspecialchars($bh['leave_type'] ?? ''); ?></td>
+                    <td style="padding:10px 12px;"><?= htmlspecialchars($bh['action'] ?? ''); ?></td>
+                    <td style="padding:10px 12px;"><?= isset($bh['old_balance']) ? number_format($bh['old_balance'],3) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($bh['new_balance']) ? number_format($bh['new_balance'],3) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= !empty($bh['created_at']) ? date('M d, Y H:i', strtotime($bh['created_at'])) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= htmlspecialchars($bh['notes'] ?? ''); ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
+
+</div>
             <div>
                 <h2><?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name'])); ?></h2>
                 <p><?= htmlspecialchars($e['email']); ?></p>
@@ -385,13 +598,13 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
         </table>
         <?php endif; ?>
     </div>
-
+                 
 </div>
 
 <div id="imageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:2000;justify-content:center;align-items:center;flex-direction:column;">
-    <span style="color:white;font-size:20px;margin-bottom:20px;" id="modalImageName"></span>
+    <span style="color:white;font-size:20px;margin-bottom:24px;" id="modalImageName"></span>
     <img id="modalImage" style="max-width:80%;max-height:80%;border-radius:8px;">
-    <button onclick="closeImageModal()" style="margin-top:20px;padding:10px 20px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">Close</button>
+    <button onclick="closeImageModal()" style="margin-top:20px;padding:10px 20px;background:var(--primary);color:white;border:none;border-radius:4px;cursor:pointer;">Close</button>
 </div>
 
 <div id="passwordModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:center;">
@@ -404,8 +617,8 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
             <input type="password" name="current" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;">
             <label>New Password</label>
             <input type="password" name="new" required minlength="6" style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;">
-            <button type="submit" style="background:#007bff;color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;">Update Password</button>
-            <button type="button" onclick="closePasswordModal()" style="margin-left:10px;background:#6c757d;color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
+            <button type="submit" style="background:var(--primary);color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;">Update Password</button>
+            <button type="button" onclick="closePasswordModal()" style="margin-left:8px;background:#6c757d;color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
         </form>
     </div>
 </div>
