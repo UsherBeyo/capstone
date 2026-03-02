@@ -18,6 +18,7 @@ if (empty($_SESSION['csrf_token'])) {
 <head>
     <title>Login - Leave System</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+    <link rel="icon" type="image/jpeg" href="../pictures/DEPED.jpg">
 </head>
 <body style="display:flex;justify-content:center;align-items:center;height:100vh;">
 

@@ -123,3 +123,24 @@ function checkFlashMessage() {
 
 document.addEventListener('DOMContentLoaded', checkFlashMessage);
 </script>
+
+<script>
+// Ensure site favicon uses pictures/DEPED.jpg when sidebar is present
+(function(){
+    try {
+        var href = '../pictures/DEPED.jpg';
+        var existing = document.querySelector("link[rel~='icon']");
+        if (existing) {
+            existing.href = href;
+        } else {
+            var l = document.createElement('link');
+            l.rel = 'icon';
+            l.type = 'image/jpeg';
+            l.href = href;
+            document.getElementsByTagName('head')[0].appendChild(l);
+        }
+    } catch (e) {
+        // silent
+    }
+})();
+</script>
