@@ -52,8 +52,9 @@ if (empty($_SESSION['csrf_token'])) {
         <?php if(empty($pending)): ?>
             <p>No pending requests.</p>
         <?php else: ?>
+        <input type="text" id="searchPending" placeholder="Search pending" style="margin-bottom:8px;padding:6px;width:100%;max-width:400px;">
         <div class="table-container">
-        <table border="1" width="100%">
+        <table border="1" width="100%" id="pendingTable">
         <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Action</th></tr>
         <?php foreach($pending as $r): ?>
         <tr>
@@ -91,8 +92,9 @@ if (empty($_SESSION['csrf_token'])) {
     <?php if(empty($approved)): ?>
         <p>No approved requests.</p>
     <?php else: ?>
+    <input type="text" id="searchApproved" placeholder="Search approved" style="margin-bottom:8px;padding:6px;width:100%;max-width:400px;">
     <div class="table-container">
-    <table border="1" width="100%">
+    <table border="1" width="100%" id="approvedTable">
         <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Comments</th></tr>
         <?php foreach($approved as $r): ?>
         <tr>
@@ -114,8 +116,9 @@ if (empty($_SESSION['csrf_token'])) {
     <?php if(empty($rejected)): ?>
         <p>No rejected requests.</p>
     <?php else: ?>
+    <input type="text" id="searchRejected" placeholder="Search rejected" style="margin-bottom:8px;padding:6px;width:100%;max-width:400px;">
     <div class="table-container">
-    <table border="1" width="100%">
+    <table border="1" width="100%" id="rejectedTable">
         <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Days</th><th>Comments</th></tr>
         <?php foreach($rejected as $r): ?>
         <tr>
@@ -134,6 +137,22 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <script>
+// utility for filtering rows
+function attachFilter(inputId, tableId) {
+    var inp = document.getElementById(inputId);
+    var table = document.getElementById(tableId);
+    if(!inp || !table) return;
+    inp.addEventListener('keyup', function(){
+        var term = inp.value.toLowerCase();
+        Array.from(table.tBodies[0].rows).forEach(function(row){
+            row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+        });
+    });
+}
+attachFilter('searchPending','pendingTable');
+attachFilter('searchApproved','approvedTable');
+attachFilter('searchRejected','rejectedTable');
+
 // intercept approve/reject forms and send via fetch
 Array.from(document.querySelectorAll('form')).forEach(function(form){
     if(form.querySelector('button[name="action"][value="approve"]')) {

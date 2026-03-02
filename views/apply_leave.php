@@ -38,9 +38,14 @@ if (empty($_SESSION['csrf_token'])) {
             var info = document.getElementById('balance-info');
             var balanceMap = {
                 <?php foreach ($leaveTypes as $lt): 
-                    $col = strtolower(str_replace(' ', '_', $lt['name'])) . '_balance';
-                    // fallback if column doesn't exist
-                    echo $lt['id'] . ": " . (isset($balances[$col]) ? $balances[$col] : 0) . ",\n";
+                    // Map leave type names to the correct balance columns
+                    $typeName = strtolower($lt['name']);
+                    $col = 'annual_balance'; // default
+                    if ($typeName === 'sick') $col = 'sick_balance';
+                    elseif ($typeName === 'force') $col = 'force_balance';
+                    elseif ($typeName === 'vacational' || $typeName === 'vacation' || $typeName === 'annual') $col = 'annual_balance';
+                    $value = isset($balances[$col]) ? $balances[$col] : 0;
+                    echo $lt['id'] . ": " . $value . ",\n";
                 endforeach; ?>
             };
             var val = balanceMap[selectedId] !== undefined ? balanceMap[selectedId] : 0;
