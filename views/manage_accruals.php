@@ -84,7 +84,7 @@ try {
     <?php endif; ?>
 
 
-    <div class="card-container" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
+    <div class="card-container" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
         <div class="card" style="flex:1;min-width:300px;max-width:500px;">
             <h3>Record Manual Accrual</h3>
             <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.</p>

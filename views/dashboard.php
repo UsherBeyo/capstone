@@ -37,7 +37,7 @@ if ($role === 'employee') {
     <h2>Welcome <?= htmlspecialchars($userName); ?></h2>
 
     <?php if(!empty($_SESSION['message'])): ?>
-        <div class="card" style="background:#eef; padding:10px;">
+        <div class="card" style="padding:10px; border:1px solid var(--primary-hover); background:#f0faff;">
             <?= htmlspecialchars($_SESSION['message']); ?>
         </div>
         <?php unset($_SESSION['message']); ?>
@@ -67,9 +67,9 @@ if ($role === 'employee') {
         }
         ?>
 
-        <div class="card" style="margin:20px auto;max-width:800px;">
+        <div class="card" style="margin:24px auto;max-width:800px;">
             <h3 style="text-align:center;">Leave Balances</h3>
-            <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:100%;align-items:center;justify-content:center;">
+            <div style="display:flex;gap:16px;flex-wrap:wrap;max-width:100%;align-items:center;justify-content:center;">
                 <div style="flex:1;min-width:250px;max-width:300px;height:200px;">
                     <canvas id="annualChart"></canvas>
                 </div>
@@ -82,7 +82,7 @@ if ($role === 'employee') {
             </div>
         </div>
 
-        <div class="card" style="margin-top:20px;">
+        <div class="card" style="margin-top:24px;">
             <h3>My Leave Requests</h3>
             <?php if(empty($ownRequests)): ?>
                 <p>No leave requests submitted yet.</p>
@@ -93,7 +93,7 @@ if ($role === 'employee') {
                 ?>
                 
                 <?php if(!empty($pending)): ?>
-                <div style="margin-bottom:20px;">
+                <div style="margin-bottom:24px;">
                     <h4>Pending Requests</h4>
                     <table border="1" width="100%" style="margin-bottom:10px;">
                         <tr>
@@ -119,7 +119,7 @@ if ($role === 'employee') {
                 <?php if(!empty($archived)): ?>
                 <div>
                     <h4><a href="#" class="dropdown-toggle" onclick="document.getElementById('archiveSection').style.display = document.getElementById('archiveSection').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (?? records)</a></h4>
-                    <div id="archiveSection" style="display:none;margin-top:10px;">
+                    <div id="archiveSection" style="display:none;margin-top:16px;">
                         <table border="1" width="100%">
                             <tr>
                                 <th>Type</th>
@@ -148,6 +148,7 @@ if ($role === 'employee') {
             // Employee balance charts
             var ctx1 = document.getElementById('annualChart');
             if (ctx1) {
+                var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#000';
                 var annualContext = ctx1.getContext('2d');
                 new Chart(annualContext, {
                     type: 'doughnut',
@@ -165,7 +166,7 @@ if ($role === 'employee') {
                             legend: {
                                 position: 'bottom',
                                 labels: {
-                                    color: '#ffffff'
+                                    color: textColor
                                 }
                             },
                             tooltip: {
@@ -175,7 +176,7 @@ if ($role === 'employee') {
                                     }
                                 }
                             },
-                            title: {display: true, text: 'Annual Leave', color: '#ffffff'}
+                            title: {display: true, text: 'Annual Leave', color: textColor}
                         }
                     }
                 });
@@ -200,7 +201,7 @@ if ($role === 'employee') {
                             legend: {
                                 position: 'bottom',
                                 labels: {
-                                    color: '#ffffff'
+                                    color: textColor
                                 }
                             },
                             tooltip: {
@@ -210,7 +211,7 @@ if ($role === 'employee') {
                                     }
                                 }
                             },
-                            title: {display: true, text: 'Sick Leave', color: '#ffffff'}
+                            title: {display: true, text: 'Sick Leave', color: textColor}
                         }
                     }
                 });
@@ -235,7 +236,7 @@ if ($role === 'employee') {
                             legend: {
                                 position: 'bottom',
                                 labels: {
-                                    color: '#ffffff'
+                                    color: textColor
                                 }
                             },
                             tooltip: {
@@ -245,7 +246,7 @@ if ($role === 'employee') {
                                     }
                                 }
                             },
-                            title: {display: true, text: 'Force Leave', color: '#ffffff'}
+                            title: {display: true, text: 'Force Leave', color: textColor}
                         }
                     }
                 });
@@ -276,12 +277,12 @@ if ($role === 'employee') {
         $deptChartStmt = $db->query("SELECT department, COUNT(*) AS cnt FROM employees GROUP BY department");
         $deptChartData = $deptChartStmt->fetchAll(PDO::FETCH_ASSOC);
         ?>
-        <div class="card" style="margin-bottom:20px;">
+        <div class="card" style="margin-bottom:24px;">
             <h3>Analytics</h3>
             <?php if($mostAbsent): ?>
                 <p><strong>Most absent employee:</strong> <?= htmlspecialchars($mostAbsentName); ?> (<?= $mostAbsent['cnt']; ?> days)</p>
             <?php endif; ?>
-            <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:100%;">
+            <div style="display:flex;gap:16px;flex-wrap:wrap;max-width:100%;">
                 <div style="flex:1;min-width:350px;max-width:600px;">
                     <canvas id="monthlyChart"></canvas>
                 </div>
@@ -430,9 +431,9 @@ if ($role === 'employee') {
         </div>
         
         <?php if(!empty($archived)): ?>
-        <div class="card" style="margin-top:20px;">
+        <div class="card" style="margin-top:24px;">
             <h3><a href="#" class="dropdown-toggle" onclick="document.getElementById('archivePanel').style.display = document.getElementById('archivePanel').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (<?= count($archived); ?> records)</a></h3>
-            <div id="archivePanel" style="display:none;margin-top:10px;">
+            <div id="archivePanel" style="display:none;margin-top:16px;">
                 <table border="1" width="100%" style="font-size:12px;">
                     <tr>
                         <th>Employee</th>
@@ -458,7 +459,7 @@ if ($role === 'employee') {
         <?php endif; ?>
 
     <?php elseif($role == 'admin'): ?>
-        <div class="card" style="margin-bottom:20px;">
+        <div class="card" style="margin-bottom:24px;">
             <a href="change_password.php" class="btn">Change Password</a>
         </div>
         <?php
@@ -480,10 +481,10 @@ if ($role === 'employee') {
         $roleCounts = array_column($roleData,'cnt');
         ?>
 
-        <div style="display:flex;gap:20px;margin-bottom:20px;">
+        <div style="display:flex;gap:16px;margin-bottom:24px;">
             <div class="card" style="flex:1;">
                 <h3>Total Employees</h3>
-                <p style="font-size:24px;color:#00c6ff;"><?= $count ?></p>
+                <p style="font-size:24px;color:var(--primary);"><?= $count ?></p>
             </div>
             <div class="card" style="flex:1;border-left:4px solid #ff6b6b;">
                 <h3>Pending Requests</h3>
@@ -495,12 +496,12 @@ if ($role === 'employee') {
             </div>
         </div>
 
-        <div class="card" style="margin-top:20px;">
+        <div class="card" style="margin-top:24px;">
             <h3>Employees by Department</h3>
             <canvas id="deptChart"></canvas>
         </div>
 
-        <div class="card" style="margin-top:20px;">
+        <div class="card" style="margin-top:24px;">
             <h3>Employees by Role</h3>
             <canvas id="roleChart"></canvas>
         </div>
@@ -526,7 +527,7 @@ if ($role === 'employee') {
                     labels: <?= json_encode($roleLabels); ?>,
                     datasets: [{
                         data: <?= json_encode($roleCounts); ?>,
-                        backgroundColor: ['#007bff','#28a745','#ffc107','#dc3545']
+                        backgroundColor: ['#2563eb','#28a745','#ffc107','#dc3545']
                     }]
                 }
             });

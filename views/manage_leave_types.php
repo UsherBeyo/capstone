@@ -44,7 +44,7 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
             <?php endforeach; ?>
         </table>
     </div>
-    <div class="card" style="margin-top:20px;">
+    <div class="card" style="margin-top:24px;">
         <h3>Add New Type</h3>
         <form method="POST" action="../controllers/LeaveTypeController.php">
             <input type="hidden" name="action" value="create">
@@ -59,7 +59,7 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
                     <input id="requires_approval" type="checkbox" name="requires_approval" checked style="width:auto;">
                     <label for="requires_approval" style="margin:0;">Requires approval</label>
                 </div>
-                <div style="margin-top:20px; ">
+                <div style="margin-top:24px; ">
                     <label for="max_days_per_year">Max days per year</label>
                     <input id="max_days_per_year" type="number" step="0.001" name="max_days_per_year">
                 </div>

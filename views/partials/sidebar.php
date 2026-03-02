@@ -17,40 +17,10 @@ if (!isset($db)) {
     $db = (new Database())->connect();
 }
 ?>
-<div class="topbar">
-    <div class="topbar-left"></div> <!-- title moved to sidebar -->
-    <div class="topbar-right">
-        <?php
-        // show profile icon with dropdown
-        $empRecord = null;
-        $displayName = $_SESSION['email'] ?? 'User';
-        if (!empty($_SESSION['emp_id'])) {
-            $stmt = $db->prepare("SELECT id, first_name, last_name FROM employees WHERE id = ?");
-            $stmt->execute([$_SESSION['emp_id']]);
-            $empRecord = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($empRecord) {
-                $displayName = $empRecord['first_name'] . ' ' . $empRecord['last_name'];
-            }
-        }
-        ?>
-        <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌓</button>
-        <div class="profile-dropdown">
-            <button class="topbar-profile-btn" onclick="toggleProfileMenu()" title="Profile">👤</button>
-            <div id="profileMenu" class="profile-menu" style="display:none;">
-                <div class="profile-menu-header"><?= htmlspecialchars($displayName); ?></div>
-                <?php if ($empRecord): ?>
-                    <a href="employee_profile.php?id=<?= htmlspecialchars($empRecord['id']); ?>">My Profile</a>
-                <?php endif; ?>
-                <a href="#" onclick="openSettings();return false;">Settings</a>
-                <a href="../controllers/logout.php">Logout</a>
-            </div>
-        </div>
-    </div>
-</div>
+<?php include __DIR__ . '/../layout/header.php'; ?>
 
 <div class="sidebar">
-    <h2 class="sidebar-title">Leave System</h2>
-     
+    <nav class="sidebar-nav">
     <a href="dashboard.php">Dashboard</a>
     <?php if(in_array($role,['employee','manager','hr','admin'])): ?>
         <a href="calendar.php">Leave Calendar</a>
@@ -77,6 +47,7 @@ if (!isset($db)) {
         <?php endif; ?>
     <?php endif; ?>
     <a href="../controllers/logout.php">Logout</a>
+    </nav>
 </div>
 
 <script>
@@ -88,25 +59,6 @@ function openSettings() {
     // redirect to settings or change-password placeholder
     window.location.href = 'change_password.php';
 }
-
-// theme toggle
-(function(){
-    var btn = document.getElementById('themeToggle');
-    function setTheme(theme) {
-        if(theme === 'light') {
-            document.body.classList.add('light-theme');
-        } else {
-            document.body.classList.remove('light-theme');
-        }
-        localStorage.setItem('theme', theme);
-    }
-    var saved = localStorage.getItem('theme') || 'dark';
-    setTheme(saved);
-    if(btn) btn.addEventListener('click', function(){
-        var cur = document.body.classList.contains('light-theme') ? 'light' : 'dark';
-        setTheme(cur === 'light' ? 'dark' : 'light');
-    });
-})();
 
 // close menu if clicked outside
 window.addEventListener('click', function(e){

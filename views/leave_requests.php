@@ -87,7 +87,7 @@ if (empty($_SESSION['csrf_token'])) {
     </div> <!-- end card -->
 
     <div class="card">
-        <h3 style="margin-top:20px;">Approved</h3>
+        <h3 style="margin-top:24px;">Approved</h3>
     <?php if(empty($approved)): ?>
         <p>No approved requests.</p>
     <?php else: ?>
@@ -110,7 +110,7 @@ if (empty($_SESSION['csrf_token'])) {
     </div> <!-- end card -->
 
     <div class="card">
-        <h3 style="margin-top:20px;">Rejected</h3>
+        <h3 style="margin-top:24px;">Rejected</h3>
     <?php if(empty($rejected)): ?>
         <p>No rejected requests.</p>
     <?php else: ?>

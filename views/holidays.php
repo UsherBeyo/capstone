@@ -40,7 +40,7 @@ if (empty($_SESSION['csrf_token'])) {
             <input type="text" name="description">
             <button type="submit" name="add">Add</button>
         </form>
-        <table border="1" style="margin-top:20px;">
+        <table border="1" style="margin-top:24px;">
             <tr><th>Date</th><th>Description</th><th>Type</th><th>Action</th></tr>
             <?php foreach($hols as $h): ?>
             <tr>

@@ -48,7 +48,7 @@ $total = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
         </table>
     </div>
 
-    <div class="card" style="margin-top:20px;">
+    <div class="card" style="margin-top:24px;">
         <h3>By role</h3>
         <table border="1">
             <tr><th>Role</th><th>Count</th></tr>
