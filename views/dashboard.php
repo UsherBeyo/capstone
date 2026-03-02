@@ -397,6 +397,9 @@ if ($role === 'employee') {
         <div class="card">
             <h3>Pending Leave Requests</h3>
 
+            <?php if(empty($requests)): ?>
+                <p style="color:#6b7280;font-size:14px;margin:12px 0;">No Pending Requests so far.</p>
+            <?php else: ?>
             <table border="1" width="100%">
                 <tr>
                     <th>Employee</th>
@@ -434,6 +437,7 @@ if ($role === 'employee') {
                 <?php endforeach; ?>
 
             </table>
+            <?php endif; ?>
         </div>
         
         <?php if(!empty($archived)): ?>
