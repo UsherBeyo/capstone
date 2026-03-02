@@ -44,34 +44,8 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
             <?php endforeach; ?>
         </table>
     </div>
-    <div class="card" style="margin-top:20px;">
-        <h3>Add New Type</h3>
-        <form method="POST" action="../controllers/LeaveTypeController.php">
-            <input type="hidden" name="action" value="create">
-            <div style="max-width:420px;text-align:left;">
-                <label for="name">Name</label>
-                <input id="name" type="text" name="name" required>
-                <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-                    <input id="deduct_balance" type="checkbox" name="deduct_balance" checked style="width:auto;">
-                    <label for="deduct_balance" style="margin:0;">Deduct balance</label>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-                    <input id="requires_approval" type="checkbox" name="requires_approval" checked style="width:auto;">
-                    <label for="requires_approval" style="margin:0;">Requires approval</label>
-                </div>
-                <div style="margin-top:20px; ">
-                    <label for="max_days_per_year">Max days per year</label>
-                    <input id="max_days_per_year" type="number" step="0.001" name="max_days_per_year">
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-                    <input id="auto_approve" type="checkbox" name="auto_approve" style="width:auto;">
-                    <label for="auto_approve" style="margin:0;">Auto approve</label>
-                </div>
-                <div style="margin-top:12px;">
-                    <button type="submit" style="padding:10px 16px;font-size:15px;">Create</button>
-                </div>
-            </div>
-        </form>
+    <div style="margin-top:20px;">
+        <button onclick="openCreateModal()" style="padding:10px 16px;font-size:15px;cursor:pointer;">+ Add New Type</button>
     </div>
 </div>
 
@@ -107,6 +81,39 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
     </div>
 </div>
 
+<div id="createModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+    <div style="background:white;padding:30px;border-radius:8px;width:90%;max-width:500px;">
+        <h3>Add New Leave Type</h3>
+        <form method="POST" action="../controllers/LeaveTypeController.php">
+            <input type="hidden" name="action" value="create">
+            <label for="createName">Name</label>
+            <input id="createName" type="text" name="name" required>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                <input id="createDeduct" type="checkbox" name="deduct_balance" checked style="width:auto;">
+                <label for="createDeduct" style="margin:0;">Deduct balance</label>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                <input id="createApproval" type="checkbox" name="requires_approval" checked style="width:auto;">
+                <label for="createApproval" style="margin:0;">Requires approval</label>
+            </div>
+
+            <div style="margin-top:20px;">
+                <label for="createMax">Max days per year</label>
+                <input id="createMax" type="number" step="0.001" name="max_days_per_year">
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                <input id="createAuto" type="checkbox" name="auto_approve" style="width:auto;">
+                <label for="createAuto" style="margin:0;">Auto approve</label>
+            </div>
+            <button type="submit">Create</button>
+            <button type="button" onclick="closeCreateModal()">Cancel</button>
+        </form>
+    </div>
+</div>
+
 <script>
 function openEditModal(id, name, deduct, approval, max, auto) {
     document.getElementById('editTypeId').value = id;
@@ -121,6 +128,31 @@ function openEditModal(id, name, deduct, approval, max, auto) {
 function closeEditModal() {
     document.getElementById('editModal').style.display = 'none';
 }
+
+function openCreateModal() {
+    document.getElementById('createName').value = '';
+    document.getElementById('createDeduct').checked = true;
+    document.getElementById('createApproval').checked = true;
+    document.getElementById('createMax').value = '';
+    document.getElementById('createAuto').checked = false;
+    document.getElementById('createModal').style.display = 'flex';
+}
+
+function closeCreateModal() {
+    document.getElementById('createModal').style.display = 'none';
+}
+
+// Close modals when clicking outside
+window.addEventListener('click', function(e) {
+    var createModal = document.getElementById('createModal');
+    var editModal = document.getElementById('editModal');
+    if (e.target === createModal) {
+        createModal.style.display = 'none';
+    }
+    if (e.target === editModal) {
+        editModal.style.display = 'none';
+    }
+});
 </script>
 </body>
 </html>

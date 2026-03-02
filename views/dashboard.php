@@ -20,6 +20,12 @@ if ($role === 'employee') {
     if ($user && !empty($user['first_name'])) {
         $userName = $user['first_name'] . ' ' . $user['last_name'];
     }
+} elseif ($role === 'admin') {
+    $userName = 'Admin';
+} elseif ($role === 'hr') {
+    $userName = 'HR';
+} elseif ($role === 'manager') {
+    $userName = 'Manager';
 }
 ?>
 <!DOCTYPE html>

@@ -116,4 +116,50 @@ window.addEventListener('click', function(e){
         menu.style.display = 'none';
     }
 });
+
+// Toast notification function - global for all pages
+function showToast(message, type = 'info', duration = 3000) {
+    var container = document.getElementById('notificationContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notificationContainer';
+        document.body.appendChild(container);
+    }
+    
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + type;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    // Auto remove after duration
+    setTimeout(function() {
+        toast.classList.add('removing');
+        setTimeout(function() {
+            toast.remove();
+        }, 300);
+    }, duration);
+}
+
+// Check for flash messages from query parameters
+function checkFlashMessage() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.has('toast_success')) {
+        showToast(decodeURIComponent(params.get('toast_success')), 'success');
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.has('toast_error')) {
+        showToast(decodeURIComponent(params.get('toast_error')), 'error');
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.has('toast_warning')) {
+        showToast(decodeURIComponent(params.get('toast_warning')), 'warning');
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.has('added_history')) {
+        showToast('Historical entry added successfully!', 'success');
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.has('undertime')) {
+        showToast('Undertime recorded successfully!', 'success');
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', checkFlashMessage);
 </script>

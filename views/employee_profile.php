@@ -292,12 +292,14 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                             <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <label>Earning (1.25 days, optional)</label>
+                    <input type="number" step="0.001" name="earning_amount" value="">
                     <label>Start Date</label>
                     <input type="date" name="start_date" required>
                     <label>End Date</label>
                     <input type="date" name="end_date" required>
                     <label>Total Days</label>
-                    <input type="number" step="0.01" name="total_days" required>
+                    <input type="number" step="0.001" name="total_days" required>
                     <label>Comments</label>
                     <input type="text" name="reason">
                     <hr>
@@ -305,9 +307,9 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <label>Vacational balance at time</label>
                     <input type="number" step="0.001" name="snapshot_annual_balance" value="">
                     <label>Sick balance at time</label>
-                    <input type="number" step="0.01" name="snapshot_sick_balance" value="">
+                    <input type="number" step="0.001" name="snapshot_sick_balance" value="">
                     <label>Force balance at time</label>
-                    <input type="number" name="snapshot_force_balance" value="">
+                    <input type="number" step="0.001" name="snapshot_force_balance" value="">
                     <div style="text-align:right;">
                         <button type="submit">Add history entry</button>
                     </div>
@@ -317,7 +319,7 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
     </div>
     <?php endif; ?>
 
-    <?php if((($_SESSION['emp_id'] ?? 0) == $id) || in_array($_SESSION['role'], ['admin','hr'])): ?>
+    <?php if(in_array($_SESSION['role'], ['admin','hr'])): ?>
     <div class="card" style="margin-top:40px;">
         <h3>Record Undertime</h3>
         <form method="POST" action="../controllers/AdminController.php" class="small-form">
@@ -326,8 +328,16 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
             <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
             <label>Date</label>
             <input type="date" name="date" required>
-            <label>Minutes</label>
-            <input type="number" step="0.01" name="minutes" required>
+            <div style="display:flex;gap:10px;">
+                <div style="flex:1;">
+                    <label>Hours</label>
+                    <input type="number" step="1" name="hours" value="0" min="0">
+                </div>
+                <div style="flex:1;">
+                    <label>Minutes</label>
+                    <input type="number" step="1" name="undertime_minutes" value="0" min="0" max="59">
+                </div>
+            </div>
             <label><input type="checkbox" name="with_pay" value="1"> With pay</label>
             <div style="text-align:right;">
                 <button type="submit">Apply Deduction</button>

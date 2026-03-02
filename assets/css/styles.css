@@ -464,3 +464,130 @@ input::-webkit-outer-spin-button {
     color: var(--text);
     z-index: 999;
 }
+
+/* Toast Notification Styles */
+#notificationContainer {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+}
+
+.toast {
+    padding: 16px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    color: white;
+    font-weight: 500;
+    animation: slideInRight 0.3s ease-out;
+    min-width: 300px;
+}
+
+.toast.success {
+    background-color: #22c55e;
+}
+
+.toast.error {
+    background-color: #ef4444;
+}
+
+.toast.warning {
+    background-color: #f59e0b;
+}
+
+.toast.info {
+    background-color: #3b82f6;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+}
+
+.toast.removing {
+    animation: slideOutRight 0.3s ease-in forwards;
+}
+
+/* Calendar cell hover effect - day only, not entire row */
+td[data-date]:hover {
+    background: rgba(100, 150, 255, 0.2);
+    transform: scale(1.02);
+    box-shadow: inset 0 0 8px rgba(100, 150, 255, 0.3);
+}
+
+/* Modal styling */
+#createModal, #editModal {
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--text);
+}
+
+#createModal > div, #editModal > div {
+    background: var(--bg);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+}
+
+#createModal input, #editModal input,
+#createModal select, #editModal select {
+    background: rgba(255,255,255,0.1);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+#createModal input:focus, #editModal input:focus,
+#createModal select:focus, #editModal select:focus {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(100,150,255,0.5);
+    outline: none;
+}
+
+#createModal label, #editModal label {
+    display: block;
+    margin-top: 12px;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+#createModal button, #editModal button {
+    background: rgba(59, 130, 246, 0.8);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    margin-right: 8px;
+    margin-top: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#createModal button:hover, #editModal button:hover {
+    background: rgba(59, 130, 246, 1);
+}
+
+#createModal button[type="button"], #editModal button[type="button"] {
+    background: rgba(107, 114, 128, 0.8);
+}
+
+#createModal button[type="button"]:hover, #editModal button[type="button"]:hover {
+    background: rgba(107, 114, 128, 1);
+}

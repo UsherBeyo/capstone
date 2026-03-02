@@ -22,18 +22,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         die("CSRF validation failed.");
     }
 
-    // handle undertime recording (employee or admin)
+    // handle undertime recording (admin/hr only)
     if (isset($_POST['record_undertime'])) {
         $empId = intval($_POST['employee_id']);
         $date = $_POST['date'];
-        $minutes = floatval($_POST['minutes']);
+        $hours = intval($_POST['hours'] ?? 0);
+        $minutes = intval($_POST['undertime_minutes'] ?? 0);
         $withPay = isset($_POST['with_pay']) ? 1 : 0;
-        // permission: employee can only log for self
-        if ($_SESSION['role'] === 'employee' && ($_SESSION['emp_id'] ?? 0) != $empId) {
+        // permission: only admin/hr can record undertime
+        if (!in_array($_SESSION['role'], ['admin','hr'])) {
             die("Access denied");
         }
+        // calculate total minutes
+        $totalMinutes = $hours * 60 + $minutes;
         // compute deduction
-        $deduct = round($minutes * 0.002, 3); // per policy with 3‑decimal precision
+        $deduct = round($totalMinutes * 0.002, 3); // per policy with 3-decimal precision
         // get old balance
         $stmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
         $stmt->execute([$empId]);
@@ -41,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newBal = max(0, $oldBal - $deduct);
         $db->prepare("UPDATE employees SET annual_balance = ? WHERE id = ?")->execute([$newBal, $empId]);
         // log budget change and leave_balance_logs
-        $leaveModel->logBudgetChange($empId, 'Vacational', $oldBal, $newBal, $withPay ? 'undertime_paid' : 'undertime_unpaid', null, 'Undertime '.$minutes.' mins');
+        $leaveModel->logBudgetChange($empId, 'Vacational', $oldBal, $newBal, $withPay ? 'undertime_paid' : 'undertime_unpaid', null, 'Undertime '.$hours.'h '.$minutes.'m');
         $stmt2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
         $stmt2->execute([$empId, -1 * $deduct, $withPay ? 'undertime_paid' : 'undertime_unpaid']);
 
@@ -152,6 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $end = $_POST['end_date'];
         $days = floatval($_POST['total_days']);
         $reason = trim($_POST['reason'] ?? '');
+        $earningAmount = isset($_POST['earning_amount']) && $_POST['earning_amount'] !== '' ? floatval($_POST['earning_amount']) : 0;
         $status = 'approved';
         $approved_by = $_SESSION['user_id'];
 
@@ -170,7 +174,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $snapshots['sick_balance'] = floatval($_POST['snapshot_sick_balance']);
         }
         if (isset($_POST['snapshot_force_balance']) && $_POST['snapshot_force_balance'] !== '') {
-            $snapshots['force_balance'] = intval($_POST['snapshot_force_balance']);
+            $snapshots['force_balance'] = floatval($_POST['snapshot_force_balance']);
+        }
+
+        // Handle earning first (if specified)
+        if ($earningAmount > 0) {
+            // Determine which column to add earning to
+            $col = 'annual_balance';
+            switch (strtolower($typeName)) {
+                case 'sick': $col='sick_balance'; break;
+                case 'force': $col='force_balance'; break;
+            }
+            // get old balance
+            $oldStmt = $db->prepare("SELECT $col FROM employees WHERE id = ?");
+            $oldStmt->execute([$empId]);
+            $oldBalance = floatval($oldStmt->fetchColumn());
+            // update balance
+            $db->prepare("UPDATE employees SET $col = $col + ? WHERE id = ?")->execute([$earningAmount, $empId]);
+            // log to budget history
+            $newBalance = $oldBalance + $earningAmount;
+            $leaveModel->logBudgetChange($empId, $typeName, $oldBalance, $newBalance, 'earning', null, 'Historical earning added by admin');
         }
 
         $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, approved_by, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
