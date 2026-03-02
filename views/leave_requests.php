@@ -69,7 +69,8 @@ if (empty($_SESSION['csrf_token'])) {
                     <form method="POST" action="../controllers/LeaveController.php">
                         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                         <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
-                        <button type="submit" name="action" value="approve">Approve</button>
+                        <input type="hidden" name="action" value="approve">
+                        <button type="submit">Approve</button>
                     </form>
                     <form method="POST" action="../controllers/LeaveController.php" onsubmit="return confirm('Reject this request?');">
                         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
@@ -152,24 +153,6 @@ function attachFilter(inputId, tableId) {
 attachFilter('searchPending','pendingTable');
 attachFilter('searchApproved','approvedTable');
 attachFilter('searchRejected','rejectedTable');
-
-// intercept approve/reject forms and send via fetch
-Array.from(document.querySelectorAll('form')).forEach(function(form){
-    if(form.querySelector('button[name="action"][value="approve"]')) {
-        form.addEventListener('submit', function(e){
-            e.preventDefault();
-            var data = new FormData(form);
-            fetch(form.action, { method: 'POST', body: data })
-                .then(res => res.text())
-                .then(() => {
-                    // simple strategy: reload row by removing it
-                    var tr = form.closest('tr');
-                    if (tr) tr.remove();
-                });
-            return false;
-        });
-    }
-});
 </script>
 </body>
 </html>​

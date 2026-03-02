@@ -108,6 +108,7 @@ if ($role === 'employee') {
                             <th>Days</th>
                             <th>Status</th>
                             <th>Manager Notes</th>
+                            <th>Action</th>
                         </tr>
                         <?php foreach($pending as $r): ?>
                         <tr>
@@ -116,6 +117,14 @@ if ($role === 'employee') {
                             <td><?= $r['total_days']; ?></td>
                             <td><?= ucfirst($r['status']); ?></td>
                             <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+                            <td>
+                                <form method="POST" action="../controllers/LeaveController.php" style="display:inline;" onsubmit="return confirm('Cancel this request?');">
+                                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                                    <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
+                                    <input type="hidden" name="action" value="cancel">
+                                    <button type="submit" style="color:red;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;">Cancel</button>
+                                </form>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </table>

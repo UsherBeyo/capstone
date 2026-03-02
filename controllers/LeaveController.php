@@ -79,6 +79,40 @@ if ($action === 'reject') {
     exit();
 }
 
+if ($action === 'cancel') {
+    // only employees can cancel their own requests
+    if ($_SESSION['role'] !== 'employee') {
+        die("Unauthorized access");
+    }
+
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        die("CSRF validation failed.");
+    }
+
+    $leave_id = $_POST['leave_id'];
+    $employee_id = $_SESSION['emp_id'] ?? null;
+
+    if (!$employee_id) {
+        die("Employee record not found");
+    }
+
+    // verify the request belongs to this employee
+    $stmt = $db->prepare("SELECT employee_id FROM leave_requests WHERE id = ? AND status = 'pending'");
+    $stmt->execute([$leave_id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$row || $row['employee_id'] != $employee_id) {
+        die("Unauthorized: Cannot cancel this request");
+    }
+
+    // delete the request
+    $stmt = $db->prepare("DELETE FROM leave_requests WHERE id = ?");
+    $stmt->execute([$leave_id]);
+
+    header("Location: ../views/dashboard.php?toast_success=Leave+request+cancelled");
+    exit();
+}
+
 if ($action === 'apply') {
     // only employees can apply
     if ($_SESSION['role'] !== 'employee') {
