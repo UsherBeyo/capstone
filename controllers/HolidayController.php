@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $desc = trim($_POST['description']);
         $type = $_POST['type'] ?? 'Other';
         $holidayModel->add($date, $desc, $type);
+        $msg = 'Holiday+added';
     }
     if (isset($_POST['update'])) {
         $id = intval($_POST['id']);
@@ -26,11 +27,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $desc = trim($_POST['description']);
         $type = $_POST['type'] ?? 'Other';
         $holidayModel->update($id, $date, $desc, $type);
+        $msg = 'Holiday+updated';
     }
     if (isset($_POST['delete'])) {
         $id = $_POST['id'];
         $holidayModel->delete($id);
+        $msg = 'Holiday+removed';
     }
-    header("Location: ../views/holidays.php");
+    $redir = '../views/holidays.php';
+    if (!empty($msg)) {
+        $redir .= '?toast_success=' . $msg;
+    }
+    header("Location: $redir");
     exit();
 }

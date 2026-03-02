@@ -95,20 +95,28 @@ function showToast(message, type = 'info', duration = 3000) {
 // Check for flash messages from query parameters
 function checkFlashMessage() {
     var params = new URLSearchParams(window.location.search);
+    var cleaned = false;
     if (params.has('toast_success')) {
         showToast(decodeURIComponent(params.get('toast_success')), 'success');
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (params.has('toast_error')) {
+        cleaned = true;
+    }
+    if (params.has('toast_error')) {
         showToast(decodeURIComponent(params.get('toast_error')), 'error');
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (params.has('toast_warning')) {
+        cleaned = true;
+    }
+    if (params.has('toast_warning')) {
         showToast(decodeURIComponent(params.get('toast_warning')), 'warning');
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (params.has('added_history')) {
+        cleaned = true;
+    }
+    if (params.has('added_history')) {
         showToast('Historical entry added successfully!', 'success');
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (params.has('undertime')) {
+        cleaned = true;
+    }
+    if (params.has('undertime')) {
         showToast('Undertime recorded successfully!', 'success');
+        cleaned = true;
+    }
+    if (cleaned) {
         window.history.replaceState({}, document.title, window.location.pathname);
     }
 }

@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
         $leaveModel->logBudgetChange($employee_id, 'Vacational', $oldBal, $newBal, 'accrual', null, 'Manual accrual recorded for ' . $month);
         $leaveModel->logBudgetChange($employee_id, 'Sick', $oldBal, $newBal, 'accrual', null, 'Manual accrual recorded for ' . $month);
 
-        header("Location: manage_accruals.php?success=1");
+        header("Location: manage_accruals.php?toast_success=Accrual+recorded+successfully");
         exit();
     }
 }
@@ -77,7 +77,7 @@ try {
 <div class="content">
     <h2>Manage Vacational Leave Accruals</h2>
 
-    <?php if(isset($_GET['success'])): ?>
+    <?php if(isset($_GET['success']) || isset($_GET['toast_success'])): ?>
         <div class="card" style="background:#d4edda;border:1px solid #c3e6cb;color:#155724;padding:12px;margin-bottom:16px;">
             Accrual recorded successfully!
         </div>

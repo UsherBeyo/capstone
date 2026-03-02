@@ -515,6 +515,20 @@ $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
                     <input type="number" step="0.001" name="total_days" required>
                     <label>Comments</label>
                     <input type="text" name="reason">
+                    <div style="margin-top:12px;">
+                        <strong>Record past undertime (optional)</strong>
+                        <div style="display:flex;gap:10px;">
+                            <div style="flex:1;">
+                                <label>Hours</label>
+                                <input type="number" step="1" name="undertime_hours" value="0" min="0">
+                            </div>
+                            <div style="flex:1;">
+                                <label>Minutes</label>
+                                <input type="number" step="1" name="undertime_minutes" value="0" min="0" max="59">
+                            </div>
+                        </div>
+                        <label><input type="checkbox" name="undertime_with_pay" value="1"> With pay</label>
+                    </div>
                     <hr>
                     <p style="font-size:12px;opacity:0.8;">(optional) supply the leave balances that were available at the time of this historical entry.</p>
                     <label>Vacational balance at time</label>

@@ -39,11 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['emp_id'] = $emp['id'];
         }
 
-        header("Location: ../views/dashboard.php");
+        header("Location: ../views/dashboard.php?toast_success=Login+successful");
         exit();
 
     } else {
-        header("Location: ../views/login.php?error=1");
+        header("Location: ../views/login.php?toast_error=Invalid+email+or+password");
         exit();
     }
 }

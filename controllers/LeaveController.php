@@ -46,7 +46,7 @@ if ($action === 'approve') {
         Mail::send($row['email'], "Your leave request approved", "Your {$row['leave_type']} leave from {$row['start_date']} to {$row['end_date']} has been approved.");
     }
 
-    header("Location: ../views/dashboard.php");
+    header("Location: ../views/dashboard.php?toast_success=Leave+approved");
     exit();
 }
 
@@ -75,7 +75,7 @@ if ($action === 'reject') {
         Mail::send($row['email'], "Your leave request was rejected", "Your {$row['leave_type']} leave from {$row['start_date']} to {$row['end_date']} has been rejected. Reason: {$comments}");
     }
 
-    header("Location: ../views/dashboard.php");
+    header("Location: ../views/dashboard.php?toast_warning=Leave+rejected");
     exit();
 }
 
@@ -108,8 +108,8 @@ if ($action === 'apply') {
       ->required('end_date', $end)
       ->date('end_date', $end);
     if ($v->fails()) {
-        $_SESSION['message'] = implode(' ', array_map('implode', $v->getErrors()));
-        header("Location: ../views/dashboard.php");
+        $err = implode(' ', array_map('implode', $v->getErrors()));
+        header("Location: ../views/dashboard.php?toast_error=".urlencode($err));
         exit();
     }
 
@@ -133,8 +133,11 @@ if ($action === 'apply') {
         }
     }
 
-    $_SESSION['message'] = $result;
-
-    header("Location: ../views/dashboard.php");
+    // use toast based on success or failure
+    if (strpos($result, 'successfully') !== false) {
+        header("Location: ../views/dashboard.php?toast_success=".urlencode($result));
+    } else {
+        header("Location: ../views/dashboard.php?toast_error=".urlencode($result));
+    }
     exit();
 }

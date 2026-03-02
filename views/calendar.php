@@ -165,8 +165,8 @@ $days = days_in_month($month,$year);
         
         window.addEventListener('click', function(e){
             var panel = document.getElementById('sidePanel');
-            // Close if clicking outside the panel (but not on calendar dates which should stay clickable)
-            if(!panel.contains(e.target) && !e.target.classList.contains('calendar-day')) {
+            // Close if clicking outside the panel (but not on calendar cells themselves)
+            if(!panel.contains(e.target) && !e.target.closest('td[data-date]')) {
                 panel.classList.remove('open');
             }
         });

@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $leaveModel->logBudgetChange($empId, 'Force', $oldBalances['force_balance'], $force, 'adjustment', null, 'Admin manual adjustment');
             }
             
-            header("Location: ../views/manage_employees.php?updated=1");
+            header("Location: ../views/manage_employees.php?toast_success=Employee+record+updated");
         } else {
             // employees can only update profile info
             if ($picPath) {
@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$empId]);
             }
             
-            header("Location: ../views/employee_profile.php?id=$empId&updated=1");
+            header("Location: ../views/employee_profile.php?id=$empId&toast_success=Profile+updated");
         }
         exit();
     }
@@ -221,7 +221,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtLog->execute([$empId, -1 * $days, 'deduction', $leave_id]);
         }
 
-        header("Location: ../views/employee_profile.php?id=$empId&added_history=1");
+        // process optional undertime recorded with history
+        $undertimeHours = intval($_POST['undertime_hours'] ?? 0);
+        $undertimeMinutes = intval($_POST['undertime_minutes'] ?? 0);
+        $withPayUT = isset($_POST['undertime_with_pay']) ? 1 : 0;
+        if ($undertimeHours > 0 || $undertimeMinutes > 0) {
+            $totalUTMin = $undertimeHours * 60 + $undertimeMinutes;
+            $deductUT = round($totalUTMin * 0.002, 3);
+            // get old vacational balance
+            $oldStmt2 = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
+            $oldStmt2->execute([$empId]);
+            $oldBalUT = floatval($oldStmt2->fetchColumn());
+            $newBalUT = max(0, $oldBalUT - $deductUT);
+            $db->prepare("UPDATE employees SET annual_balance = ? WHERE id = ?")->execute([$newBalUT, $empId]);
+            $leaveModel->logBudgetChange($empId, 'Vacational', $oldBalUT, $newBalUT, $withPayUT ? 'undertime_paid' : 'undertime_unpaid', null, 'Historical undertime: '.$undertimeHours.'h '.$undertimeMinutes.'m');
+            $stmtLog2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
+            $stmtLog2->execute([$empId, -1 * $deductUT, $withPayUT ? 'undertime_paid' : 'undertime_unpaid']);
+        }
+
+        $redirectUrl = "../views/employee_profile.php?id=$empId&added_history=1";
+        if (isset($undertimeHours) && ($undertimeHours > 0 || ($undertimeMinutes ?? 0) > 0)) {
+            $redirectUrl .= "&undertime=1";
+        }
+        header("Location: $redirectUrl");
         exit();
     }
 
