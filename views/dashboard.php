@@ -34,7 +34,7 @@ if ($role === 'employee') {
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="content">
-    <h2>Welcome <?= htmlspecialchars($userName); ?></h2>
+    
 
     <?php if(!empty($_SESSION['message'])): ?>
         <div class="card" style="padding:10px; border:1px solid var(--primary-hover); background:#f0faff;">
