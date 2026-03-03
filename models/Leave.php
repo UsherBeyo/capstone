@@ -139,9 +139,20 @@ class Leave {
      * Retrieve all three balance snapshots for an employee
      */
     public function getBalanceSnapshots($employee_id) {
-        $stmt = $this->conn->prepare("SELECT annual_balance, sick_balance, force_balance, leave_balance FROM employees WHERE id = :id");
-        $stmt->execute([':id' => $employee_id]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            $stmt = $this->conn->prepare("SELECT annual_balance, sick_balance, force_balance, leave_balance FROM employees WHERE id = :id");
+            $stmt->execute([':id' => $employee_id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $row ?: ['annual_balance'=>0,'sick_balance'=>0,'force_balance'=>0,'leave_balance'=>0];
+        } catch (\Throwable $e) {
+            // fallback if leave_balance column doesn't exist
+            $stmt = $this->conn->prepare("SELECT annual_balance, sick_balance, force_balance FROM employees WHERE id = :id");
+            $stmt->execute([':id' => $employee_id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $row = $row ?: ['annual_balance'=>0,'sick_balance'=>0,'force_balance'=>0];
+            $row['leave_balance'] = 0;
+            return $row;
+        }
     }
 
     /**
@@ -233,13 +244,49 @@ class Leave {
     /**
      * Log a budget change to budget_history table
      */
-    public function logBudgetChange($employee_id, $leave_type, $old_balance, $new_balance, $action, $leave_request_id = null, $notes = null) {
+    public function logBudgetChange(
+    $employee_id,
+    $leave_type,
+    $old_balance,
+    $new_balance,
+    $action,
+    $leave_request_id = null,
+    $notes = null,
+    $trans_date = null // ✅ NEW (YYYY-MM-DD) used for history encoding
+) {
+    // Try insert with trans_date (new schema)
+    try {
+        $stmt = $this->conn->prepare(
+            "INSERT INTO budget_history (employee_id, trans_date, leave_type, old_balance, new_balance, action, leave_request_id, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        );
+        return $stmt->execute([
+            $employee_id,
+            $trans_date,
+            $leave_type,
+            $old_balance,
+            $new_balance,
+            $action,
+            $leave_request_id,
+            $notes
+        ]);
+    } catch (\Throwable $e) {
+        // Fallback to old schema (no trans_date)
         $stmt = $this->conn->prepare(
             "INSERT INTO budget_history (employee_id, leave_type, old_balance, new_balance, action, leave_request_id, notes)
              VALUES (?, ?, ?, ?, ?, ?, ?)"
         );
-        return $stmt->execute([$employee_id, $leave_type, $old_balance, $new_balance, $action, $leave_request_id, $notes]);
+        return $stmt->execute([
+            $employee_id,
+            $leave_type,
+            $old_balance,
+            $new_balance,
+            $action,
+            $leave_request_id,
+            $notes
+        ]);
     }
+}
 
     /**
      * General manager response for a pending leave request.

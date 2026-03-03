@@ -20,134 +20,196 @@ if (!in_array($role, ['admin','manager','hr']) && ($_SESSION['emp_id'] ?? 0) != 
     die("Access denied");
 }
 
+// detect trans_date column if budget_history exists (needed for budget rows export)
+$hasTransDate = false;
+try {
+    $db->query("SELECT trans_date FROM budget_history LIMIT 1");
+    $hasTransDate = true;
+} catch (Throwable $t) {
+    $hasTransDate = false;
+}
+
 // export leave card - merged leave history & budget history with accurate balances
+// export leave card - complete transaction history (leave_requests + budget_history)
 if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         $_SESSION['role'] === 'admin' ||
         $_SESSION['role'] === 'hr' ||
+        $_SESSION['role'] === 'manager' ||
         ($_SESSION['emp_id'] ?? 0) == $id
     )) {
+
     $empId = $id;
     $rows = [];
 
-    // gather leave requests; use budget_history to determine balances after deduction
+    /**
+     * ONLY Leave Requests (no budget_history merging)
+     */
     $leaveStmt = $db->prepare(
-        "SELECT lr.created_at, COALESCE(lt.name, lr.leave_type) AS leave_type, lr.status, lr.total_days
+        "SELECT 
+            lr.start_date,
+            lr.created_at,
+            COALESCE(lt.name, lr.leave_type) AS leave_type,
+            lr.status,
+            lr.total_days,
+            lr.snapshot_annual_balance,
+            lr.snapshot_sick_balance,
+            lr.snapshot_force_balance
          FROM leave_requests lr
          LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
          WHERE lr.employee_id = ?
-         ORDER BY lr.created_at ASC"
+         ORDER BY lr.start_date ASC, lr.created_at ASC"
     );
     $leaveStmt->execute([$empId]);
+
     foreach ($leaveStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $vacDed = 0;
-        $sickDed = 0;
-        if (strtolower($r['leave_type']) !== 'sick' && $r['status'] === 'approved') {
-            $vacDed = floatval($r['total_days']);
-        } elseif (strtolower($r['leave_type']) === 'sick' && $r['status'] === 'approved') {
-            $sickDed = floatval($r['total_days']);
+        $leaveType = trim((string)$r['leave_type']);
+        $statusRaw = strtolower(trim((string)$r['status']));
+        $isSick = (strtolower($leaveType) === 'sick');
+        $days = floatval($r['total_days']);
+
+        // Deduction only if approved
+        $vacDed = 0.0;
+        $sickDed = 0.0;
+        if ($statusRaw === 'approved') {
+            if ($isSick) {
+                $sickDed = $days;
+            } else {
+                $vacDed = $days;
+            }
         }
-        // lookup balance after this leave in budget_history
-        $vacBal = '';
-        $sickBal = '';
-        if ($vacDed || !$vacDed) {
-            $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type IN ('Annual','Vacational','Vacation') AND created_at >= ? ORDER BY created_at ASC LIMIT 1");
-            $balStmt->execute([$empId, $r['created_at']]);
-            $vacBal = floatval($balStmt->fetchColumn() ?: 0);
+
+        // Use snapshot values EXACTLY as stored (no lookups, no calculations)
+        $vacBal = ($r['snapshot_annual_balance'] !== null && $r['snapshot_annual_balance'] !== '')
+            ? floatval($r['snapshot_annual_balance']) : '';
+        $sickBal = ($r['snapshot_sick_balance'] !== null && $r['snapshot_sick_balance'] !== '')
+            ? floatval($r['snapshot_sick_balance']) : '';
+
+        $partLabel = strtolower($leaveType);
+        if (strpos($partLabel, 'accrual') !== false) {
+            // don't tack on " Leave" for accrual entries
+            $particulars = $leaveType;
+        } else {
+            $particulars = $leaveType . ' Leave';
         }
-        if ($sickDed || !$sickDed) {
-            $balStmt2 = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Sick' AND created_at >= ? ORDER BY created_at ASC LIMIT 1");
-            $balStmt2->execute([$empId, $r['created_at']]);
-            $sickBal = floatval($balStmt2->fetchColumn() ?: 0);
-        }
+
         $rows[] = [
-            'date' => substr($r['created_at'], 0, 10),
-            'particulars' => $r['leave_type'] . ' Leave',
-            'vac_earned' => 0,
+            'date' => $r['start_date'] ?: substr((string)$r['created_at'], 0, 10),
+            'particulars' => $particulars,
+            'vac_earned' => 0.0,
             'vac_deducted' => $vacDed,
             'vac_balance' => $vacBal,
-            'sick_earned' => 0,
+            'sick_earned' => 0.0,
             'sick_deducted' => $sickDed,
             'sick_balance' => $sickBal,
-            'status' => ucfirst($r['status'])
+            'status' => ucfirst($statusRaw)
         ];
     }
 
-    // gather budget history entries
-    $budgetStmt = $db->prepare(
-        "SELECT created_at, leave_type, action, old_balance, new_balance
-         FROM budget_history
-         WHERE employee_id = ?
-         ORDER BY created_at ASC"
-    );
+    // 2) Budget history rows (earnings, adjustments, undertime, deductions)
+    if ($hasTransDate) {
+        $budgetStmt = $db->prepare(
+            "SELECT id, created_at, trans_date, leave_type, action, old_balance, new_balance
+             FROM budget_history
+             WHERE employee_id = ?
+             ORDER BY COALESCE(trans_date, DATE(created_at)) ASC, created_at ASC, id ASC"
+        );
+    } else {
+        $budgetStmt = $db->prepare(
+            "SELECT id, created_at, leave_type, action, old_balance, new_balance
+             FROM budget_history
+             WHERE employee_id = ?
+             ORDER BY created_at ASC, id ASC"
+        );
+    }
     $budgetStmt->execute([$empId]);
-    foreach ($budgetStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $vacDed = 0;
-        $sickDed = 0;
-        $vacEarn = 0;
-        $sickEarn = 0;
 
-        $part = ucfirst($r['action']) . ' ' . $r['leave_type'];
-        if (in_array(strtolower($r['leave_type']), ['annual','vacational','vacation'])) {
-            $vacEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
-            $vacDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
-            $vacBal  = floatval($r['new_balance']);
-            $sickBal = '';
-        } elseif (strtolower($r['leave_type']) === 'sick') {
-            $sickEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
-            $sickDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
-            $sickBal  = floatval($r['new_balance']);
-            $vacBal   = '';
+    foreach ($budgetStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $leaveType = trim((string)$r['leave_type']);
+        $action = strtolower(trim((string)$r['action']));
+
+        $vacDed = 0; $sickDed = 0;
+        $vacEarn = 0; $sickEarn = 0;
+        $vacBal = ''; $sickBal = '';
+
+        // Date column
+        $dateCol = '';
+        if ($hasTransDate && !empty($r['trans_date'])) {
+            $dateCol = (string)$r['trans_date'];
         } else {
-            // other types, just show balances generically
-            $vacBal = '';
-            $sickBal = '';
+            $dateCol = substr((string)$r['created_at'], 0, 10);
+        }
+
+        // Particulars formatting
+        if ($action === 'undertime_paid' || $action === 'undertime_unpaid') {
+            $particulars = $action . ' ' . $leaveType;
+        } else {
+            $particulars = ucfirst($action) . ' ' . $leaveType;
+        }
+
+        $deltaEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
+        $deltaDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
+
+        if (in_array($action, ['accrual', 'earning'], true)) {
+            $vacEarn = $deltaEarn;
+            $sickEarn = $deltaEarn;
+        } else {
+            if (in_array(strtolower($leaveType), ['annual','vacational','vacation'], true)) {
+                $vacEarn = $deltaEarn;
+                $vacDed  = $deltaDed;
+            } elseif (strtolower($leaveType) === 'sick') {
+                $sickEarn = $deltaEarn;
+                $sickDed  = $deltaDed;
+            }
+        }
+
+        if (in_array(strtolower($leaveType), ['annual','vacational','vacation'], true)) {
+            $vacBal = floatval($r['new_balance']);
+        } elseif (strtolower($leaveType) === 'sick') {
+            $sickBal = floatval($r['new_balance']);
         }
 
         $rows[] = [
-            'date' => substr($r['created_at'], 0, 10),
-            'particulars' => $part,
+            'date' => $dateCol,
+            'particulars' => $particulars,
             'vac_earned' => $vacEarn,
             'vac_deducted' => $vacDed,
-            'vac_balance' => isset($vacBal) ? $vacBal : '',
+            'vac_balance' => $vacBal,
             'sick_earned' => $sickEarn,
             'sick_deducted' => $sickDed,
-            'sick_balance' => isset($sickBal) ? $sickBal : '',
-            'status' => ucfirst($r['action'])
+            'sick_balance' => $sickBal,
+            'status' => ucfirst($action)
         ];
     }
 
-    // sort everything by date
-    usort($rows, function($a, $b) {
-        return strtotime($a['date']) - strtotime($b['date']);
-    });
-
-    // output as Excel (HTML)
+    // Output as Excel (HTML)
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     header('Content-Disposition: attachment; filename="leave_card_'.$id.'_'.date('Y-m-d').'.xls"');
+
     echo "<table border=1>\n";
     echo "<tr><td colspan='9' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";
-    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($e['first_name'].' '.$e['last_name'])."</td><td><strong>Position</strong></td><td>".htmlspecialchars($e['position'] ?? '')."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
-    echo "<tr><td><strong>Status</strong></td><td>".htmlspecialchars($e['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($e['civil_status'] ?? '')."</td><td><strong>Entrance to Duty</strong></td><td>".htmlspecialchars($e['entrance_to_duty'] ?? '')."</td><td><strong>Unit</strong></td><td>".htmlspecialchars($e['unit'] ?? '')."</td></tr>\n";
+    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name']))."</td><td><strong>Position</strong></td><td>".htmlspecialchars($e['position'] ?? '')."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
+    echo "<tr><td><strong>Status</strong></td><td>".htmlspecialchars($e['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($e['civil_status'] ?? '')."</td><td><strong>Entrance to Duty</strong></td><td>".htmlspecialchars($e['entrance_to_duty'] ?? '0000-00-00')."</td><td><strong>Unit</strong></td><td>".htmlspecialchars($e['unit'] ?? '')."</td></tr>\n";
     echo "<tr><td colspan='9'>&nbsp;</td></tr>\n";
+
     echo "<tr><td colspan='9' style='font-weight:bold;background-color:#d3d3d3;'><strong>LEAVE CARD TRANSACTIONS</strong></td></tr>\n";
     echo "<tr style='background-color:#e0e0e0;'>";
     echo "<th>Date</th><th>Particulars</th><th>Vac Earned</th><th>Vac Deducted</th><th>Vac Balance</th><th>Sick Earned</th><th>Sick Deducted</th><th>Sick Balance</th><th>Status</th>";
     echo "</tr>\n";
+
     foreach ($rows as $row) {
         echo "<tr>";
         echo "<td>".htmlspecialchars($row['date'])."</td>";
         echo "<td>".htmlspecialchars($row['particulars'])."</td>";
         echo "<td>".($row['vac_earned'] != 0 ? number_format($row['vac_earned'],3) : '')."</td>";
         echo "<td>".($row['vac_deducted'] != 0 ? number_format($row['vac_deducted'],3) : '')."</td>";
-        echo "<td>".(!
-            isset($row['vac_balance']) || $row['vac_balance'] === '' ? '' : number_format($row['vac_balance'],3))."</td>";
+        echo "<td>".($row['vac_balance'] === '' ? '' : number_format(floatval($row['vac_balance']),3))."</td>";
         echo "<td>".($row['sick_earned'] != 0 ? number_format($row['sick_earned'],3) : '')."</td>";
         echo "<td>".($row['sick_deducted'] != 0 ? number_format($row['sick_deducted'],3) : '')."</td>";
-        echo "<td>".(!
-            isset($row['sick_balance']) || $row['sick_balance'] === '' ? '' : number_format($row['sick_balance'],3))."</td>";
+        echo "<td>".($row['sick_balance'] === '' ? '' : number_format(floatval($row['sick_balance']),3))."</td>";
         echo "<td>".htmlspecialchars($row['status'])."</td>";
         echo "</tr>\n";
     }
+
     echo "</table>";
     exit();
 }
@@ -264,7 +326,7 @@ if ($stmtTypes) {
             <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1" class="action-btn">Export history</a>
             <a href="employee_profile.php?id=<?= $e['id']; ?>&export=leave_card" class="action-btn">Export leave card</a>
         <?php endif; ?>
-        <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
+        <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
             <a href="reports.php?type=leave_card&employee_id=<?= $e['id']; ?>" class="action-btn">View Leave Card</a>
         <?php endif; ?>
     </div>
@@ -410,7 +472,9 @@ if ($stmtTypes) {
       <input type="hidden" name="add_history" value="1">
       <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
       <label>Leave Type</label>
-      <select name="leave_type_id" style="width:100%;padding:8px 12px;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;background:#fff;color:#111827;font-size:14px;cursor:pointer;">
+      <select id="historyType" name="leave_type_id" style="width:100%;padding:8px 12px;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;background:#fff;color:#111827;font-size:14px;cursor:pointer;">
+        <option value="0">Vacational Accrual Earned</option>
+        <option value="-1">Undertime</option>
         <?php foreach($allTypes as $lt): ?>
           <option value="<?= $lt['id']; ?>"><?= htmlspecialchars($lt['name']); ?></option>
         <?php endforeach; ?>
@@ -422,7 +486,7 @@ if ($stmtTypes) {
       <label>End Date</label>
       <input type="date" name="end_date" required>
       <label>Total Days</label>
-      <input type="number" step="0.001" name="total_days" required>
+      <input id="totalDays" type="number" step="0.001" name="total_days" required>
       <label>Comments</label>
       <input type="text" name="reason">
       <div style="margin-top:12px;">
@@ -430,11 +494,11 @@ if ($stmtTypes) {
         <div style="display:flex;gap:10px;">
           <div style="flex:1;">
             <label>Hours</label>
-            <input type="number" step="1" name="undertime_hours" value="0" min="0">
+            <input id="utHours" type="number" step="1" name="undertime_hours" value="0" min="0">
           </div>
           <div style="flex:1;">
             <label>Minutes</label>
-            <input type="number" step="1" name="undertime_minutes" value="0" min="0" max="59">
+            <input id="utMins" type="number" step="1" name="undertime_minutes" value="0" min="0" max="59">
           </div>
         </div>
         <label><input type="checkbox" name="undertime_with_pay" value="1"> With pay</label>
@@ -514,6 +578,49 @@ function closeModal(id) {
         });
     }
 });
+
+// dynamic form logic for history entry
+(function(){
+    var typeSelect = document.getElementById('historyType');
+    var totalDays = document.getElementById('totalDays');
+    var earnField = document.querySelector('input[name="earning_amount"]');
+    var utHours = document.getElementById('utHours');
+    var utMins = document.getElementById('utMins');
+
+    function updateRequirements(){
+        var typeVal = typeSelect ? typeSelect.value : '';
+        var isAccrual = typeVal === '0';
+        var isUT = typeVal === '-1';
+        if(isAccrual){
+            totalDays.required = false;
+            totalDays.disabled = true;
+            totalDays.value = '';
+            if(earnField) earnField.required = true;
+        } else if(isUT){
+            totalDays.required = false;
+            totalDays.disabled = true;
+            if(earnField) earnField.required = false;
+        } else {
+            totalDays.disabled = false;
+            if(earnField) earnField.required = false;
+            totalDays.required = true;
+        }
+        // undertime hours should trigger required UT check
+        var utVal = (parseInt(utHours.value,10) || 0) + (parseInt(utMins.value,10) || 0);
+        if(utVal > 0){
+            totalDays.required = false;
+        }
+    }
+
+    [typeSelect, earnField, utHours, utMins].forEach(function(el){
+        if(el){
+            el.addEventListener('change', updateRequirements);
+            el.addEventListener('input', updateRequirements);
+        }
+    });
+    // initial run to set proper state
+    updateRequirements();
+})();
 </script>
 
 </body>
