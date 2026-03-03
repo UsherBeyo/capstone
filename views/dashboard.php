@@ -20,6 +20,12 @@ if ($role === 'employee') {
     if ($user && !empty($user['first_name'])) {
         $userName = $user['first_name'] . ' ' . $user['last_name'];
     }
+} elseif ($role === 'admin') {
+    $userName = 'Admin';
+} elseif ($role === 'hr') {
+    $userName = 'HR';
+} elseif ($role === 'manager') {
+    $userName = 'Manager';
 }
 ?>
 <!DOCTYPE html>
@@ -102,6 +108,7 @@ if ($role === 'employee') {
                             <th>Days</th>
                             <th>Status</th>
                             <th>Manager Notes</th>
+                            <th>Action</th>
                         </tr>
                         <?php foreach($pending as $r): ?>
                         <tr>
@@ -110,6 +117,14 @@ if ($role === 'employee') {
                             <td><?= $r['total_days']; ?></td>
                             <td><?= ucfirst($r['status']); ?></td>
                             <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
+                            <td>
+                                <form method="POST" action="../controllers/LeaveController.php" style="display:inline;" onsubmit="return confirm('Cancel this request?');">
+                                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                                    <input type="hidden" name="leave_id" value="<?= $r['id']; ?>">
+                                    <input type="hidden" name="action" value="cancel">
+                                    <button type="submit" style="color:red;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;">Cancel</button>
+                                </form>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </table>
@@ -391,6 +406,9 @@ if ($role === 'employee') {
         <div class="card">
             <h3>Pending Leave Requests</h3>
 
+            <?php if(empty($requests)): ?>
+                <p style="color:#6b7280;font-size:14px;margin:12px 0;">No Pending Requests so far.</p>
+            <?php else: ?>
             <table border="1" width="100%">
                 <tr>
                     <th>Employee</th>
@@ -428,6 +446,7 @@ if ($role === 'employee') {
                 <?php endforeach; ?>
 
             </table>
+            <?php endif; ?>
         </div>
         
         <?php if(!empty($archived)): ?>

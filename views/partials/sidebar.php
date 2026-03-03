@@ -68,4 +68,79 @@ window.addEventListener('click', function(e){
         menu.style.display = 'none';
     }
 });
+
+// Toast notification function - global for all pages
+function showToast(message, type = 'info', duration = 3000) {
+    var container = document.getElementById('notificationContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notificationContainer';
+        document.body.appendChild(container);
+    }
+    
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + type;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    // Auto remove after duration
+    setTimeout(function() {
+        toast.classList.add('removing');
+        setTimeout(function() {
+            toast.remove();
+        }, 300);
+    }, duration);
+}
+
+// Check for flash messages from query parameters
+function checkFlashMessage() {
+    var params = new URLSearchParams(window.location.search);
+    var cleaned = false;
+    if (params.has('toast_success')) {
+        showToast(decodeURIComponent(params.get('toast_success')), 'success');
+        cleaned = true;
+    }
+    if (params.has('toast_error')) {
+        showToast(decodeURIComponent(params.get('toast_error')), 'error');
+        cleaned = true;
+    }
+    if (params.has('toast_warning')) {
+        showToast(decodeURIComponent(params.get('toast_warning')), 'warning');
+        cleaned = true;
+    }
+    if (params.has('added_history')) {
+        showToast('Historical entry added successfully!', 'success');
+        cleaned = true;
+    }
+    if (params.has('undertime')) {
+        showToast('Undertime recorded successfully!', 'success');
+        cleaned = true;
+    }
+    if (cleaned) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', checkFlashMessage);
+</script>
+
+<script>
+// Ensure site favicon uses pictures/DEPED.jpg when sidebar is present
+(function(){
+    try {
+        var href = '../pictures/DEPED.jpg';
+        var existing = document.querySelector("link[rel~='icon']");
+        if (existing) {
+            existing.href = href;
+        } else {
+            var l = document.createElement('link');
+            l.rel = 'icon';
+            l.type = 'image/jpeg';
+            l.href = href;
+            document.getElementsByTagName('head')[0].appendChild(l);
+        }
+    } catch (e) {
+        // silent
+    }
+})();
 </script>

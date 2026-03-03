@@ -46,7 +46,7 @@ if ($action === 'approve') {
         Mail::send($row['email'], "Your leave request approved", "Your {$row['leave_type']} leave from {$row['start_date']} to {$row['end_date']} has been approved.");
     }
 
-    header("Location: ../views/dashboard.php");
+    header("Location: ../views/dashboard.php?toast_success=Leave+approved");
     exit();
 }
 
@@ -75,7 +75,41 @@ if ($action === 'reject') {
         Mail::send($row['email'], "Your leave request was rejected", "Your {$row['leave_type']} leave from {$row['start_date']} to {$row['end_date']} has been rejected. Reason: {$comments}");
     }
 
-    header("Location: ../views/dashboard.php");
+    header("Location: ../views/dashboard.php?toast_warning=Leave+rejected");
+    exit();
+}
+
+if ($action === 'cancel') {
+    // only employees can cancel their own requests
+    if ($_SESSION['role'] !== 'employee') {
+        die("Unauthorized access");
+    }
+
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        die("CSRF validation failed.");
+    }
+
+    $leave_id = $_POST['leave_id'];
+    $employee_id = $_SESSION['emp_id'] ?? null;
+
+    if (!$employee_id) {
+        die("Employee record not found");
+    }
+
+    // verify the request belongs to this employee
+    $stmt = $db->prepare("SELECT employee_id FROM leave_requests WHERE id = ? AND status = 'pending'");
+    $stmt->execute([$leave_id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$row || $row['employee_id'] != $employee_id) {
+        die("Unauthorized: Cannot cancel this request");
+    }
+
+    // delete the request
+    $stmt = $db->prepare("DELETE FROM leave_requests WHERE id = ?");
+    $stmt->execute([$leave_id]);
+
+    header("Location: ../views/dashboard.php?toast_success=Leave+request+cancelled");
     exit();
 }
 
@@ -108,8 +142,8 @@ if ($action === 'apply') {
       ->required('end_date', $end)
       ->date('end_date', $end);
     if ($v->fails()) {
-        $_SESSION['message'] = implode(' ', array_map('implode', $v->getErrors()));
-        header("Location: ../views/dashboard.php");
+        $err = implode(' ', array_map('implode', $v->getErrors()));
+        header("Location: ../views/dashboard.php?toast_error=".urlencode($err));
         exit();
     }
 
@@ -133,8 +167,11 @@ if ($action === 'apply') {
         }
     }
 
-    $_SESSION['message'] = $result;
-
-    header("Location: ../views/dashboard.php");
+    // use toast based on success or failure
+    if (strpos($result, 'successfully') !== false) {
+        header("Location: ../views/dashboard.php?toast_success=".urlencode($result));
+    } else {
+        header("Location: ../views/dashboard.php?toast_error=".urlencode($result));
+    }
     exit();
 }

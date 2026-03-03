@@ -742,24 +742,3 @@ p { line-height: 1.6; }
     color: var(--text);
     z-index: 999;
 }
-
-/* Mobile form adjustments */
-@media (max-width: 640px) {
-    input, select, textarea {
-        font-size: 16px;
-    }
-    
-    button {
-        width: 100%;
-        padding: 14px 16px;
-    }
-    
-    .card {
-        border-radius: 8px;
-        padding: 16px;
-    }
-    
-    .form-group {
-        margin-bottom: 12px;
-    }
-}

@@ -17,31 +17,49 @@ $leaveModel = new Leave($db);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // CSRF check
-    if (!isset($_POST['csrf_token']) || 
-        $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         die("CSRF validation failed.");
     }
 
-    // handle undertime recording (employee or admin)
+    // handle undertime recording (admin/hr only)
     if (isset($_POST['record_undertime'])) {
         $empId = intval($_POST['employee_id']);
         $date = $_POST['date'];
-        $minutes = floatval($_POST['minutes']);
+        $hours = intval($_POST['hours'] ?? 0);
+        $minutes = intval($_POST['undertime_minutes'] ?? 0);
         $withPay = isset($_POST['with_pay']) ? 1 : 0;
-        // permission: employee can only log for self
-        if ($_SESSION['role'] === 'employee' && ($_SESSION['emp_id'] ?? 0) != $empId) {
+
+        // permission: only admin/hr can record undertime
+        if (!in_array($_SESSION['role'], ['admin','hr'])) {
             die("Access denied");
         }
+
+        // calculate total minutes
+        $totalMinutes = $hours * 60 + $minutes;
+
         // compute deduction
-        $deduct = round($minutes * 0.002, 3); // per policy with 3‑decimal precision
+        $deduct = round($totalMinutes * 0.002, 3); // per policy with 3-decimal precision
+
         // get old balance
         $stmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
         $stmt->execute([$empId]);
         $oldBal = floatval($stmt->fetchColumn());
+
         $newBal = max(0, $oldBal - $deduct);
         $db->prepare("UPDATE employees SET annual_balance = ? WHERE id = ?")->execute([$newBal, $empId]);
+
         // log budget change and leave_balance_logs
-        $leaveModel->logBudgetChange($empId, 'Vacational', $oldBal, $newBal, $withPay ? 'undertime_paid' : 'undertime_unpaid', null, 'Undertime '.$minutes.' mins');
+        $leaveModel->logBudgetChange(
+            $empId,
+            'Vacational',
+            $oldBal,
+            $newBal,
+            $withPay ? 'undertime_paid' : 'undertime_unpaid',
+            null,
+            'Undertime '.$hours.'h '.$minutes.'m',
+            $date // ✅ keep date consistent
+        );
+
         $stmt2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
         $stmt2->execute([$empId, -1 * $deduct, $withPay ? 'undertime_paid' : 'undertime_unpaid']);
 
@@ -51,13 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // handle update of existing employee record
     if (isset($_POST['update_employee'])) {
-        $empId = $_POST['employee_id'];
+        $empId = intval($_POST['employee_id']);
         $role = $_SESSION['role'] ?? '';
-        $emp_id = $_SESSION['emp_id'] ?? 0;
-        
+        $sessionEmpId = intval($_SESSION['emp_id'] ?? 0);
+
         // permission check: admin/hr/manager can update any, employees can update own
         if ($role === 'employee') {
-            if ($emp_id != $empId) {
+            if ($sessionEmpId !== $empId) {
                 die("You can only update your own profile");
             }
         } elseif (!in_array($role, ['admin','hr','manager'])) {
@@ -65,9 +83,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // load existing values so we can preserve when not provided
-        $rowStmt = $db->prepare("SELECT first_name, last_name, department, position, status, civil_status, entrance_to_duty, unit, gsis_policy_no, national_reference_card_no FROM employees WHERE id = ?");
+        $rowStmt = $db->prepare("SELECT first_name, last_name, department, position, status, civil_status, entrance_to_duty, unit, gsis_policy_no, national_reference_card_no, manager_id, annual_balance, sick_balance, force_balance FROM employees WHERE id = ?");
         $rowStmt->execute([$empId]);
-        $existing = $rowStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $existing = $rowStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$existing) {
+            die("Employee not found");
+        }
 
         $first_name = isset($_POST['first_name']) ? trim($_POST['first_name']) : ($existing['first_name'] ?? '');
         $last_name = isset($_POST['last_name']) ? trim($_POST['last_name']) : ($existing['last_name'] ?? '');
@@ -80,24 +101,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $gsis_policy_no = isset($_POST['gsis_policy_no']) ? trim($_POST['gsis_policy_no']) : ($existing['gsis_policy_no'] ?? null);
         $national_ref = isset($_POST['national_reference_card_no']) ? trim($_POST['national_reference_card_no']) : ($existing['national_reference_card_no'] ?? null);
 
-        // only admins/hr can update balances and manager
-        $manager_id = NULL;
-        $annual = null;
-        $sick = null;
-        $force = null;
-        
-        if (in_array($role, ['admin','hr'])) {
-            $manager_id = !empty($_POST['manager_id']) ? $_POST['manager_id'] : NULL;
-            $annual = isset($_POST['annual_balance']) ? floatval($_POST['annual_balance']) : null;
-            $sick = isset($_POST['sick_balance']) ? floatval($_POST['sick_balance']) : null;
-            $force = isset($_POST['force_balance']) ? intval($_POST['force_balance']) : null;
-        }
-
-        // get old balances to log changes
-        $oldStmt = $db->prepare("SELECT annual_balance, sick_balance, force_balance FROM employees WHERE id = ?");
-        $oldStmt->execute([$empId]);
-        $oldBalances = $oldStmt->fetch(PDO::FETCH_ASSOC);
-
         // handle picture upload if provided
         $picPath = null;
         if (!empty($_FILES['profile_pic']['name'])) {
@@ -106,9 +109,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $picPath = $dest;
         }
 
-        // update based on role
-        if (in_array($role, ['admin','hr','manager'])) {
-            // full update for admins/hr
+        /**
+         * ✅ FIX: Only admin/hr can change balances + manager_id.
+         * Managers can edit profile fields but MUST NOT overwrite balances to NULL.
+         */
+        $isAdminHr = in_array($role, ['admin','hr'], true);
+
+        $manager_id = $existing['manager_id'] ?? null;
+        $annual = $existing['annual_balance'];
+        $sick  = $existing['sick_balance'];
+        $force = $existing['force_balance'];
+
+        if ($isAdminHr) {
+            $manager_id = !empty($_POST['manager_id']) ? $_POST['manager_id'] : NULL;
+
+            // if fields not provided in POST, preserve current
+            if (isset($_POST['annual_balance']) && $_POST['annual_balance'] !== '') $annual = floatval($_POST['annual_balance']);
+            if (isset($_POST['sick_balance']) && $_POST['sick_balance'] !== '') $sick = floatval($_POST['sick_balance']);
+            if (isset($_POST['force_balance']) && $_POST['force_balance'] !== '') $force = intval($_POST['force_balance']);
+        }
+
+        // for logging (only relevant if admin/hr)
+        $oldBalances = [
+            'annual_balance' => floatval($existing['annual_balance']),
+            'sick_balance'   => floatval($existing['sick_balance']),
+            'force_balance'  => intval($existing['force_balance']),
+        ];
+
+        // UPDATE (admin/hr) includes balances; manager/employee excludes balances
+        if ($isAdminHr) {
             if ($picPath) {
                 $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=?, manager_id=?, annual_balance=?, sick_balance=?, force_balance=?, profile_pic=? WHERE id=?");
                 $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$manager_id,$annual,$sick,$force,$picPath,$empId]);
@@ -117,30 +146,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$manager_id,$annual,$sick,$force,$empId]);
             }
 
-            // log budget changes
-            if ($oldBalances['annual_balance'] != $annual) {
+            // log budget changes (admin/hr only)
+            if (floatval($oldBalances['annual_balance']) != floatval($annual)) {
                 $leaveModel->logBudgetChange($empId, 'Annual', $oldBalances['annual_balance'], $annual, 'adjustment', null, 'Admin manual adjustment');
             }
-            if ($oldBalances['sick_balance'] != $sick) {
+            if (floatval($oldBalances['sick_balance']) != floatval($sick)) {
                 $leaveModel->logBudgetChange($empId, 'Sick', $oldBalances['sick_balance'], $sick, 'adjustment', null, 'Admin manual adjustment');
             }
-            if ($oldBalances['force_balance'] != $force) {
+            if (intval($oldBalances['force_balance']) != intval($force)) {
                 $leaveModel->logBudgetChange($empId, 'Force', $oldBalances['force_balance'], $force, 'adjustment', null, 'Admin manual adjustment');
             }
-            
-            header("Location: ../views/manage_employees.php?updated=1");
-        } else {
-            // employees can only update profile info
-            if ($picPath) {
-                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=?, profile_pic=? WHERE id=?");
-                $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$picPath,$empId]);
-            } else {
-                $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=? WHERE id=?");
-                $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$empId]);
-            }
-            
-            header("Location: ../views/employee_profile.php?id=$empId&updated=1");
+
+            header("Location: ../views/manage_employees.php?toast_success=Employee+record+updated");
+            exit();
         }
+
+        // manager OR employee: profile-only update (no balances, no manager_id)
+        if ($picPath) {
+            $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=?, profile_pic=? WHERE id=?");
+            $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$picPath,$empId]);
+        } else {
+            $stmt = $db->prepare("UPDATE employees SET first_name=?, last_name=?, department=?, position=?, status=?, civil_status=?, entrance_to_duty=?, unit=?, gsis_policy_no=?, national_reference_card_no=? WHERE id=?");
+            $stmt->execute([$first_name,$last_name,$department,$position,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$empId]);
+        }
+
+        header("Location: ../views/employee_profile.php?id=$empId&toast_success=Profile+updated");
         exit();
     }
 
@@ -150,18 +180,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $typeId = intval($_POST['leave_type_id']);
         $start = $_POST['start_date'];
         $end = $_POST['end_date'];
-        $days = floatval($_POST['total_days']);
+        // total_days may be empty for accrual or undertime
+        $days = isset($_POST['total_days']) && $_POST['total_days'] !== '' ? floatval($_POST['total_days']) : 0;
         $reason = trim($_POST['reason'] ?? '');
+        $earningAmount = isset($_POST['earning_amount']) && $_POST['earning_amount'] !== '' ? floatval($_POST['earning_amount']) : 0;
         $status = 'approved';
         $approved_by = $_SESSION['user_id'];
 
         // resolve leave type name for compatibility
-        $ltStmt = $db->prepare("SELECT * FROM leave_types WHERE id = ?");
-        $ltStmt->execute([$typeId]);
-        $ltInfo = $ltStmt->fetch(PDO::FETCH_ASSOC);
-        $typeName = $ltInfo ? $ltInfo['name'] : '';
+        $typeName = '';
+        $ltInfo = null;
+        if ($typeId === 0) {
+            // special accrual option
+            $typeName = 'Vacational Accrual Earned';
+        } else {
+            $ltStmt = $db->prepare("SELECT * FROM leave_types WHERE id = ?");
+            $ltStmt->execute([$typeId]);
+            $ltInfo = $ltStmt->fetch(PDO::FETCH_ASSOC);
+            if ($ltInfo) {
+                $typeName = $ltInfo['name'];
+            }
+        }
 
-        // get balance snapshots before deduction, allow override via form
+        // get balance snapshots (admin can override via form to match the past)
         $snapshots = $leaveModel->getBalanceSnapshots($empId);
         if (isset($_POST['snapshot_annual_balance']) && $_POST['snapshot_annual_balance'] !== '') {
             $snapshots['annual_balance'] = floatval($_POST['snapshot_annual_balance']);
@@ -170,35 +211,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $snapshots['sick_balance'] = floatval($_POST['snapshot_sick_balance']);
         }
         if (isset($_POST['snapshot_force_balance']) && $_POST['snapshot_force_balance'] !== '') {
-            $snapshots['force_balance'] = intval($_POST['snapshot_force_balance']);
+            $snapshots['force_balance'] = floatval($_POST['snapshot_force_balance']);
         }
 
+        // IMPORTANT: Historical entries must NOT change CURRENT balances.
+        $effectiveSnapshot = $snapshots;
+
+        if ($earningAmount > 0) {
+            $bucket = 'annual_balance';
+            switch (strtolower($typeName)) {
+                case 'sick': $bucket = 'sick_balance'; break;
+                case 'force': $bucket = 'force_balance'; break;
+                default: $bucket = 'annual_balance'; break;
+            }
+            $oldBalance = floatval($effectiveSnapshot[$bucket] ?? 0);
+            $newBalance = $oldBalance + $earningAmount;
+            $effectiveSnapshot[$bucket] = $newBalance;
+
+            $leaveModel->logBudgetChange(
+                $empId,
+                $typeName,
+                $oldBalance,
+                $newBalance,
+                'earning',
+                null,
+                'Historical earning (no current balance affected)',
+                $start
+            );
+        }
+
+        // Always insert the leave request row as history (even accrual – days may be zero)
         $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, approved_by, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([$empId, $typeName, $typeId, $start, $end, $days, $reason, $status, $approved_by, $snapshots['annual_balance'], $snapshots['sick_balance'], $snapshots['force_balance']]);
         $leave_id = $db->lastInsertId();
 
-        // if this type deducts balance
+        // only deduct if it's a real leave type that reduces balance
         if ($ltInfo && $ltInfo['deduct_balance']) {
-            // choose correct column
-            $col = 'annual_balance';
+            $bucket = 'annual_balance';
             switch (strtolower($ltInfo['name'])) {
-                case 'sick': $col='sick_balance'; break;
-                case 'force': $col='force_balance'; break;
+                case 'sick': $bucket = 'sick_balance'; break;
+                case 'force': $bucket = 'force_balance'; break;
+                default: $bucket = 'annual_balance'; break;
             }
-            // get old balance
-            $oldStmt = $db->prepare("SELECT $col FROM employees WHERE id = ?");
-            $oldStmt->execute([$empId]);
-            $oldBalance = floatval($oldStmt->fetchColumn());
-            // update balance
-            $db->prepare("UPDATE employees SET $col = GREATEST(0, $col - ?) WHERE id = ?")->execute([$days, $empId]);
-            // log to budget history and leave_balance_logs
+
+            $oldBalance = floatval($effectiveSnapshot[$bucket] ?? 0);
             $newBalance = max(0, $oldBalance - $days);
-            $leaveModel->logBudgetChange($empId, $ltInfo['name'], $oldBalance, $newBalance, 'deduction', $leave_id, 'Historical leave entry added by admin');
+            $effectiveSnapshot[$bucket] = $newBalance;
+
+            $leaveModel->logBudgetChange(
+                $empId,
+                $ltInfo['name'],
+                $oldBalance,
+                $newBalance,
+                'deduction',
+                $leave_id,
+                'Historical leave entry (no current balance affected)',
+                $start
+            );
+
             $stmtLog = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason, leave_id) VALUES (?, ?, ?, ?)");
-            $stmtLog->execute([$empId, -1 * $days, 'deduction', $leave_id]);
+            $stmtLog->execute([$empId, -1 * $days, 'historical_deduction', $leave_id]);
         }
 
-        header("Location: ../views/employee_profile.php?id=$empId&added_history=1");
+        // optional undertime recorded with history (history-only)
+        $undertimeHours = intval($_POST['undertime_hours'] ?? 0);
+        $undertimeMinutes = intval($_POST['undertime_minutes'] ?? 0);
+        $withPayUT = isset($_POST['undertime_with_pay']) ? 1 : 0;
+
+        if ($undertimeHours > 0 || $undertimeMinutes > 0) {
+            $totalUTMin = $undertimeHours * 60 + $undertimeMinutes;
+            $deductUT = round($totalUTMin * 0.002, 3);
+
+            $oldBalUT = floatval($snapshots['annual_balance'] ?? 0);
+            $newBalUT = max(0, $oldBalUT - $deductUT);
+
+            $leaveModel->logBudgetChange(
+                $empId,
+                'Vacational',
+                $oldBalUT,
+                $newBalUT,
+                $withPayUT ? 'undertime_paid' : 'undertime_unpaid',
+                null,
+                'Historical undertime (no current balance affected): '.$undertimeHours.'h '.$undertimeMinutes.'m',
+                $start
+            );
+
+            $stmtLog2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
+            $stmtLog2->execute([$empId, -1 * $deductUT, $withPayUT ? 'historical_undertime_paid' : 'historical_undertime_unpaid']);
+        }
+
+        $redirectUrl = "../views/employee_profile.php?id=$empId&added_history=1";
+        if ($undertimeHours > 0 || $undertimeMinutes > 0) {
+            $redirectUrl .= "&undertime=1";
+        }
+        header("Location: $redirectUrl");
         exit();
     }
 
@@ -220,21 +326,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $db->beginTransaction();
 
-        // 1️⃣ Create the user account and mark active immediately
+        // Create the user account and mark active immediately
         $userModel->create($email, $password, $role, $activation_token);
         $user_id = $db->lastInsertId();
-        // activate right away (bypass activation link)
-        $db->prepare("UPDATE users SET is_active=1, activation_token=NULL WHERE id = ?")
-           ->execute([$user_id]);
 
-        // 2️⃣ Create employee profile with balances
-        // check for profile picture upload
+        $db->prepare("UPDATE users SET is_active=1, activation_token=NULL WHERE id = ?")->execute([$user_id]);
+
+        // profile picture upload
         $picPath = null;
         if (!empty($_FILES['profile_pic']['name'])) {
             $dest = '../uploads/' . uniqid() . '_' . basename($_FILES['profile_pic']['name']);
             move_uploaded_file($_FILES['profile_pic']['tmp_name'], $dest);
             $picPath = $dest;
         }
+
         $stmt = $db->prepare("INSERT INTO employees 
             (user_id, first_name, last_name, department, position, status, civil_status, entrance_to_duty, unit, gsis_policy_no, national_reference_card_no, manager_id, 
              annual_balance, sick_balance, force_balance, profile_pic) 

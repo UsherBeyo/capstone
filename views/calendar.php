@@ -165,7 +165,10 @@ $days = days_in_month($month,$year);
         
         window.addEventListener('click', function(e){
             var panel = document.getElementById('sidePanel');
-            if(e.target === panel) panel.classList.remove('open');
+            // Close if clicking outside the panel (but not on calendar cells themselves)
+            if(!panel.contains(e.target) && !e.target.closest('td[data-date]')) {
+                panel.classList.remove('open');
+            }
         });
     </script>
 </div>
