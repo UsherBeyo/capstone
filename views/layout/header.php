@@ -23,7 +23,9 @@ if (!empty($_SESSION['emp_id'])) {
 <header class="app-header">
     <div class="header-container">
         <div class="header-left">
-            <h1 class="app-title">Leave System</h1>
+            <div class="header-brand-area">
+                <h1 class="app-title">Leave System</h1>
+            </div>
         </div>
         <div class="header-right">
             <div class="profile-section">
