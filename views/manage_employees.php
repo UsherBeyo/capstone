@@ -261,7 +261,7 @@ if (isset($_GET['export_leave_card'])) {
                     &nbsp;
                     <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link">✏️</a>
                     &nbsp;
-                    <a href="manage_employees.php?export_leave_card=<?= $e['id']; ?>" title="Export leave card" class="profile-link">📊</a>
+                    <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link">📊</a>
                 </td>
             </tr>
             <?php endforeach; ?>

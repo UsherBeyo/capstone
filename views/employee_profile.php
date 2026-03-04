@@ -6,6 +6,13 @@ require_once '../config/database.php';
 
 $db = (new Database())->connect();
 
+function trunc3($v): string {
+    if ($v === null || $v === '') return '';
+    $n = (float)$v;
+    $t = floor($n * 1000) / 1000;         // TRUNCATE (not round)
+    return number_format($t, 3, '.', ''); // always 3 decimals
+}
+
 $id = isset($_GET['id']) ? intval($_GET['id']) : ($_SESSION['emp_id'] ?? 0);
 if (!$id) { die("Employee not specified"); }
 
@@ -64,18 +71,28 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
     foreach ($leaveStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $leaveType = trim((string)$r['leave_type']);
         $statusRaw = strtolower(trim((string)$r['status']));
+
+        $typeLower = strtolower($leaveType);
+        $isAccrual = (strpos($typeLower, 'accrual') !== false);
+        
+        // Skip accrual/undertime entries from leave_requests; they'll be exported from budget_history instead
+        if (strtolower($leaveType) === 'undertime') {
+            continue;
+        }   
+        
         $isSick = (strtolower($leaveType) === 'sick');
         $days = floatval($r['total_days']);
 
         // Deduction only if approved
-        $vacDed = 0.0;
-        $sickDed = 0.0;
-        if ($statusRaw === 'approved') {
-            if ($isSick) {
-                $sickDed = $days;
-            } else {
-                $vacDed = $days;
-            }
+        $vacDed = 0.0; $sickDed = 0.0;
+        $vacEarn = 0.0; $sickEarn = 0.0;
+
+        if ($isAccrual) {
+            $vacEarn = $days;
+            $sickEarn = $days;
+            $statusRaw = 'earning';
+        } else {
+            // your existing approved-deduction logic
         }
 
         // Use snapshot values EXACTLY as stored (no lookups, no calculations)
@@ -86,7 +103,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
 
         $partLabel = strtolower($leaveType);
         if (strpos($partLabel, 'accrual') !== false) {
-            // don't tack on " Leave" for accrual entries
             $particulars = $leaveType;
         } else {
             $particulars = $leaveType . ' Leave';
@@ -95,10 +111,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         $rows[] = [
             'date' => $r['start_date'] ?: substr((string)$r['created_at'], 0, 10),
             'particulars' => $particulars,
-            'vac_earned' => 0.0,
+            'vac_earned' => $vacEarn,
             'vac_deducted' => $vacDed,
             'vac_balance' => $vacBal,
-            'sick_earned' => 0.0,
+            'sick_earned' => $sickEarn,
             'sick_deducted' => $sickDed,
             'sick_balance' => $sickBal,
             'status' => ucfirst($statusRaw)
@@ -110,14 +126,16 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         $budgetStmt = $db->prepare(
             "SELECT id, created_at, trans_date, leave_type, action, old_balance, new_balance
              FROM budget_history
-             WHERE employee_id = ?
+                WHERE employee_id = ?
+                AND (leave_request_id IS NULL OR leave_request_id = 0)
              ORDER BY COALESCE(trans_date, DATE(created_at)) ASC, created_at ASC, id ASC"
         );
     } else {
         $budgetStmt = $db->prepare(
             "SELECT id, created_at, leave_type, action, old_balance, new_balance
              FROM budget_history
-             WHERE employee_id = ?
+                WHERE employee_id = ?
+                AND (leave_request_id IS NULL OR leave_request_id = 0)
              ORDER BY created_at ASC, id ASC"
         );
     }
@@ -150,8 +168,15 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         $deltaDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
 
         if (in_array($action, ['accrual', 'earning'], true)) {
+            // earning/accrual entries should show the earned amount and resulting balance
             $vacEarn = $deltaEarn;
             $sickEarn = $deltaEarn;
+            // determine which bucket the balance applies to based on leave type text
+            if (strpos(strtolower($leaveType), 'sick') !== false) {
+                $sickBal = floatval($r['new_balance']);
+            } else {
+                $vacBal = floatval($r['new_balance']);
+            }
         } else {
             if (in_array(strtolower($leaveType), ['annual','vacational','vacation'], true)) {
                 $vacEarn = $deltaEarn;
@@ -162,10 +187,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
             }
         }
 
-        if (in_array(strtolower($leaveType), ['annual','vacational','vacation'], true)) {
-            $vacBal = floatval($r['new_balance']);
-        } elseif (strtolower($leaveType) === 'sick') {
-            $sickBal = floatval($r['new_balance']);
+        if (!in_array($action, ['accrual', 'earning'], true)) {
+            if (in_array(strtolower($leaveType), ['annual','vacational','vacation'], true)) {
+                $vacBal = floatval($r['new_balance']);
+            } elseif (strtolower($leaveType) === 'sick') {
+                $sickBal = floatval($r['new_balance']);
+            }
         }
 
         $rows[] = [
@@ -200,12 +227,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         echo "<tr>";
         echo "<td>".htmlspecialchars($row['date'])."</td>";
         echo "<td>".htmlspecialchars($row['particulars'])."</td>";
-        echo "<td>".($row['vac_earned'] != 0 ? number_format($row['vac_earned'],3) : '')."</td>";
-        echo "<td>".($row['vac_deducted'] != 0 ? number_format($row['vac_deducted'],3) : '')."</td>";
-        echo "<td>".($row['vac_balance'] === '' ? '' : number_format(floatval($row['vac_balance']),3))."</td>";
-        echo "<td>".($row['sick_earned'] != 0 ? number_format($row['sick_earned'],3) : '')."</td>";
-        echo "<td>".($row['sick_deducted'] != 0 ? number_format($row['sick_deducted'],3) : '')."</td>";
-        echo "<td>".($row['sick_balance'] === '' ? '' : number_format(floatval($row['sick_balance']),3))."</td>";
+        echo "<td>".($row['vac_earned'] != 0 ? trunc3($row['vac_earned']) : '')."</td>";
+        echo "<td>".($row['vac_deducted'] != 0 ? trunc3($row['vac_deducted']) : '')."</td>";
+        echo "<td>" . ($row['vac_balance'] === '' ? '' : trunc3($row['vac_balance'])) . "</td>";
+        echo "<td>" . ($row['sick_earned'] != 0 ? trunc3($row['sick_earned']) : '') . "</td>";
+        echo "<td>".($row['sick_deducted'] != 0 ? trunc3($row['sick_deducted']) : '')."</td>";
+        echo "<td>" . ($row['sick_balance'] === '' ? '' : trunc3($row['sick_balance'])) . "</td>";
         echo "<td>".htmlspecialchars($row['status'])."</td>";
         echo "</tr>\n";
     }
@@ -240,7 +267,7 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
         echo "<tr>";
         foreach($r as $key => $cell) {
             if ($key === 'total_days') {
-                $cell = intval($cell);
+                $cell = trunc3($cell);
             }
             echo "<td>".htmlspecialchars($cell)."</td>";
         }
@@ -304,11 +331,11 @@ if ($stmtTypes) {
                 <p style="margin:0 0 12px 0;font-size:14px;">Position: <strong><?= htmlspecialchars($e['position'] ?? '—'); ?></strong></p>
                 <p style="margin:0 0 12px 0;font-size:14px;">Entrance to Duty: <strong><?= htmlspecialchars($e['entrance_to_duty'] ?? '0000-00-00'); ?></strong></p>
                 <div style="display:flex;gap:8px;padding:12px;background:#f8fafc;border-radius:8px;font-size:14px;">
-                    <span>Vacational: <strong><?= number_format($e['annual_balance'] ?? 0,3); ?> days</strong></span>
+                    <span>Vacational: <strong><?= trunc3($e['annual_balance'] ?? 0); ?> days</strong></span>
                     <span style="color:#d1d5db;">|</span>
-                    <span>Sick: <strong><?= number_format($e['sick_balance'] ?? 0,3); ?></strong></span>
+                    <span>Sick: <strong><?= trunc3($e['sick_balance'] ?? 0); ?></strong></span>
                     <span style="color:#d1d5db;">|</span>
-                    <span>Force: <strong><?= $e['force_balance'] ?? 0; ?></strong></span>
+                    <span>Force: <strong><?= trunc3($e['force_balance'] ?? 0); ?></strong></span>
                 </div>
             </div>
         </div>
@@ -379,12 +406,12 @@ if ($stmtTypes) {
                 <tr style="border-bottom:1px solid var(--border);">
                     <td style="padding:10px 12px;"><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type'] ?? ''); ?></td>
                     <td style="padding:10px 12px;"><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
-                    <td style="padding:10px 12px;"><?= isset($h['total_days']) ? number_format($h['total_days'],3) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($h['total_days']) ? trunc3($h['total_days']) : ''; ?></td>
                     <td style="padding:10px 12px;"><?= htmlspecialchars($h['status'] ?? ''); ?></td>
                     <td style="padding:10px 12px;"><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
-                    <td style="padding:10px 12px;"><?= isset($h['snapshot_annual_balance']) ? number_format($h['snapshot_annual_balance'],3) : '—'; ?></td>
-                    <td style="padding:10px 12px;"><?= isset($h['snapshot_sick_balance']) ? number_format($h['snapshot_sick_balance'],3) : '—'; ?></td>
-                    <td style="padding:10px 12px;"><?= $h['snapshot_force_balance'] ?? '—'; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($h['snapshot_annual_balance']) ? trunc3($h['snapshot_annual_balance']) : '—'; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($h['snapshot_sick_balance']) ? trunc3($h['snapshot_sick_balance']) : '—'; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($h['snapshot_force_balance']) ? trunc3($h['snapshot_force_balance']) : '—'; ?></td>
                     <td style="padding:10px 12px;"><?= htmlspecialchars($h['manager_comments'] ?? $h['reason'] ?? ''); ?></td>
                 </tr>
                 <?php endforeach; ?>
@@ -413,8 +440,8 @@ if ($stmtTypes) {
                 <tr style="border-bottom:1px solid var(--border);">
                     <td style="padding:10px 12px;"><?= htmlspecialchars($bh['leave_type'] ?? ''); ?></td>
                     <td style="padding:10px 12px;"><?= htmlspecialchars($bh['action'] ?? ''); ?></td>
-                    <td style="padding:10px 12px;"><?= isset($bh['old_balance']) ? number_format($bh['old_balance'],3) : ''; ?></td>
-                    <td style="padding:10px 12px;"><?= isset($bh['new_balance']) ? number_format($bh['new_balance'],3) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($bh['old_balance']) ? trunc3($bh['old_balance']) : ''; ?></td>
+                    <td style="padding:10px 12px;"><?= isset($bh['new_balance']) ? trunc3($bh['new_balance']) : ''; ?></td>
                     <td style="padding:10px 12px;"><?= !empty($bh['created_at']) ? date('M d, Y H:i', strtotime($bh['created_at'])) : ''; ?></td>
                     <td style="padding:10px 12px;"><?= htmlspecialchars($bh['notes'] ?? ''); ?></td>
                 </tr>
@@ -452,11 +479,11 @@ if ($stmtTypes) {
       <input type="hidden" name="update_employee" value="1">
       <input type="hidden" name="employee_id" value="<?= $e['id']; ?>">
       <label>Vacational Balance</label>
-      <input type="number" step="0.001" name="annual_balance" value="<?= number_format($e['annual_balance'] ?? 0,3); ?>">
+      <input type="number" step="0.001" name="annual_balance" value="<?= trunc3($e['annual_balance'] ?? 0); ?>">
       <label>Sick Balance</label>
-      <input type="number" step="0.001" name="sick_balance" value="<?= number_format($e['sick_balance'] ?? 0,3); ?>">
+      <input type="number" step="0.001" name="sick_balance" value="<?= trunc3($e['sick_balance'] ?? 0); ?>">
       <label>Force Balance</label>
-      <input type="number" name="force_balance" value="<?= $e['force_balance'] ?? 0; ?>">
+      <input type="number" name="force_balance" value="<?= trunc3($e['force_balance'] ?? 0); ?>">
       <div style="text-align:right;">
           <button type="submit">Update balances</button>
           <button type="button" onclick="closeModal('modalUpdateBalances')">Cancel</button>
@@ -489,20 +516,26 @@ if ($stmtTypes) {
       <input id="totalDays" type="number" step="0.001" name="total_days" required>
       <label>Comments</label>
       <input type="text" name="reason">
-      <div style="margin-top:12px;">
-        <strong>Record past undertime (optional)</strong>
-        <div style="display:flex;gap:10px;">
-          <div style="flex:1;">
-            <label>Hours</label>
-            <input id="utHours" type="number" step="1" name="undertime_hours" value="0" min="0">
-          </div>
-          <div style="flex:1;">
-            <label>Minutes</label>
-            <input id="utMins" type="number" step="1" name="undertime_minutes" value="0" min="0" max="59">
-          </div>
-        </div>
-        <label><input type="checkbox" name="undertime_with_pay" value="1"> With pay</label>
-      </div>
+      <!-- UNDERTIME FIELDS (only show when type = -1) -->
+<div id="undertimeFields" style="display:none;margin-top:12px;">
+  <strong>Undertime Details</strong>
+  <div style="display:flex;gap:10px;margin-top:8px;">
+    <div style="flex:1;">
+      <label>Hours</label>
+      <input id="utHours" type="number" step="1" name="undertime_hours" value="0" min="0">
+    </div>
+    <div style="flex:1;">
+      <label>Minutes</label>
+      <input id="utMins" type="number" step="1" name="undertime_minutes" value="0" min="0" max="59">
+    </div>
+  </div>
+  <label style="margin-top:8px;display:block;">
+    <input type="checkbox" name="undertime_with_pay" value="1"> With pay
+  </label>
+  <p style="font-size:12px;opacity:0.8;margin-top:6px;">
+    Deduction uses chart: 480 mins = 1.000 day (8 hours = 1 day).
+  </p>
+</div>
       <hr>
       <p style="font-size:12px;opacity:0.8;">(optional) supply the leave balances that were available at the time of this historical entry.</p>
       <label>Vacational balance at time</label>
@@ -589,28 +622,40 @@ function closeModal(id) {
 
     function updateRequirements(){
         var typeVal = typeSelect ? typeSelect.value : '';
+
         var isAccrual = typeVal === '0';
         var isUT = typeVal === '-1';
-        if(isAccrual){
-            totalDays.required = false;
-            totalDays.disabled = true;
+
+        var undertimeFields = document.getElementById('undertimeFields');
+
+        // default UI
+        if (undertimeFields) undertimeFields.style.display = 'none';
+
+        // earning field control
+        if (earnField) {
+            earnField.required = false;
+            earnField.disabled = true;
+            earnField.value = earnField.value || '';
+        }
+
+        // total days control
+        totalDays.required = false;
+        totalDays.disabled = true;
+
+        if (isAccrual) {
+            // accrual: earning required, no total_days
+            if (earnField) { earnField.disabled = false; earnField.required = true; }
             totalDays.value = '';
-            if(earnField) earnField.required = true;
-        } else if(isUT){
-            totalDays.required = false;
-            totalDays.disabled = true;
-            if(earnField) earnField.required = false;
+        } else if (isUT) {
+            // undertime: show UT fields, no total_days, no earning
+            if (undertimeFields) undertimeFields.style.display = 'block';
+            totalDays.value = '';
         } else {
+            // normal leave
             totalDays.disabled = false;
-            if(earnField) earnField.required = false;
             totalDays.required = true;
         }
-        // undertime hours should trigger required UT check
-        var utVal = (parseInt(utHours.value,10) || 0) + (parseInt(utMins.value,10) || 0);
-        if(utVal > 0){
-            totalDays.required = false;
         }
-    }
 
     [typeSelect, earnField, utHours, utMins].forEach(function(el){
         if(el){

@@ -11,6 +11,13 @@ function safe_h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
+function trunc3($v): string {
+    if ($v === null || $v === '') return '';
+    $n = (float)$v;
+    $t = floor($n * 1000) / 1000;         // TRUNCATE (not round)
+    return number_format($t, 3, '.', ''); // always 3 decimals
+}
+
 /**
  * Detect if a column exists in a table (safe + reusable).
  */
@@ -64,23 +71,41 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
 
     foreach ($leaveStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $leaveType = trim((string)$r['leave_type']);
+        $typeLowerFull = strtolower($leaveType);
+
+        // skip undertime only (keep accrual because we store it in leave_requests now)
+        if ($typeLowerFull === 'undertime') {
+            continue;
+        }
         $statusRaw = strtolower(trim((string)$r['status']));
         $days = floatval($r['total_days']);
 
         $txDate = !empty($r['start_date']) ? (string)$r['start_date'] : substr((string)$r['created_at'], 0, 10);
 
-        $isSick = (strtolower($leaveType) === 'sick');
+        $isAccrual = (strpos($typeLowerFull, 'accrual') !== false);
 
-        // Deduction only if approved
-        $vacDed = 0.0;
-        $sickDed = 0.0;
+    $vacDed = 0.0;
+    $sickDed = 0.0;
+    $vacEarn = 0.0;
+    $sickEarn = 0.0;
+
+    if ($isAccrual) {
+        // ✅ For accrual history: total_days is the earning amount
+        $vacEarn = $days;
+        $sickEarn = $days;
+
+        // show as earning status
+        $statusRaw = 'earning';
+
+    } else {
+        // Normal leave behavior: deduction only if approved
+        $isSick = ($typeLowerFull === 'sick');
+
         if ($statusRaw === 'approved') {
-            if ($isSick) {
-                $sickDed = $days;
-            } else {
-                $vacDed = $days;
-            }
+            if ($isSick) $sickDed = $days;
+            else $vacDed = $days;
         }
+    }
 
         // Use snapshot values EXACTLY as stored (no lookups, no calculations)
         $vacBal = ($r['snapshot_annual_balance'] !== null && $r['snapshot_annual_balance'] !== '')
@@ -97,10 +122,10 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
         $rows[] = [
             'date' => $txDate,
             'particulars' => $particulars,
-            'vac_earned' => 0.0,
+            'vac_earned' => $vacEarn,
             'vac_deducted' => $vacDed,
             'vac_balance' => $vacBal,
-            'sick_earned' => 0.0,
+            'sick_earned' => $sickEarn,
             'sick_deducted' => $sickDed,
             'sick_balance' => $sickBal,
             'status' => ucfirst($statusRaw),
@@ -112,6 +137,7 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
         SELECT id, created_at" . ($hasTransDate ? ", trans_date" : "") . ", leave_type, action, old_balance, new_balance
         FROM budget_history
         WHERE employee_id = ?
+            AND (leave_request_id IS NULL OR leave_request_id = 0)
         ORDER BY " . ($hasTransDate ? "COALESCE(trans_date, DATE(created_at))" : "DATE(created_at)") . " ASC, created_at ASC, id ASC
     ";
     $budgetStmt = $db->prepare($budgetSql);
@@ -140,6 +166,12 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
         if (in_array($actionLower, ['accrual', 'earning'], true)) {
             $vacEarn = $deltaEarn;
             $sickEarn = $deltaEarn;
+            // also reflect resulting balance
+            if (strpos($typeLower, 'sick') !== false) {
+                $sickBal = floatval($r['new_balance']);
+            } else {
+                $vacBal = floatval($r['new_balance']);
+            }
         } else {
             if (in_array($typeLower, ['annual', 'vacational', 'vacation'], true)) {
                 $vacEarn = $deltaEarn;
@@ -150,10 +182,12 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
             }
         }
 
-        if (in_array($typeLower, ['annual', 'vacational', 'vacation'], true)) {
-            $vacBal = floatval($r['new_balance']);
-        } elseif ($typeLower === 'sick') {
-            $sickBal = floatval($r['new_balance']);
+        if (!in_array($actionLower, ['accrual', 'earning'], true)) {
+            if (in_array($typeLower, ['annual', 'vacational', 'vacation'], true)) {
+                $vacBal = floatval($r['new_balance']);
+            } elseif ($typeLower === 'sick') {
+                $sickBal = floatval($r['new_balance']);
+            }
         }
 
         $rows[] = [
@@ -193,12 +227,12 @@ function exportCsv(array $headers, array $rows, string $filename): void {
             fputcsv($out, [
                 $row['date'] ?? '',
                 $row['particulars'] ?? '',
-                (($row['vac_earned'] ?? 0) != 0 ? number_format($row['vac_earned'], 3) : ''),
-                (($row['vac_deducted'] ?? 0) != 0 ? number_format($row['vac_deducted'], 3) : ''),
-                ($vb === '' ? '' : number_format((float)$vb, 3)),
-                (($row['sick_earned'] ?? 0) != 0 ? number_format($row['sick_earned'], 3) : ''),
-                (($row['sick_deducted'] ?? 0) != 0 ? number_format($row['sick_deducted'], 3) : ''),
-                ($sb === '' ? '' : number_format((float)$sb, 3)),
+                (($row['vac_earned'] ?? 0) != 0 ? trunc3($row['vac_earned']) : ''),
+                (($row['vac_deducted'] ?? 0) != 0 ? trunc3($row['vac_deducted']) : ''),
+                ($vb === '' ? '' : trunc3($vb)),
+                (($row['sick_earned'] ?? 0) != 0 ? trunc3($row['sick_earned']) : ''),
+                (($row['sick_deducted'] ?? 0) != 0 ? trunc3($row['sick_deducted']) : ''),
+                ($sb === '' ? '' : trunc3($sb)),
                 $row['status'] ?? ''
             ]);
         } else {
@@ -244,14 +278,14 @@ function exportExcelPhpSpreadsheet(array $headers, array $rows, string $filename
     foreach ($rows as $row) {
         $sheet->setCellValueByColumnAndRow(1, $rownum, $row['date'] ?? '');
         $sheet->setCellValueByColumnAndRow(2, $rownum, $row['particulars'] ?? '');
-        $sheet->setCellValueByColumnAndRow(3, $rownum, (($row['vac_earned'] ?? 0) != 0 ? number_format($row['vac_earned'], 3) : ''));
-        $sheet->setCellValueByColumnAndRow(4, $rownum, (($row['vac_deducted'] ?? 0) != 0 ? number_format($row['vac_deducted'], 3) : ''));
+        $sheet->setCellValueByColumnAndRow(3, $rownum, (($row['vac_earned'] ?? 0) != 0 ? trunc3($row['vac_earned']) : ''));
+        $sheet->setCellValueByColumnAndRow(4, $rownum, (($row['vac_deducted'] ?? 0) != 0 ? trunc3($row['vac_deducted']) : ''));
         $vb = $row['vac_balance'] ?? '';
-        $sheet->setCellValueByColumnAndRow(5, $rownum, ($vb === '' ? '' : number_format((float)$vb, 3)));
-        $sheet->setCellValueByColumnAndRow(6, $rownum, (($row['sick_earned'] ?? 0) != 0 ? number_format($row['sick_earned'], 3) : ''));
-        $sheet->setCellValueByColumnAndRow(7, $rownum, (($row['sick_deducted'] ?? 0) != 0 ? number_format($row['sick_deducted'], 3) : ''));
+        $sheet->setCellValueByColumnAndRow(5, $rownum, ($vb === '' ? '' : trunc3($vb)));
+        $sheet->setCellValueByColumnAndRow(6, $rownum, (($row['sick_earned'] ?? 0) != 0 ? trunc3($row['sick_earned']) : ''));
+        $sheet->setCellValueByColumnAndRow(7, $rownum, (($row['sick_deducted'] ?? 0) != 0 ? trunc3($row['sick_deducted']) : ''));
         $sb = $row['sick_balance'] ?? '';
-        $sheet->setCellValueByColumnAndRow(8, $rownum, ($sb === '' ? '' : number_format((float)$sb, 3)));
+        $sheet->setCellValueByColumnAndRow(8, $rownum, ($sb === '' ? '' : trunc3($sb)));
         $sheet->setCellValueByColumnAndRow(9, $rownum, $row['status'] ?? '');
         $rownum++;
     }
@@ -292,12 +326,12 @@ function exportPdfTcpdf(array $headers, array $rows, string $filename, ?array $c
         $html .= '<tr>';
         $html .= '<td>' . safe_h($row['date'] ?? '') . '</td>';
         $html .= '<td>' . safe_h($row['particulars'] ?? '') . '</td>';
-        $html .= '<td>' . ((($row['vac_earned'] ?? 0) != 0) ? number_format((float)$row['vac_earned'], 3) : '') . '</td>';
-        $html .= '<td>' . ((($row['vac_deducted'] ?? 0) != 0) ? number_format((float)$row['vac_deducted'], 3) : '') . '</td>';
-        $html .= '<td>' . ($vb === '' ? '' : number_format((float)$vb, 3)) . '</td>';
-        $html .= '<td>' . ((($row['sick_earned'] ?? 0) != 0) ? number_format((float)$row['sick_earned'], 3) : '') . '</td>';
-        $html .= '<td>' . ((($row['sick_deducted'] ?? 0) != 0) ? number_format((float)$row['sick_deducted'], 3) : '') . '</td>';
-        $html .= '<td>' . ($sb === '' ? '' : number_format((float)$sb, 3)) . '</td>';
+        $html .= '<td>' . ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : '') . '</td>';
+        $html .= '<td>' . ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : '') . '</td>';
+        $html .= '<td>' . ($vb === '' ? '' : trunc3($vb)) . '</td>';
+        $html .= '<td>' . ((($row['sick_earned'] ?? 0) != 0) ? trunc3($row['sick_earned']) : '') . '</td>';
+        $html .= '<td>' . ((($row['sick_deducted'] ?? 0) != 0) ? trunc3($row['sick_deducted']) : '') . '</td>';
+        $html .= '<td>' . ($sb === '' ? '' : trunc3($sb)) . '</td>';
         $html .= '<td>' . safe_h($row['status'] ?? '') . '</td>';
         $html .= '</tr>';
     }
@@ -562,9 +596,12 @@ if ($reportType === 'balance') {
             $base = "?type=" . urlencode($reportType) . "&dept=" . urlencode($departmentFilter);
             if ($reportType === 'leave_card' && $employeeFilter) $base .= "&employee_id=" . intval($employeeFilter);
             ?>
-            <a href="<?= $base; ?>&export=1&format=csv" class="btn-export">Export CSV</a>
-            <a href="<?= $base; ?>&export=1&format=excel" class="btn-export">Export Excel</a>
-            <a href="<?= $base; ?>&export=1&format=pdf" class="btn-export">Export PDF</a>
+            <?php if ($reportType === 'leave_card' && $employeeFilter): ?>
+                <a href="employee_profile.php?export=leave_card&id=<?= intval($employeeFilter); ?>" class="btn-export">Export Leave Card</a>
+            <?php else: ?>
+                <a href="<?= $base; ?>&export=1&format=excel" class="btn-export">Export Excel</a>
+                <a href="<?= $base; ?>&export=1&format=pdf" class="btn-export">Export PDF</a>
+            <?php endif; ?>
         </form>
     </div>
 
@@ -576,7 +613,7 @@ if ($reportType === 'balance') {
                 <tr><td>Total Employees</td><td><?= (int)$totalEmployees; ?></td></tr>
                 <tr><td>Pending Requests</td><td><?= (int)$totalPending; ?></td></tr>
                 <tr><td>Approved Requests</td><td><?= (int)$totalApproved; ?></td></tr>
-                <tr><td>Average Vacational Balance</td><td><?= number_format((float)$avgAnnualBalance, 3); ?> days</td></tr>
+                <tr><td>Average Vacational Balance</td><td><?= trunc3($avgAnnualBalance); ?> days</td></tr>
             </table>
         </div>
 
@@ -594,8 +631,8 @@ if ($reportType === 'balance') {
                 <tr>
                     <td><?= safe_h(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')); ?></td>
                     <td><?= safe_h($row['department'] ?? ''); ?></td>
-                    <td><?= number_format((float)($row['annual_balance'] ?? 0), 3); ?></td>
-                    <td><?= number_format((float)($row['sick_balance'] ?? 0), 3); ?></td>
+                    <td><?= trunc3($row['annual_balance'] ?? 0); ?></td>
+                    <td><?= trunc3($row['sick_balance'] ?? 0); ?></td>
                     <td><?= (int)($row['force_balance'] ?? 0); ?></td>
                 </tr>
                 <?php endforeach; ?>
@@ -628,17 +665,17 @@ if ($reportType === 'balance') {
                 <tr>
                     <td><?= safe_h($row['date'] ?? ''); ?></td>
                     <td><?= safe_h($row['particulars'] ?? ''); ?></td>
-                    <td><?= ((($row['vac_earned'] ?? 0) != 0) ? number_format((float)$row['vac_earned'], 3) : ''); ?></td>
-                    <td><?= ((($row['vac_deducted'] ?? 0) != 0) ? number_format((float)$row['vac_deducted'], 3) : ''); ?></td>
+                    <td><?= ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : ''); ?></td>
+                    <td><?= ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : ''); ?></td>
                     <?php $vb = $row['vac_balance'] ?? ''; ?>
                     <td style="background-color:<?= ($vb !== '' && (float)$vb < 0 ? '#ffcccc' : '#ccffcc'); ?>;">
-                        <?= ($vb === '' ? '' : number_format((float)$vb, 3)); ?>
+                        <?= ($vb === '' ? '' : trunc3($vb)); ?>
                     </td>
-                    <td><?= ((($row['sick_earned'] ?? 0) != 0) ? number_format((float)$row['sick_earned'], 3) : ''); ?></td>
-                    <td><?= ((($row['sick_deducted'] ?? 0) != 0) ? number_format((float)$row['sick_deducted'], 3) : ''); ?></td>
+                    <td><?= ((($row['sick_earned'] ?? 0) != 0) ? trunc3($row['sick_earned']) : ''); ?></td>
+                    <td><?= ((($row['sick_deducted'] ?? 0) != 0) ? trunc3($row['sick_deducted']) : ''); ?></td>
                     <?php $sb = $row['sick_balance'] ?? ''; ?>
                     <td style="background-color:<?= ($sb !== '' && (float)$sb < 0 ? '#ffcccc' : '#ccffcc'); ?>;">
-                        <?= ($sb === '' ? '' : number_format((float)$sb, 3)); ?>
+                        <?= ($sb === '' ? '' : trunc3($sb)); ?>
                     </td>
                     <td><?= safe_h($row['status'] ?? ''); ?></td>
                 </tr>

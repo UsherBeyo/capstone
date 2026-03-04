@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $totalMinutes = $hours * 60 + $minutes;
 
         // compute deduction
-        $deduct = round($totalMinutes * 0.002, 3); // per policy with 3-decimal precision
+        $deduct = floor(($totalMinutes * 0.002) * 1000) / 1000; // per policy with 3-decimal precision
 
         // get old balance
         $stmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
@@ -217,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // IMPORTANT: Historical entries must NOT change CURRENT balances.
         $effectiveSnapshot = $snapshots;
 
-        if ($earningAmount > 0) {
+        /*if ($earningAmount > 0) {
             $bucket = 'annual_balance';
             switch (strtolower($typeName)) {
                 case 'sick': $bucket = 'sick_balance'; break;
@@ -238,7 +238,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'Historical earning (no current balance affected)',
                 $start
             );
-        }
+        }*/
+// ✅ SPECIAL CASE: Accrual Earned should ONLY log budget_history
+        // ✅ SPECIAL CASE: Accrual Earned should ONLY log budget_history (no leave_requests row)
+// This prevents the "double row" in Leave Card.
+// ✅ SPECIAL CASE: Accrual Earned
+// Goal:
+// - ONE row on Leave Card (NO double row)
+// - Shows Vac Earned + Sick Earned = earning amount
+// - Uses Snapshot balances EXACTLY as admin typed (no adding)
+// - Appears in Employee Profile → Leave History (easy)
+
+if ($typeId === 0) {
+    if ($earningAmount <= 0) {
+        header("Location: ../views/employee_profile.php?id=$empId&toast_error=Earning+amount+required+for+accrual");
+        exit();
+    }
+
+    // 1) Insert a leave_requests row so it appears in Leave History
+    // Store the earning amount in total_days (we will treat it as "earned" in reports.php)
+    $stmt = $db->prepare("
+        INSERT INTO leave_requests
+            (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, approved_by,
+             snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance)
+        VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+
+    $leaveTypeName = 'Vacational Accrual Earned';
+    $stmt->execute([
+        $empId,
+        $leaveTypeName,
+        0,
+        $start,
+        $end,
+        $earningAmount,                 // ✅ treat as earned amount
+        $reason,
+        'approved',
+        $approved_by,
+        $snapshots['annual_balance'],    // ✅ EXACTLY as admin typed
+        $snapshots['sick_balance'],      // ✅ EXACTLY as admin typed
+        $snapshots['force_balance']
+    ]);
+
+    $leave_id = $db->lastInsertId();
+
+    // 2) Optional audit log in budget_history BUT link it to leave_request_id
+    // reports.php ignores budget_history rows that have leave_request_id,
+    // so it will NOT create a second Leave Card row.
+    $leaveModel->logBudgetChange(
+        $empId,
+        $leaveTypeName,
+        0,
+        0,
+        'earning',
+        $leave_id, // ✅ linked
+        'Historical accrual earning (history only)',
+        $start
+    );
+
+    header("Location: ../views/employee_profile.php?id=$empId&added_history=1");
+    exit();
+}
+
+// ✅ SPECIAL CASE: UNDERTIME (history-only)
+// Goal: create ONLY ONE row (budget_history) and DO NOT insert leave_requests
+if ($typeId === -1) {
+    $undertimeHours = intval($_POST['undertime_hours'] ?? 0);
+    $undertimeMinutes = intval($_POST['undertime_minutes'] ?? 0);
+    $withPayUT = isset($_POST['undertime_with_pay']) ? 1 : 0;
+
+    $totalUTMin = ($undertimeHours * 60) + $undertimeMinutes;
+
+    if ($totalUTMin <= 0) {
+        header("Location: ../views/employee_profile.php?id=$empId&toast_error=Undertime+minutes+required");
+        exit();
+    }
+
+    // ✅ Chart-based: 8 hours = 1 day => 480 mins = 1.000 day
+    // ✅ truncate to 3 decimals (not round)
+    $deductUT = floor(($totalUTMin / 480) * 1000) / 1000;
+
+    // Use snapshots EXACTLY as admin typed (no current balance affected)
+    $oldBalUT = floatval($snapshots['annual_balance'] ?? 0);
+    $newBalUT = max(0, $oldBalUT - $deductUT);
+
+    // Log ONLY in budget_history so it appears ONCE in View Leave Card + Export Leave Card
+    $leaveModel->logBudgetChange(
+        $empId,
+        'Vacational',
+        $oldBalUT,
+        $newBalUT,
+        $withPayUT ? 'undertime_paid' : 'undertime_unpaid',
+        null, // keep NULL so reports/employee export includes it
+        'Historical undertime (no current balance affected): ' . $undertimeHours . 'h ' . $undertimeMinutes . 'm',
+        $start
+    );
+
+    // Optional log
+    $stmtLog2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
+    $stmtLog2->execute([$empId, -1 * $deductUT, $withPayUT ? 'historical_undertime_paid' : 'historical_undertime_unpaid']);
+
+    header("Location: ../views/employee_profile.php?id=$empId&undertime=1");
+    exit();
+}
 
         // Always insert the leave request row as history (even accrual – days may be zero)
         $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, approved_by, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -274,31 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // optional undertime recorded with history (history-only)
-        $undertimeHours = intval($_POST['undertime_hours'] ?? 0);
-        $undertimeMinutes = intval($_POST['undertime_minutes'] ?? 0);
-        $withPayUT = isset($_POST['undertime_with_pay']) ? 1 : 0;
-
-        if ($undertimeHours > 0 || $undertimeMinutes > 0) {
-            $totalUTMin = $undertimeHours * 60 + $undertimeMinutes;
-            $deductUT = round($totalUTMin * 0.002, 3);
-
-            $oldBalUT = floatval($snapshots['annual_balance'] ?? 0);
-            $newBalUT = max(0, $oldBalUT - $deductUT);
-
-            $leaveModel->logBudgetChange(
-                $empId,
-                'Vacational',
-                $oldBalUT,
-                $newBalUT,
-                $withPayUT ? 'undertime_paid' : 'undertime_unpaid',
-                null,
-                'Historical undertime (no current balance affected): '.$undertimeHours.'h '.$undertimeMinutes.'m',
-                $start
-            );
-
-            $stmtLog2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
-            $stmtLog2->execute([$empId, -1 * $deductUT, $withPayUT ? 'historical_undertime_paid' : 'historical_undertime_unpaid']);
-        }
+        
 
         $redirectUrl = "../views/employee_profile.php?id=$empId&added_history=1";
         if ($undertimeHours > 0 || $undertimeMinutes > 0) {

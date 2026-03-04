@@ -103,7 +103,7 @@ class Employee
     public function computeUndertimeDeduction(int $hours, int $minutes): float
     {
         $totalMinutes = max(0, $hours) * 60 + max(0, $minutes);
-        return round($totalMinutes * 0.002, 3);
+        return floor(($totalMinutes * 0.002) * 1000) / 1000;
     }
 
     /** Apply undertime deduction to annual_balance only */
