@@ -14,6 +14,33 @@ $db = (new Database())->connect();
 $userModel = new User($db);
 $leaveModel = new Leave($db);
 
+// ✅ Undertime conversion using the provided chart (TRUNCATE to 3 decimals)
+function undertimeDaysFromChart(int $hours, int $minutes): float {
+    $minutes = max(0, min(60, $minutes));
+
+    // store as INTEGER thousandths (no float)
+    $minMapTh = [
+        0=>0, 1=>2, 2=>4, 3=>6, 4=>8, 5=>10,
+        6=>12, 7=>15, 8=>17, 9=>19, 10=>21,
+        11=>23, 12=>25, 13=>27, 14=>29, 15=>31,
+        16=>33, 17=>35, 18=>37, 19=>40, 20=>42,
+        21=>44, 22=>46, 23=>48, 24=>50, 25=>52,
+        26=>54, 27=>56, 28=>58, 29=>60, 30=>62,
+        31=>65, 32=>67, 33=>69, 34=>71, 35=>73,
+        36=>75, 37=>77, 38=>79, 39=>81, 40=>83,
+        41=>85, 42=>87, 43=>90, 44=>92, 45=>94,
+        46=>96, 47=>98, 48=>100, 49=>102, 50=>104,
+        51=>106, 52=>108, 53=>110, 54=>112, 55=>115,
+        56=>117, 57=>119, 58=>121, 59=>123, 60=>125
+    ];
+
+    $hoursTh = max(0, $hours) * 125;              // 0.125 day per hour = 125/1000
+    $minsTh  = $minMapTh[$minutes] ?? 0;
+
+    $totalTh = $hoursTh + $minsTh;                // exact integer thousandths
+    return $totalTh / 1000;                       // exact 3-decimal float
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // CSRF check
@@ -38,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $totalMinutes = $hours * 60 + $minutes;
 
         // compute deduction
-        $deduct = floor(($totalMinutes * 0.002) * 1000) / 1000; // per policy with 3-decimal precision
+        $deduct = undertimeDaysFromChart($hours, $minutes); // ✅ chart-exact
 
         // get old balance
         $stmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
@@ -304,6 +331,13 @@ if ($typeId === 0) {
 // ✅ SPECIAL CASE: UNDERTIME (history-only)
 // Goal: create ONLY ONE row (budget_history) and DO NOT insert leave_requests
 if ($typeId === -1) {
+    // ✅ SPECIAL CASE: UNDERTIME (history-only)
+// Goal:
+// - ONE row only (budget_history)
+// - Vac Deducted follows chart exactly
+// - Balances stay EXACTLY as typed (no subtraction shown in balance columns)
+// - Must appear in chronological order using trans_date
+if ($typeId === -1) {
     $undertimeHours = intval($_POST['undertime_hours'] ?? 0);
     $undertimeMinutes = intval($_POST['undertime_minutes'] ?? 0);
     $withPayUT = isset($_POST['undertime_with_pay']) ? 1 : 0;
@@ -315,32 +349,41 @@ if ($typeId === -1) {
         exit();
     }
 
-    // ✅ Chart-based: 8 hours = 1 day => 480 mins = 1.000 day
+    // ✅ Chart-based: 480 mins = 1.000 day (8 hours = 1 day)
     // ✅ truncate to 3 decimals (not round)
-    $deductUT = floor(($totalUTMin / 480) * 1000) / 1000;
+    $deductUT = undertimeDaysFromChart($undertimeHours, $undertimeMinutes);
 
-    // Use snapshots EXACTLY as admin typed (no current balance affected)
-    $oldBalUT = floatval($snapshots['annual_balance'] ?? 0);
-    $newBalUT = max(0, $oldBalUT - $deductUT);
+    // Balances EXACTLY as admin typed (snapshots)
+    $vacTyped  = floatval($snapshots['annual_balance'] ?? 0);
+    $sickTyped = floatval($snapshots['sick_balance'] ?? 0);
+    $forceTyped = floatval($snapshots['force_balance'] ?? 0);
 
-    // Log ONLY in budget_history so it appears ONCE in View Leave Card + Export Leave Card
+    // IMPORTANT: keep old_balance == new_balance so export/view will NOT "deduct"
+    $oldBalUT = $vacTyped;
+    $newBalUT = $vacTyped;
+
+    // Put everything needed for rendering into notes (parsable)
+    // We will parse this in employee_profile.php and reports.php
+    $meta = "UT_DEDUCT=" . number_format($deductUT, 3, '.', '') .
+            ";VAC=" . number_format($vacTyped, 3, '.', '') .
+            ";SICK=" . number_format($sickTyped, 3, '.', '') .
+            ";FORCE=" . number_format($forceTyped, 3, '.', '') .
+            ";H=" . $undertimeHours . ";M=" . $undertimeMinutes;
+
     $leaveModel->logBudgetChange(
         $empId,
         'Vacational',
         $oldBalUT,
         $newBalUT,
         $withPayUT ? 'undertime_paid' : 'undertime_unpaid',
-        null, // keep NULL so reports/employee export includes it
-        'Historical undertime (no current balance affected): ' . $undertimeHours . 'h ' . $undertimeMinutes . 'm',
-        $start
+        null, // keep NULL so it is included in leave card exports
+        'Historical undertime (no current balance affected) | ' . $meta,
+        $start // trans_date
     );
-
-    // Optional log
-    $stmtLog2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
-    $stmtLog2->execute([$empId, -1 * $deductUT, $withPayUT ? 'historical_undertime_paid' : 'historical_undertime_unpaid']);
 
     header("Location: ../views/employee_profile.php?id=$empId&undertime=1");
     exit();
+}
 }
 
         // Always insert the leave request row as history (even accrual – days may be zero)

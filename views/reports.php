@@ -44,16 +44,15 @@ function bh_date(array $r, bool $hasTransDate): string {
 function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSnapshots): array {
     $rows = [];
 
-    /**
-     * Leave Requests ONLY
-     * - Date uses start_date (historical date of the leave)
-     * - Deduction only if approved
-     * - Balances: use snapshot_* columns (exact as stored, or blank if null)
-     */
+    // -----------------------------
+    // 1) LEAVE REQUESTS (history rows)
+    // -----------------------------
     $leaveSql = "
         SELECT
+            lr.id,
             lr.created_at,
             lr.start_date,
+            lr.end_date,
             COALESCE(lt.name, lr.leave_type) AS leave_type,
             lr.status,
             lr.total_days,
@@ -65,60 +64,53 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
         WHERE lr.employee_id = ?
         ORDER BY COALESCE(lr.start_date, DATE(lr.created_at)) ASC, lr.created_at ASC, lr.id ASC
     ";
-
     $leaveStmt = $db->prepare($leaveSql);
     $leaveStmt->execute([$empId]);
 
     foreach ($leaveStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $leaveType = trim((string)$r['leave_type']);
-        $typeLowerFull = strtolower($leaveType);
-
-        // skip undertime only (keep accrual because we store it in leave_requests now)
-        if ($typeLowerFull === 'undertime') {
-            continue;
-        }
+        $typeLower = strtolower($leaveType);
         $statusRaw = strtolower(trim((string)$r['status']));
         $days = floatval($r['total_days']);
 
+        // date: use historical date if present
         $txDate = !empty($r['start_date']) ? (string)$r['start_date'] : substr((string)$r['created_at'], 0, 10);
 
-        $isAccrual = (strpos($typeLowerFull, 'accrual') !== false);
-
-    $vacDed = 0.0;
-    $sickDed = 0.0;
-    $vacEarn = 0.0;
-    $sickEarn = 0.0;
-
-    if ($isAccrual) {
-        // ✅ For accrual history: total_days is the earning amount
-        $vacEarn = $days;
-        $sickEarn = $days;
-
-        // show as earning status
-        $statusRaw = 'earning';
-
-    } else {
-        // Normal leave behavior: deduction only if approved
-        $isSick = ($typeLowerFull === 'sick');
-
-        if ($statusRaw === 'approved') {
-            if ($isSick) $sickDed = $days;
-            else $vacDed = $days;
+        // Skip "undertime" leave_requests (we represent undertime via budget_history)
+        if ($typeLower === 'undertime') {
+            continue;
         }
-    }
 
-        // Use snapshot values EXACTLY as stored (no lookups, no calculations)
+        $isAccrual = (strpos($typeLower, 'accrual') !== false);
+
+        $vacEarn = 0.0; $sickEarn = 0.0;
+        $vacDed  = 0.0; $sickDed  = 0.0;
+
+        if ($isAccrual) {
+            // accrual earned: store earning amount in total_days
+            $vacEarn = $days;
+            $sickEarn = $days;
+            $statusRaw = 'earning';
+        } else {
+            // normal leave: show deduction only if approved
+            if ($statusRaw === 'approved') {
+                if ($typeLower === 'sick') {
+                    $sickDed = $days;
+                } else {
+                    // vacational/annual/vacation/force treated as Vac Deducted
+                    $vacDed = $days;
+                }
+            }
+        }
+
+        // snapshots EXACTLY as stored (typed by admin for historical entries)
         $vacBal = ($r['snapshot_annual_balance'] !== null && $r['snapshot_annual_balance'] !== '')
             ? floatval($r['snapshot_annual_balance']) : '';
         $sickBal = ($r['snapshot_sick_balance'] !== null && $r['snapshot_sick_balance'] !== '')
             ? floatval($r['snapshot_sick_balance']) : '';
 
-        $partLabel = strtolower($leaveType);
-        if (strpos($partLabel, 'accrual') !== false) {
-            $particulars = $leaveType;
-        } else {
-            $particulars = $leaveType . ' Leave';
-        }
+        $particulars = $isAccrual ? $leaveType : ($leaveType . ' Leave');
+
         $rows[] = [
             'date' => $txDate,
             'particulars' => $particulars,
@@ -129,84 +121,127 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
             'sick_deducted' => $sickDed,
             'sick_balance' => $sickBal,
             'status' => ucfirst($statusRaw),
+            '_sort_ts' => strtotime($txDate ?: '1970-01-01'),
+            '_sort_seq' => 1,
         ];
     }
 
-    // 2) Budget history rows – accrual/earning/undertime etc (do not alter leave rows)
+    // -----------------------------
+    // 2) BUDGET HISTORY (undertime / adjustments / earnings / etc)
+    // -----------------------------
     $budgetSql = "
-        SELECT id, created_at" . ($hasTransDate ? ", trans_date" : "") . ", leave_type, action, old_balance, new_balance
+        SELECT
+            id,
+            created_at" . ($hasTransDate ? ", trans_date" : "") . ",
+            leave_type, action, old_balance, new_balance, notes
         FROM budget_history
         WHERE employee_id = ?
-            AND (leave_request_id IS NULL OR leave_request_id = 0)
-        ORDER BY " . ($hasTransDate ? "COALESCE(trans_date, DATE(created_at))" : "DATE(created_at)") . " ASC, created_at ASC, id ASC
+          AND (leave_request_id IS NULL OR leave_request_id = 0)
+        ORDER BY " . ($hasTransDate ? "COALESCE(trans_date, DATE(created_at))" : "DATE(created_at)") . " ASC,
+                 created_at ASC, id ASC
     ";
     $budgetStmt = $db->prepare($budgetSql);
     $budgetStmt->execute([$empId]);
 
     foreach ($budgetStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $leaveType = trim((string)$r['leave_type']);
-        $action = trim((string)$r['action']);
-
         $typeLower = strtolower($leaveType);
-        $actionLower = strtolower($action);
+        $actionLower = strtolower(trim((string)$r['action']));
+        $notes = (string)($r['notes'] ?? '');
 
-        $deltaEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
-        $deltaDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
+        $txDate = bh_date($r, $hasTransDate);
 
-        $vacEarn = 0.0;
-        $sickEarn = 0.0;
-        $vacDed = 0.0;
-        $sickDed = 0.0;
+        $vacEarn = 0.0; $sickEarn = 0.0;
+        $vacDed  = 0.0; $sickDed  = 0.0;
+        $vacBal  = '';  $sickBal  = '';
 
-        $vacBal = '';
-        $sickBal = '';
-
-        $part = ucfirst($action) . ' ' . $leaveType;
-
-        if (in_array($actionLower, ['accrual', 'earning'], true)) {
-            $vacEarn = $deltaEarn;
-            $sickEarn = $deltaEarn;
-            // also reflect resulting balance
-            if (strpos($typeLower, 'sick') !== false) {
-                $sickBal = floatval($r['new_balance']);
-            } else {
-                $vacBal = floatval($r['new_balance']);
-            }
+        // Particulars
+        if ($actionLower === 'undertime_paid' || $actionLower === 'undertime_unpaid') {
+            $particulars = $actionLower . ' ' . $leaveType;
         } else {
-            if (in_array($typeLower, ['annual', 'vacational', 'vacation'], true)) {
-                $vacEarn = $deltaEarn;
-                $vacDed = $deltaDed;
-            } elseif ($typeLower === 'sick') {
-                $sickEarn = $deltaEarn;
-                $sickDed = $deltaDed;
-            }
+            $particulars = ucfirst($actionLower) . ' ' . $leaveType;
         }
 
-        if (!in_array($actionLower, ['accrual', 'earning'], true)) {
-            if (in_array($typeLower, ['annual', 'vacational', 'vacation'], true)) {
-                $vacBal = floatval($r['new_balance']);
-            } elseif ($typeLower === 'sick') {
-                $sickBal = floatval($r['new_balance']);
+        // SPECIAL undertime: read values you encoded in notes
+        if ($actionLower === 'undertime_paid' || $actionLower === 'undertime_unpaid') {
+            $meta = [];
+            if (preg_match_all('/([A-Z_]+)=([0-9.]+)/', $notes, $m, PREG_SET_ORDER)) {
+                foreach ($m as $pair) $meta[$pair[1]] = $pair[2];
+            }
+
+            // UT_DEDUCT is the "Vac Deducted"
+            if (isset($meta['UT_DEDUCT'])) $vacDed = (float)$meta['UT_DEDUCT'];
+
+            // balances at time (typed)
+            if (isset($meta['VAC']))  $vacBal  = (float)$meta['VAC'];
+            if (isset($meta['SICK'])) $sickBal = (float)$meta['SICK'];
+
+            // no earned / no sick deducted for undertime
+            $vacEarn = 0.0;
+            $sickEarn = 0.0;
+            $sickDed = 0.0;
+
+        } else {
+            // normal budget rows: infer delta
+            $old = floatval($r['old_balance']);
+            $new = floatval($r['new_balance']);
+            $deltaEarn = max(0, $new - $old);
+            $deltaDed  = max(0, $old - $new);
+
+            if (in_array($actionLower, ['accrual', 'earning'], true)) {
+                $vacEarn = $deltaEarn;
+                $sickEarn = $deltaEarn;
+
+                // show resulting balance in the correct bucket
+                if (strpos($typeLower, 'sick') !== false) $sickBal = $new;
+                else $vacBal = $new;
+            } else {
+                // deduction/adjustment: decide which bucket
+                if (in_array($typeLower, ['annual','vacational','vacation','force'], true)) {
+                    $vacEarn = $deltaEarn;
+                    $vacDed  = $deltaDed;
+                    $vacBal  = $new;
+                } elseif ($typeLower === 'sick') {
+                    $sickEarn = $deltaEarn;
+                    $sickDed  = $deltaDed;
+                    $sickBal  = $new;
+                }
             }
         }
 
         $rows[] = [
-            'date' => bh_date($r, $hasTransDate),
-            'particulars' => $part,
+            'date' => $txDate,
+            'particulars' => $particulars,
             'vac_earned' => $vacEarn,
             'vac_deducted' => $vacDed,
             'vac_balance' => ($vacBal === '' ? '' : $vacBal),
             'sick_earned' => $sickEarn,
             'sick_deducted' => $sickDed,
             'sick_balance' => ($sickBal === '' ? '' : $sickBal),
-            'status' => ucfirst($action),
+            'status' => ucfirst($actionLower),
+            '_sort_ts' => strtotime($txDate ?: '1970-01-01'),
+            '_sort_seq' => 2,
         ];
     }
 
-    // Sort by date
+    // FINAL: sort everything chronologically by date, then seq (leave rows first), then particulars
     usort($rows, function($a, $b) {
-        return strtotime($a['date'] ?? '') <=> strtotime($b['date'] ?? '');
+        $ta = $a['_sort_ts'] ?? 0;
+        $tb = $b['_sort_ts'] ?? 0;
+        if ($ta !== $tb) return $ta <=> $tb;
+
+        $sa = $a['_sort_seq'] ?? 0;
+        $sb = $b['_sort_seq'] ?? 0;
+        if ($sa !== $sb) return $sa <=> $sb;
+
+        return strcmp((string)($a['particulars'] ?? ''), (string)($b['particulars'] ?? ''));
     });
+
+    // remove internal sort keys
+    foreach ($rows as &$rr) {
+        unset($rr['_sort_ts'], $rr['_sort_seq']);
+    }
+    unset($rr);
 
     return $rows;
 }

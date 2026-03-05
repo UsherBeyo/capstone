@@ -92,8 +92,18 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
             $sickEarn = $days;
             $statusRaw = 'earning';
         } else {
-            // your existing approved-deduction logic
+    // ✅ Deduction only if approved
+    if ($statusRaw === 'approved') {
+        $lower = strtolower($leaveType);
+
+        if ($lower === 'sick') {
+            $sickDed = $days;
+        } else {
+            // Vacational, Annual, Vacation, Force -> treat as Vac deducted for display
+            $vacDed = $days;
         }
+    }
+}
 
         // Use snapshot values EXACTLY as stored (no lookups, no calculations)
         $vacBal = ($r['snapshot_annual_balance'] !== null && $r['snapshot_annual_balance'] !== '')
@@ -124,7 +134,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
     // 2) Budget history rows (earnings, adjustments, undertime, deductions)
     if ($hasTransDate) {
         $budgetStmt = $db->prepare(
-            "SELECT id, created_at, trans_date, leave_type, action, old_balance, new_balance
+            "SELECT id, created_at, trans_date, leave_type, action, old_balance, new_balance, notes
              FROM budget_history
                 WHERE employee_id = ?
                 AND (leave_request_id IS NULL OR leave_request_id = 0)
@@ -132,7 +142,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         );
     } else {
         $budgetStmt = $db->prepare(
-            "SELECT id, created_at, leave_type, action, old_balance, new_balance
+            "SELECT id, created_at, leave_type, action, old_balance, new_balance, notes
              FROM budget_history
                 WHERE employee_id = ?
                 AND (leave_request_id IS NULL OR leave_request_id = 0)
@@ -142,72 +152,89 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
     $budgetStmt->execute([$empId]);
 
     foreach ($budgetStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $leaveType = trim((string)$r['leave_type']);
-        $action = strtolower(trim((string)$r['action']));
+    $leaveType = trim((string)$r['leave_type']);
+    $action = strtolower(trim((string)$r['action']));
+    $notes = (string)($r['notes'] ?? '');
 
-        $vacDed = 0; $sickDed = 0;
-        $vacEarn = 0; $sickEarn = 0;
-        $vacBal = ''; $sickBal = '';
+    $vacDed = 0.0; $sickDed = 0.0;
+    $vacEarn = 0.0; $sickEarn = 0.0;
 
-        // Date column
-        $dateCol = '';
-        if ($hasTransDate && !empty($r['trans_date'])) {
-            $dateCol = (string)$r['trans_date'];
-        } else {
-            $dateCol = substr((string)$r['created_at'], 0, 10);
+    // Date column: ALWAYS use trans_date when present
+    $dateCol = '';
+    if ($hasTransDate && !empty($r['trans_date'])) $dateCol = (string)$r['trans_date'];
+    else $dateCol = substr((string)$r['created_at'], 0, 10);
+
+    // Particulars formatting
+    if ($action === 'undertime_paid' || $action === 'undertime_unpaid') {
+        $particulars = $action . ' ' . $leaveType;
+    } else {
+        $particulars = ucfirst($action) . ' ' . $leaveType;
+    }
+
+    // Defaults from balances in row
+    $vacBal = '';
+    $sickBal = '';
+
+    // --- SPECIAL: undertime history meta parsing ---
+    // Notes format contains: UT_DEDUCT=0.125;VAC=9.000;SICK=5.000;...
+    if ($action === 'undertime_paid' || $action === 'undertime_unpaid') {
+        $meta = [];
+        if (preg_match_all('/([A-Z_]+)=([0-9.]+)/', $notes, $m, PREG_SET_ORDER)) {
+            foreach ($m as $pair) $meta[$pair[1]] = $pair[2];
         }
 
-        // Particulars formatting
-        if ($action === 'undertime_paid' || $action === 'undertime_unpaid') {
-            $particulars = $action . ' ' . $leaveType;
-        } else {
-            $particulars = ucfirst($action) . ' ' . $leaveType;
-        }
+        if (isset($meta['UT_DEDUCT'])) $vacDed = (float)$meta['UT_DEDUCT'];
+        if (isset($meta['VAC'])) $vacBal = (float)$meta['VAC'];
+        if (isset($meta['SICK'])) $sickBal = (float)$meta['SICK'];
 
+        // No earned amounts for undertime
+        $vacEarn = 0.0; $sickEarn = 0.0;
+        $sickDed = 0.0;
+    } else {
         $deltaEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
         $deltaDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
 
         if (in_array($action, ['accrual', 'earning'], true)) {
-            // earning/accrual entries should show the earned amount and resulting balance
             $vacEarn = $deltaEarn;
             $sickEarn = $deltaEarn;
-            // determine which bucket the balance applies to based on leave type text
+
             if (strpos(strtolower($leaveType), 'sick') !== false) {
                 $sickBal = floatval($r['new_balance']);
             } else {
                 $vacBal = floatval($r['new_balance']);
             }
         } else {
-            if (in_array(strtolower($leaveType), ['annual','vacational','vacation'], true)) {
+            if (in_array(strtolower($leaveType), ['annual','vacational','vacation','force'], true)) {
                 $vacEarn = $deltaEarn;
                 $vacDed  = $deltaDed;
+                $vacBal  = floatval($r['new_balance']);
             } elseif (strtolower($leaveType) === 'sick') {
                 $sickEarn = $deltaEarn;
                 $sickDed  = $deltaDed;
+                $sickBal  = floatval($r['new_balance']);
             }
         }
-
-        if (!in_array($action, ['accrual', 'earning'], true)) {
-            if (in_array(strtolower($leaveType), ['annual','vacational','vacation'], true)) {
-                $vacBal = floatval($r['new_balance']);
-            } elseif (strtolower($leaveType) === 'sick') {
-                $sickBal = floatval($r['new_balance']);
-            }
-        }
-
-        $rows[] = [
-            'date' => $dateCol,
-            'particulars' => $particulars,
-            'vac_earned' => $vacEarn,
-            'vac_deducted' => $vacDed,
-            'vac_balance' => $vacBal,
-            'sick_earned' => $sickEarn,
-            'sick_deducted' => $sickDed,
-            'sick_balance' => $sickBal,
-            'status' => ucfirst($action)
-        ];
     }
 
+    $rows[] = [
+        'date' => $dateCol,
+        'particulars' => $particulars,
+        'vac_earned' => $vacEarn,
+        'vac_deducted' => $vacDed,
+        'vac_balance' => $vacBal,
+        'sick_earned' => $sickEarn,
+        'sick_deducted' => $sickDed,
+        'sick_balance' => $sickBal,
+        'status' => ucfirst($action)
+    ];
+}
+    // ✅ Ensure chronological order by date (and stable tie-breaker)
+    usort($rows, function($a, $b) {
+        $da = strtotime($a['date'] ?? '') ?: 0;
+        $dbb = strtotime($b['date'] ?? '') ?: 0;
+        if ($da !== $dbb) return $da <=> $dbb;
+        return strcmp((string)($a['particulars'] ?? ''), (string)($b['particulars'] ?? ''));
+    });
     // Output as Excel (HTML)
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     header('Content-Disposition: attachment; filename="leave_card_'.$id.'_'.date('Y-m-d').'.xls"');
@@ -613,57 +640,53 @@ function closeModal(id) {
 });
 
 // dynamic form logic for history entry
+// dynamic form logic for history entry
 (function(){
     var typeSelect = document.getElementById('historyType');
     var totalDays = document.getElementById('totalDays');
     var earnField = document.querySelector('input[name="earning_amount"]');
-    var utHours = document.getElementById('utHours');
-    var utMins = document.getElementById('utMins');
+    var undertimeFields = document.getElementById('undertimeFields');
 
     function updateRequirements(){
-        var typeVal = typeSelect ? typeSelect.value : '';
+        var typeVal = typeSelect ? String(typeSelect.value) : '';
 
         var isAccrual = typeVal === '0';
         var isUT = typeVal === '-1';
 
-        var undertimeFields = document.getElementById('undertimeFields');
-
-        // default UI
+        // Hide UT by default
         if (undertimeFields) undertimeFields.style.display = 'none';
 
-        // earning field control
+        // Earning field defaults
         if (earnField) {
             earnField.required = false;
             earnField.disabled = true;
-            earnField.value = earnField.value || '';
         }
 
-        // total days control
-        totalDays.required = false;
-        totalDays.disabled = true;
+        // Total days defaults
+        if (totalDays) {
+            totalDays.required = false;
+            totalDays.disabled = true;
+        }
 
         if (isAccrual) {
             // accrual: earning required, no total_days
             if (earnField) { earnField.disabled = false; earnField.required = true; }
-            totalDays.value = '';
+            if (totalDays) totalDays.value = '';
         } else if (isUT) {
             // undertime: show UT fields, no total_days, no earning
             if (undertimeFields) undertimeFields.style.display = 'block';
-            totalDays.value = '';
+            if (totalDays) totalDays.value = '';
         } else {
-            // normal leave
-            totalDays.disabled = false;
-            totalDays.required = true;
+            // normal leave: total_days required
+            if (totalDays) { totalDays.disabled = false; totalDays.required = true; }
         }
-        }
+    }
 
-    [typeSelect, earnField, utHours, utMins].forEach(function(el){
-        if(el){
-            el.addEventListener('change', updateRequirements);
-            el.addEventListener('input', updateRequirements);
-        }
-    });
-    // initial run to set proper state
+    if (typeSelect) {
+        typeSelect.addEventListener('change', updateRequirements);
+    }
+
+    // Initial run
     updateRequirements();
 })();
 </script>
