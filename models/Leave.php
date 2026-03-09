@@ -6,37 +6,28 @@ class Leave {
         $this->conn = $db;
     }
 
-    /**
-     * Count deductible days between two dates, excluding weekends and holidays.
-     * This value is what will be subtracted from the employee's balance.
-     */
     public function calculateDays($start, $end) {
         $startDT = new DateTime($start);
         $endDT = new DateTime($end);
         $days = 0;
 
-        // prefetch all holidays in range to avoid querying inside loop
         $stmt = $this->conn->prepare("SELECT holiday_date FROM holidays WHERE holiday_date BETWEEN ? AND ?");
         $stmt->execute([$startDT->format('Y-m-d'), $endDT->format('Y-m-d')]);
         $holidays = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
         $holidaySet = array_flip($holidays);
 
         while ($startDT <= $endDT) {
-            $weekday = (int)$startDT->format('N'); // 1 = Mon ... 7 = Sun
+            $weekday = (int)$startDT->format('N');
             $today = $startDT->format('Y-m-d');
             if ($weekday < 6 && !isset($holidaySet[$today])) {
                 $days++;
             }
             $startDT->modify('+1 day');
         }
-        // always count at least one day (helps when start=end even if weekend/holiday)
+
         return max(1, $days);
     }
 
-    /**
-     * Determine if the requested date range overlaps with any existing
-     * approved or pending leave for the same employee.
-     */
     public function checkOverlap($employee_id, $start, $end) {
         $query = "SELECT COUNT(*) FROM leave_requests
                   WHERE employee_id = :id
@@ -51,12 +42,23 @@ class Leave {
         return $stmt->fetchColumn() > 0;
     }
 
-    /**
-     * Submit a leave request.  Accepts either a leave type name or ID.
-     * Contains auto‑approval and rule evaluation logic.
-     */
-    public function apply($employee_id, $typeIdentifier, $start, $end, $reason) {
-        // resolve leave type metadata
+    private function getDepartmentHeadUserIdForEmployee(int $employeeId): ?int {
+        $stmt = $this->conn->prepare("
+            SELECT u.id
+            FROM employees e
+            JOIN departments d ON e.department_id = d.id
+            LEFT JOIN department_head_assignments dha ON d.id = dha.department_id AND dha.is_active = 1
+            LEFT JOIN employees dh ON dha.employee_id = dh.id
+            LEFT JOIN users u ON dh.user_id = u.id
+            WHERE e.id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$employeeId]);
+        $val = $stmt->fetchColumn();
+        return $val ? (int)$val : null;
+    }
+
+    public function apply($employee_id, $typeIdentifier, $start, $end, $reason, $applicantUserId = null, $applicantRole = 'employee', $commutation = null) {
         $leaveType = $this->getLeaveType($typeIdentifier);
         if (!$leaveType) {
             return "Invalid leave type.";
@@ -64,9 +66,6 @@ class Leave {
 
         $days = $this->calculateDays($start, $end);
 
-        // respect the configured auto_approve flag in leave_types and do not override it here
-
-        // if we are deducting balance, and balance is already negative, immediately reject
         if ($leaveType['deduct_balance']) {
             $currentBal = $this->getBalanceByType($employee_id, $leaveType['name']);
             if ($currentBal < 0) {
@@ -78,7 +77,6 @@ class Leave {
             return "Overlapping leave exists.";
         }
 
-        // if this type deducts balance, ensure sufficient
         if ($leaveType['deduct_balance']) {
             $balance = $this->getBalanceByType($employee_id, $leaveType['name']);
             if ($balance < $days) {
@@ -86,7 +84,6 @@ class Leave {
             }
         }
 
-        // enforce max days per year if configured
         if (!is_null($leaveType['max_days_per_year']) && $leaveType['max_days_per_year'] > 0) {
             $stmt = $this->conn->prepare(
                 "SELECT SUM(total_days) FROM leave_requests
@@ -99,34 +96,97 @@ class Leave {
             }
         }
 
-        // capture snapshots before insertion
         $snapshots = $this->getBalanceSnapshots($employee_id);
 
+        // Get employee's department
+        $stmtDept = $this->conn->prepare("SELECT department_id FROM employees WHERE id = ?");
+        $stmtDept->execute([$employee_id]);
+        $departmentId = $stmtDept->fetchColumn();
+
         $status = 'pending';
-        if ($leaveType['auto_approve']) {
-            $status = 'approved';
+        $workflowStatus = 'pending_department_head';
+        $departmentHeadUserId = $this->getDepartmentHeadUserIdForEmployee((int)$employee_id);
+        $departmentHeadApprovedAt = null;
+        $personnelUserId = null; // Will be assigned later or find a personnel user
+
+        // Check if employee is the department head
+        $isDepartmentHead = false;
+        if ($departmentHeadUserId && $applicantUserId == $departmentHeadUserId) {
+            $isDepartmentHead = true;
         }
 
-        // insert request (keep old leave_type string for backwards compatibility)
-        $query = "INSERT INTO leave_requests 
-                  (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance)
-                  VALUES (:eid, :type, :typeid, :start, :end, :days, :reason, :status, :snap_annual, :snap_sick, :snap_force)";
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute([
-            ':eid' => $employee_id,
-            ':type' => $leaveType['name'],
-            ':typeid' => $leaveType['id'],
-            ':start' => $start,
-            ':end' => $end,
-            ':days' => $days,
-            ':reason' => $reason,
-            ':status' => $status,
-            ':snap_annual' => $snapshots['annual_balance'],
-            ':snap_sick' => $snapshots['sick_balance'],
-            ':snap_force' => $snapshots['force_balance']
-        ]);
+        // If no department head or employee is department head, go to personnel
+        if (!$departmentHeadUserId || $isDepartmentHead) {
+            $workflowStatus = 'pending_personnel';
+            $departmentHeadApprovedAt = date('Y-m-d H:i:s');
+        }
 
-        // if auto approved, deduct immediately
+        // Self-approval of department head / legacy manager requests
+        if (in_array($applicantRole, ['manager', 'department_head', 'admin'], true)) {
+            $workflowStatus = 'pending_personnel';
+            $departmentHeadUserId = $applicantUserId ?: $departmentHeadUserId;
+            $departmentHeadApprovedAt = date('Y-m-d H:i:s');
+        }
+
+        if (!empty($leaveType['auto_approve'])) {
+            $status = 'approved';
+            $workflowStatus = 'finalized';
+        }
+
+        // Block if no department head and not self-approving
+        if (!$departmentHeadUserId && !in_array($applicantRole, ['manager', 'department_head', 'admin'], true)) {
+            return "Cannot submit leave: No department head assigned to your department.";
+        }
+
+        try {
+            $query = "INSERT INTO leave_requests 
+                (employee_id, department_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, workflow_status, department_head_user_id, personnel_user_id, department_head_approved_at, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance, commutation)
+                VALUES (:eid, :dept_id, :type, :typeid, :start, :end, :days, :reason, :status, :workflow_status, :department_head_user_id, :personnel_user_id, :department_head_approved_at, :snap_annual, :snap_sick, :snap_force, :commutation)";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([
+                ':eid' => $employee_id,
+                ':dept_id' => $departmentId,
+                ':type' => $leaveType['name'],
+                ':typeid' => $leaveType['id'],
+                ':start' => $start,
+                ':end' => $end,
+                ':days' => $days,
+                ':reason' => $reason,
+                ':status' => $status,
+                ':workflow_status' => $workflowStatus,
+                ':department_head_user_id' => $departmentHeadUserId,
+                ':personnel_user_id' => $personnelUserId,
+                ':department_head_approved_at' => $departmentHeadApprovedAt,
+                ':snap_annual' => $snapshots['annual_balance'],
+                ':snap_sick' => $snapshots['sick_balance'],
+                ':snap_force' => $snapshots['force_balance'],
+                ':commutation' => $commutation
+            ]);
+        } catch (\Throwable $e) {
+            // fallback for older schema
+            $query = "INSERT INTO leave_requests 
+                (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, workflow_status, department_head_user_id, department_head_approved_at, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance, commutation)
+                VALUES (:eid, :type, :typeid, :start, :end, :days, :reason, :status, :workflow_status, :department_head_user_id, :department_head_approved_at, :snap_annual, :snap_sick, :snap_force, :commutation)";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([
+                ':eid' => $employee_id,
+                ':type' => $leaveType['name'],
+                ':typeid' => $leaveType['id'],
+                ':start' => $start,
+                ':end' => $end,
+                ':days' => $days,
+                ':reason' => $reason,
+                ':status' => $status,
+                ':workflow_status' => $workflowStatus,
+                ':department_head_user_id' => $departmentHeadUserId,
+                ':department_head_approved_at' => $departmentHeadApprovedAt,
+                ':snap_annual' => $snapshots['annual_balance'],
+                ':snap_sick' => $snapshots['sick_balance'],
+                ':snap_force' => $snapshots['force_balance'],
+                ':commutation' => $commutation
+            ]);
+        }
+
         if ($status === 'approved' && $leaveType['deduct_balance']) {
             $newId = $this->conn->lastInsertId();
             $this->respondToLeave($newId, null, 'approve');
@@ -135,9 +195,6 @@ class Leave {
         return "Leave submitted successfully.";
     }
 
-    /**
-     * Retrieve all three balance snapshots for an employee
-     */
     public function getBalanceSnapshots($employee_id) {
         try {
             $stmt = $this->conn->prepare("SELECT annual_balance, sick_balance, force_balance, leave_balance FROM employees WHERE id = :id");
@@ -145,7 +202,6 @@ class Leave {
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             return $row ?: ['annual_balance'=>0,'sick_balance'=>0,'force_balance'=>0,'leave_balance'=>0];
         } catch (\Throwable $e) {
-            // fallback if leave_balance column doesn't exist
             $stmt = $this->conn->prepare("SELECT annual_balance, sick_balance, force_balance FROM employees WHERE id = :id");
             $stmt->execute([':id' => $employee_id]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -155,9 +211,6 @@ class Leave {
         }
     }
 
-    /**
-     * Look up a leave type record by id or name.
-     */
     public function getLeaveType($identifier) {
         if (is_numeric($identifier)) {
             $stmt = $this->conn->prepare("SELECT * FROM leave_types WHERE id = ?");
@@ -168,14 +221,7 @@ class Leave {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Retrieve a balance depending on leave type.
-     */
-    /**
-     * Obtain the current balance for a leave type.  Identifier may be name or id.
-     */
     private function getBalanceByType($employee_id, $type) {
-        // resolve to leave type name if necessary
         if (is_numeric($type)) {
             $typeInfo = $this->getLeaveType($type);
             $name = $typeInfo ? $typeInfo['name'] : null;
@@ -183,9 +229,9 @@ class Leave {
             $name = $type;
         }
 
-        switch (strtolower($name)) {
+        switch (strtolower((string)$name)) {
             case 'annual':
-            case 'vacational': // synonyms for annual/vacation
+            case 'vacational':
             case 'vacation':
                 $col = 'annual_balance';
                 break;
@@ -196,40 +242,92 @@ class Leave {
                 $col = 'force_balance';
                 break;
             default:
-                // fallback to the generic leave_balance column
                 $col = 'leave_balance';
         }
+
         $stmt = $this->conn->prepare("SELECT $col FROM employees WHERE id = :id");
         $stmt->execute([':id' => $employee_id]);
         return $stmt->fetchColumn();
     }
 
-    /**
-     * Perform monthly accrual: each employee gains 1.25 days annual
-     * and resets force leave quota to 5 for the new month.
-     *
-     * This method can be invoked from a cron job or administration script.
-     */
-    public function accrueMonthly() {
-        // each employee gains 1.25 days for both annual and sick at end of month;
-        // force leave resets to 5
+    private function recordAccrualLogsForEmployee(
+        int $employeeId,
+        float $amount,
+        string $monthRef,
+        string $transDate,
+        string $notePrefix = 'Accrual recorded'
+    ): void {
+        $insert = $this->conn->prepare("
+            INSERT INTO accrual_history (employee_id, amount, date_accrued, month_reference)
+            VALUES (?, ?, ?, ?)
+        ");
+        $insert->execute([$employeeId, $amount, $transDate . ' 00:00:00', $monthRef]);
+
+        $stmt = $this->conn->prepare("
+            SELECT annual_balance, sick_balance
+            FROM employees
+            WHERE id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$employeeId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['annual_balance' => 0, 'sick_balance' => 0];
+
+        $newAnnual = floatval($row['annual_balance']);
+        $newSick   = floatval($row['sick_balance']);
+        $oldAnnual = $newAnnual - $amount;
+        $oldSick   = $newSick - $amount;
+
+        $note = $notePrefix . ' for ' . $monthRef;
+
+        $this->logBudgetChange(
+            $employeeId,
+            'Vacational',
+            $oldAnnual,
+            $newAnnual,
+            'accrual',
+            null,
+            $note,
+            $transDate
+        );
+
+        $this->logBudgetChange(
+            $employeeId,
+            'Sick',
+            $oldSick,
+            $newSick,
+            'accrual',
+            null,
+            $note,
+            $transDate
+        );
+    }
+
+    public function accrueSingleEmployee(
+        int $employeeId,
+        float $amount = 1.25,
+        ?string $monthRef = null,
+        ?string $transDate = null,
+        string $notePrefix = 'Manual accrual recorded'
+    ): bool {
+        $monthRef = $monthRef ?: date('Y-m');
+        $transDate = $transDate ?: date('Y-m-d');
+
         try {
             $this->conn->beginTransaction();
-            $stmt = $this->conn->prepare("UPDATE employees 
-                  SET annual_balance = annual_balance + 1.25,
-                      sick_balance = sick_balance + 1.25,
-                      force_balance = 5");
-            $stmt->execute();
 
-            // log accruals for each user (could also be done in trigger)
-            $insert = $this->conn->prepare("INSERT INTO accrual_history (employee_id, amount, date_accrued, month_reference) VALUES (?, ?, ?, ?)");
-            $monthRef = date('Y-m');
-            // use month end date as the accrual date
-            $accrualDate = date('Y-m-t');
-            $empStmt = $this->conn->query("SELECT id FROM employees");
-            while ($row = $empStmt->fetch(PDO::FETCH_ASSOC)) {
-                $insert->execute([$row['id'], 1.25, $accrualDate, $monthRef]);
+            $stmt = $this->conn->prepare("
+                UPDATE employees
+                SET annual_balance = annual_balance + ?,
+                    sick_balance = sick_balance + ?
+                WHERE id = ?
+            ");
+            $stmt->execute([$amount, $amount, $employeeId]);
+
+            if ($stmt->rowCount() < 1) {
+                throw new Exception('Employee not found.');
             }
+
+            $this->recordAccrualLogsForEmployee($employeeId, $amount, $monthRef, $transDate, $notePrefix);
 
             $this->conn->commit();
             return true;
@@ -241,60 +339,116 @@ class Leave {
         }
     }
 
-    /**
-     * Log a budget change to budget_history table
-     */
-    public function logBudgetChange(
-    $employee_id,
-    $leave_type,
-    $old_balance,
-    $new_balance,
-    $action,
-    $leave_request_id = null,
-    $notes = null,
-    $trans_date = null // ✅ NEW (YYYY-MM-DD) used for history encoding
-) {
-    // Try insert with trans_date (new schema)
-    try {
-        $stmt = $this->conn->prepare(
-            "INSERT INTO budget_history (employee_id, trans_date, leave_type, old_balance, new_balance, action, leave_request_id, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        );
-        return $stmt->execute([
-            $employee_id,
-            $trans_date,
-            $leave_type,
-            $old_balance,
-            $new_balance,
-            $action,
-            $leave_request_id,
-            $notes
-        ]);
-    } catch (\Throwable $e) {
-        // Fallback to old schema (no trans_date)
-        $stmt = $this->conn->prepare(
-            "INSERT INTO budget_history (employee_id, leave_type, old_balance, new_balance, action, leave_request_id, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?)"
-        );
-        return $stmt->execute([
-            $employee_id,
-            $leave_type,
-            $old_balance,
-            $new_balance,
-            $action,
-            $leave_request_id,
-            $notes
-        ]);
+    public function accrueAllEmployees(
+        float $amount = 1.25,
+        ?string $monthRef = null,
+        ?string $transDate = null,
+        string $notePrefix = 'Bulk accrual recorded'
+    ): array {
+        $monthRef = $monthRef ?: date('Y-m');
+        $transDate = $transDate ?: date('Y-m-d');
+
+        try {
+            $this->conn->beginTransaction();
+
+            $empStmt = $this->conn->query("SELECT id FROM employees ORDER BY id ASC");
+            $employeeIds = $empStmt->fetchAll(PDO::FETCH_COLUMN);
+
+            if (empty($employeeIds)) {
+                $this->conn->commit();
+                return [
+                    'success' => true,
+                    'count' => 0,
+                    'message' => 'No employees found.'
+                ];
+            }
+
+            $updateStmt = $this->conn->prepare("
+                UPDATE employees
+                SET annual_balance = annual_balance + ?,
+                    sick_balance = sick_balance + ?
+                WHERE id = ?
+            ");
+
+            foreach ($employeeIds as $employeeId) {
+                $updateStmt->execute([$amount, $amount, $employeeId]);
+                $this->recordAccrualLogsForEmployee((int)$employeeId, $amount, $monthRef, $transDate, $notePrefix);
+            }
+
+            $this->conn->commit();
+
+            return [
+                'success' => true,
+                'count' => count($employeeIds),
+                'message' => 'Bulk accrual completed successfully.'
+            ];
+        } catch (Exception $e) {
+            if ($this->conn->inTransaction()) {
+                $this->conn->rollBack();
+            }
+
+            return [
+                'success' => false,
+                'count' => 0,
+                'message' => 'Failed to perform bulk accrual.'
+            ];
+        }
     }
-}
 
-    /**
-     * General manager response for a pending leave request.
-     * action should be either 'approve' or 'reject'.
-     * comments can contain optional reasoning.
-     */
+    public function accrueMonthly(): bool {
+        $result = $this->accrueAllEmployees(
+            1.25,
+            date('Y-m'),
+            date('Y-m-t'),
+            'Monthly accrual recorded'
+        );
+
+        return !empty($result['success']);
+    }
+
+    public function logBudgetChange(
+        $employee_id,
+        $leave_type,
+        $old_balance,
+        $new_balance,
+        $action,
+        $leave_request_id = null,
+        $notes = null,
+        $trans_date = null
+    ) {
+        try {
+            $stmt = $this->conn->prepare(
+                "INSERT INTO budget_history (employee_id, trans_date, leave_type, old_balance, new_balance, action, leave_request_id, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            return $stmt->execute([
+                $employee_id,
+                $trans_date,
+                $leave_type,
+                $old_balance,
+                $new_balance,
+                $action,
+                $leave_request_id,
+                $notes
+            ]);
+        } catch (\Throwable $e) {
+            $stmt = $this->conn->prepare(
+                "INSERT INTO budget_history (employee_id, leave_type, old_balance, new_balance, action, leave_request_id, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"
+            );
+            return $stmt->execute([
+                $employee_id,
+                $leave_type,
+                $old_balance,
+                $new_balance,
+                $action,
+                $leave_request_id,
+                $notes
+            ]);
+        }
+    }
+
     public function respondToLeave($leave_id, $manager_id, $action, $comments = '') {
-
         if (!in_array($action, ['approve','reject'])) {
             return false;
         }
@@ -302,7 +456,6 @@ class Leave {
         try {
             $this->conn->beginTransaction();
 
-            // Get leave details - make sure to fetch leave_type_id
             $stmt = $this->conn->prepare(
                 "SELECT employee_id, total_days, leave_type, leave_type_id
                  FROM leave_requests 
@@ -315,7 +468,6 @@ class Leave {
                 return false;
             }
 
-            // Update leave status and comments
             $status = $action === 'approve' ? 'approved' : 'rejected';
             $this->conn->prepare(
                 "UPDATE leave_requests 
@@ -328,14 +480,11 @@ class Leave {
                 ':id' => $leave_id
             ]);
 
-            // if approved, we may need to deduct from balance and log change
             if ($action === 'approve') {
-                // fetch leave type metadata to know if this type deducts balance
                 $typeInfo = $this->getLeaveType($leave['leave_type_id'] ?? $leave['leave_type']);
                 if ($typeInfo && $typeInfo['deduct_balance']) {
-                    // choose the correct employee column based on type name
                     $col = 'leave_balance';
-                            switch (strtolower($typeInfo['name'])) {
+                    switch (strtolower($typeInfo['name'])) {
                         case 'annual':
                         case 'vacational':
                         case 'vacation':
@@ -345,17 +494,14 @@ class Leave {
                             $col = 'sick_balance';
                             break;
                         case 'force':
-                            // force leave deducts from vacational/annual balance per policy
                             $col = 'annual_balance';
                             break;
                     }
 
-                    // get old balance before update
                     $stmt = $this->conn->prepare("SELECT $col FROM employees WHERE id = ?");
                     $stmt->execute([$leave['employee_id']]);
                     $oldBalance = floatval($stmt->fetchColumn());
 
-                    // update balance
                     $stmt = $this->conn->prepare(
                         "UPDATE employees 
                          SET $col = $col - :days 
@@ -366,19 +512,29 @@ class Leave {
                         ':employee_id' => $leave['employee_id']
                     ]);
 
-                    // get updated snapshots of all three balance types
                     $snapshots = $this->getBalanceSnapshots($leave['employee_id']);
 
-                    // update leave record with approved snapshots
                     $this->conn->prepare(
                         "UPDATE leave_requests 
                          SET snapshot_annual_balance = ?, snapshot_sick_balance = ?, snapshot_force_balance = ? 
                          WHERE id = ?"
-                    )->execute([$snapshots['annual_balance'], $snapshots['sick_balance'], $snapshots['force_balance'], $leave_id]);
+                    )->execute([
+                        $snapshots['annual_balance'],
+                        $snapshots['sick_balance'],
+                        $snapshots['force_balance'],
+                        $leave_id
+                    ]);
 
-                    // record in budget history & new leave_balance_logs
                     $newBalance = max(0, $oldBalance - $leave['total_days']);
-                    $this->logBudgetChange($leave['employee_id'], $typeInfo['name'], $oldBalance, $newBalance, 'deduction', $leave_id, 'Leave approved');
+                    $this->logBudgetChange(
+                        $leave['employee_id'],
+                        $typeInfo['name'],
+                        $oldBalance,
+                        $newBalance,
+                        'deduction',
+                        $leave_id,
+                        'Leave approved'
+                    );
 
                     $stmt = $this->conn->prepare(
                         "INSERT INTO leave_balance_logs (employee_id, change_amount, reason, leave_id)
@@ -390,7 +546,6 @@ class Leave {
 
             $this->conn->commit();
             return true;
-
         } catch (Exception $e) {
             if ($this->conn->inTransaction()) {
                 $this->conn->rollBack();
@@ -399,7 +554,6 @@ class Leave {
         }
     }
 
-    // keep the old helper around for backwards compatibility
     public function approveLeave($leave_id, $manager_id) {
         return $this->respondToLeave($leave_id, $manager_id, 'approve');
     }

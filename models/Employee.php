@@ -9,7 +9,6 @@ class Employee
         $this->conn = $db;
     }
 
-    /** Fetch employee + user email (used by employee_profile.php style queries) */
     public function findWithUser(int $employeeId): ?array
     {
         $stmt = $this->conn->prepare("
@@ -24,7 +23,6 @@ class Employee
         return $row ?: null;
     }
 
-    /** Fetch raw employee record */
     public function find(int $employeeId): ?array
     {
         $stmt = $this->conn->prepare("SELECT * FROM employees WHERE id = ? LIMIT 1");
@@ -33,7 +31,6 @@ class Employee
         return $row ?: null;
     }
 
-    /** Fetch balances only */
     public function getBalances(int $employeeId): array
     {
         $stmt = $this->conn->prepare("
@@ -51,10 +48,8 @@ class Employee
         ];
     }
 
-    /** Update balances (admin/hr use-case) */
     public function updateBalances(int $employeeId, ?float $annual, ?float $sick, ?int $force): bool
     {
-        // Only update the provided fields; preserve others
         $current = $this->getBalances($employeeId);
 
         $annual = ($annual === null) ? $current['annual_balance'] : $annual;
@@ -69,11 +64,10 @@ class Employee
         return $stmt->execute([$annual, $sick, $force, $employeeId]);
     }
 
-    /** Generic profile update (safe for employee self-update too) */
     public function updateProfile(int $employeeId, array $data): bool
     {
         $allowed = [
-            'first_name','last_name','department','position','status','civil_status',
+            'first_name','middle_name','last_name','department','department_id','position','salary','status','civil_status',
             'entrance_to_duty','unit','gsis_policy_no','national_reference_card_no',
             'manager_id','profile_pic'
         ];
@@ -96,17 +90,12 @@ class Employee
         return $stmt->execute($vals);
     }
 
-    /**
-     * Record undertime deduction calculation helper
-     * Policy: deduct = minutes * 0.002 (3-decimal precision)
-     */
     public function computeUndertimeDeduction(int $hours, int $minutes): float
     {
         $totalMinutes = max(0, $hours) * 60 + max(0, $minutes);
         return floor(($totalMinutes * 0.002) * 1000) / 1000;
     }
 
-    /** Apply undertime deduction to annual_balance only */
     public function applyUndertimeToAnnual(int $employeeId, float $deduct): array
     {
         $balances = $this->getBalances($employeeId);

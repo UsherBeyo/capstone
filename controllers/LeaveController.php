@@ -3,11 +3,11 @@ session_start();
 require_once '../config/database.php';
 require_once '../helpers/Auth.php';
 
-// most endpoints require the user be authenticated
 if (empty($_SESSION['user_id'])) {
     header("Location: ../views/login.php");
     exit();
 }
+
 require_once '../models/Leave.php';
 require_once '../models/LeaveType.php';
 require_once '../services/Mail.php';
@@ -17,71 +17,230 @@ require_once '../helpers/ErrorHandler.php';
 $db = (new Database())->connect();
 $leaveModel = new Leave($db);
 
-// determine the requested action
-$action = isset($_POST['action']) ? $_POST['action'] : null;
+$action = $_POST['action'] ?? null;
+$role = $_SESSION['role'] ?? '';
+$userId = (int)($_SESSION['user_id'] ?? 0);
+
+function fetchLeaveForWorkflow(PDO $db, int $leaveId): ?array {
+    $stmt = $db->prepare("
+        SELECT lr.*, e.user_id AS employee_user_id, e.first_name, e.last_name, u.email,
+               COALESCE(lt.name, lr.leave_type) AS leave_type_name
+        FROM leave_requests lr
+        JOIN employees e ON lr.employee_id = e.id
+        LEFT JOIN users u ON e.user_id = u.id
+        LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+        WHERE lr.id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$leaveId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
 
 if ($action === 'approve') {
-
-    if (!in_array($_SESSION['role'], ['manager','admin'])) {
+    if (!in_array($role, ['manager','department_head','personnel','hr','admin'], true)) {
         die("Unauthorized access");
     }
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         die("CSRF validation failed.");
     }
 
-    $leave_id = $_POST['leave_id'];
-    $manager_id = $_SESSION['user_id'];
-
-    $leaveModel->respondToLeave($leave_id, $manager_id, 'approve');
-
-    // send email to employee informing approval
-    $stmt = $db->prepare("SELECT u.email, lr.start_date, lr.end_date, COALESCE(lt.name, lr.leave_type) AS leave_type
-        FROM leave_requests lr
-        JOIN employees e ON lr.employee_id = e.id
-        JOIN users u ON e.user_id = u.id
-        LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
-        WHERE lr.id = ?");
-    $stmt->execute([$leave_id]);
-    if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        Mail::send($row['email'], "Your leave request approved", "Your {$row['leave_type']} leave from {$row['start_date']} to {$row['end_date']} has been approved.");
+    $leave_id = (int)($_POST['leave_id'] ?? 0);
+    $comments = trim($_POST['comments'] ?? '');
+    $row = fetchLeaveForWorkflow($db, $leave_id);
+    if (!$row) {
+        header("Location: ../views/leave_requests.php?toast_error=Leave+request+not+found");
+        exit();
     }
 
-    header("Location: ../views/dashboard.php?toast_success=Leave+approved");
+    $workflow = trim((string)($row['workflow_status'] ?? ''));
+
+    // Stage 1: Department Head approval -> forward to personnel
+    if ($workflow === '' || $workflow === 'pending_department_head') {
+        if (!in_array($role, ['manager','department_head','admin'], true)) {
+            die("Unauthorized access");
+        }
+
+        if ($role === 'department_head') {
+            // Check if this user is the department head for the employee's department
+            $stmt = $db->prepare("SELECT e.department_id FROM employees e WHERE e.id = ?");
+            $stmt->execute([$row['employee_id']]);
+            $deptId = $stmt->fetchColumn();
+            if (!$deptId) {
+                die("Employee has no department assigned");
+            }
+            $stmt2 = $db->prepare("SELECT 1 FROM department_head_assignments WHERE department_id = ? AND employee_id = (SELECT id FROM employees WHERE user_id = ?) AND is_active = 1");
+            $stmt2->execute([$deptId, $userId]);
+            if (!$stmt2->fetch()) {
+                die("Unauthorized: You are not the department head for this employee's department");
+            }
+        } elseif ($role !== 'admin' && !empty($row['department_head_user_id']) && (int)$row['department_head_user_id'] !== $userId) {
+            die("Unauthorized: Not assigned as this request's Department Head");
+        }
+
+        $stmt = $db->prepare("
+            UPDATE leave_requests
+            SET workflow_status = 'pending_personnel',
+                department_head_user_id = COALESCE(department_head_user_id, ?),
+                department_head_comments = ?,
+                department_head_approved_at = NOW()
+            WHERE id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$userId, $comments, $leave_id]);
+
+        if (!empty($row['email'])) {
+            Mail::send(
+                $row['email'],
+                "Your leave request moved to personnel review",
+                "Your {$row['leave_type_name']} leave request from {$row['start_date']} to {$row['end_date']} was approved by the Department Head and is now pending personnel review."
+            );
+        }
+
+        header("Location: ../views/leave_requests.php?toast_success=Leave+approved+by+Department+Head+and+forwarded+to+Personnel");
+        exit();
+    }
+
+    // Stage 2: Personnel final approval
+    if ($workflow === 'pending_personnel') {
+        if (!in_array($role, ['personnel','hr','admin'], true)) {
+            die("Unauthorized access");
+        }
+
+        $ok = $leaveModel->respondToLeave($leave_id, $userId, 'approve', $comments);
+        if (!$ok) {
+            header("Location: ../views/leave_requests.php?toast_error=Unable+to+finalize+approval");
+            exit();
+        }
+
+        $stmt = $db->prepare("
+            UPDATE leave_requests
+            SET workflow_status = 'finalized',
+                personnel_user_id = ?,
+                personnel_comments = ?,
+                personnel_checked_at = NOW(),
+                finalized_at = NOW(),
+                print_status = 'pending_print'
+            WHERE id = ?
+        ");
+        $stmt->execute([$userId, $comments, $leave_id]);
+
+        if (!empty($row['email'])) {
+            Mail::send(
+                $row['email'],
+                "Your leave request approved",
+                "Your {$row['leave_type_name']} leave from {$row['start_date']} to {$row['end_date']} has been fully approved."
+            );
+        }
+
+        header("Location: ../views/leave_requests.php?toast_success=Leave+fully+approved+by+Personnel");
+        exit();
+    }
+
+    header("Location: ../views/leave_requests.php?toast_warning=This+request+is+not+in+an+approvable+workflow+stage");
     exit();
 }
 
 if ($action === 'reject') {
-    if (!in_array($_SESSION['role'], ['manager','admin'])) {
+    if (!in_array($role, ['manager','department_head','personnel','hr','admin'], true)) {
         die("Unauthorized access");
     }
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         die("CSRF validation failed.");
     }
-    $leave_id = $_POST['leave_id'];
-    $manager_id = $_SESSION['user_id'];
+
+    $leave_id = (int)($_POST['leave_id'] ?? 0);
     $comments = trim($_POST['comments'] ?? '');
-
-    $leaveModel->respondToLeave($leave_id, $manager_id, 'reject', $comments);
-
-    // notify employee
-    $stmt = $db->prepare("SELECT u.email, lr.start_date, lr.end_date, COALESCE(lt.name, lr.leave_type) AS leave_type
-        FROM leave_requests lr
-        JOIN employees e ON lr.employee_id = e.id
-        JOIN users u ON e.user_id = u.id
-        LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
-        WHERE lr.id = ?");
-    $stmt->execute([$leave_id]);
-    if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        Mail::send($row['email'], "Your leave request was rejected", "Your {$row['leave_type']} leave from {$row['start_date']} to {$row['end_date']} has been rejected. Reason: {$comments}");
+    $row = fetchLeaveForWorkflow($db, $leave_id);
+    if (!$row) {
+        header("Location: ../views/leave_requests.php?toast_error=Leave+request+not+found");
+        exit();
     }
 
-    header("Location: ../views/dashboard.php?toast_warning=Leave+rejected");
+    $workflow = trim((string)($row['workflow_status'] ?? ''));
+
+    if ($workflow === '' || $workflow === 'pending_department_head') {
+        if (!in_array($role, ['manager','department_head','admin'], true)) {
+            die("Unauthorized access");
+        }
+
+        if ($role === 'department_head') {
+            // Check if this user is the department head for the employee's department
+            $stmt = $db->prepare("SELECT e.department_id FROM employees e WHERE e.id = ?");
+            $stmt->execute([$row['employee_id']]);
+            $deptId = $stmt->fetchColumn();
+            if (!$deptId) {
+                die("Employee has no department assigned");
+            }
+            $stmt2 = $db->prepare("SELECT 1 FROM department_head_assignments WHERE department_id = ? AND employee_id = (SELECT id FROM employees WHERE user_id = ?) AND is_active = 1");
+            $stmt2->execute([$deptId, $userId]);
+            if (!$stmt2->fetch()) {
+                die("Unauthorized: You are not the department head for this employee's department");
+            }
+        } elseif ($role !== 'admin' && !empty($row['department_head_user_id']) && (int)$row['department_head_user_id'] !== $userId) {
+            die("Unauthorized: Not assigned as this request's Department Head");
+        }
+
+        $stmt = $db->prepare("
+            UPDATE leave_requests
+            SET status = 'rejected',
+                workflow_status = 'rejected_department_head',
+                approved_by = ?,
+                manager_comments = ?,
+                department_head_user_id = COALESCE(department_head_user_id, ?),
+                department_head_comments = ?,
+                department_head_approved_at = NOW()
+            WHERE id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$userId, $comments, $userId, $comments, $leave_id]);
+
+        if (!empty($row['email'])) {
+            Mail::send(
+                $row['email'],
+                "Your leave request was rejected",
+                "Your {$row['leave_type_name']} leave from {$row['start_date']} to {$row['end_date']} was rejected by the Department Head. Reason: {$comments}"
+            );
+        }
+
+        header("Location: ../views/leave_requests.php?toast_warning=Leave+rejected+by+Department+Head");
+        exit();
+    }
+
+    if ($workflow === 'pending_personnel') {
+        if (!in_array($role, ['personnel','hr','admin'], true)) {
+            die("Unauthorized access");
+        }
+
+        $stmt = $db->prepare("
+            UPDATE leave_requests
+            SET status = 'rejected',
+                workflow_status = 'returned_by_personnel',
+                approved_by = ?,
+                manager_comments = ?,
+                personnel_user_id = ?,
+                personnel_comments = ?,
+                personnel_checked_at = NOW()
+            WHERE id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$userId, $comments, $userId, $comments, $leave_id]);
+
+        if (!empty($row['email'])) {
+            Mail::send(
+                $row['email'],
+                "Your leave request was returned by personnel",
+                "Your {$row['leave_type_name']} leave from {$row['start_date']} to {$row['end_date']} was not finalized by personnel. Reason: {$comments}"
+            );
+        }
+
+        header("Location: ../views/leave_requests.php?toast_warning=Leave+returned+by+Personnel");
+        exit();
+    }
+
+    header("Location: ../views/leave_requests.php?toast_warning=This+request+is+not+in+a+rejectable+workflow+stage");
     exit();
 }
 
 if ($action === 'cancel') {
-    // only employees can cancel their own requests
-    if ($_SESSION['role'] !== 'employee') {
+    if (!in_array($role, ['employee','manager','department_head','admin'], true)) {
         die("Unauthorized access");
     }
 
@@ -89,23 +248,29 @@ if ($action === 'cancel') {
         die("CSRF validation failed.");
     }
 
-    $leave_id = $_POST['leave_id'];
-    $employee_id = $_SESSION['emp_id'] ?? null;
+    $leave_id = (int)($_POST['leave_id'] ?? 0);
+    $employee_id = (int)($_SESSION['emp_id'] ?? 0);
 
     if (!$employee_id) {
         die("Employee record not found");
     }
 
-    // verify the request belongs to this employee
-    $stmt = $db->prepare("SELECT employee_id FROM leave_requests WHERE id = ? AND status = 'pending'");
+    $stmt = $db->prepare("
+        SELECT employee_id, status, workflow_status
+        FROM leave_requests
+        WHERE id = ?
+    ");
     $stmt->execute([$leave_id]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$row || $row['employee_id'] != $employee_id) {
+    if (!$row || (int)$row['employee_id'] !== $employee_id) {
         die("Unauthorized: Cannot cancel this request");
     }
 
-    // delete the request
+    if (strtolower((string)$row['status']) !== 'pending') {
+        die("Only pending requests can be cancelled");
+    }
+
     $stmt = $db->prepare("DELETE FROM leave_requests WHERE id = ?");
     $stmt->execute([$leave_id]);
 
@@ -114,17 +279,15 @@ if ($action === 'cancel') {
 }
 
 if ($action === 'apply') {
-    // only employees can apply
-    if ($_SESSION['role'] !== 'employee') {
+    if (!in_array($role, ['employee','manager','department_head','admin'], true)) {
         die("Unauthorized access");
     }
 
-    // CSRF check
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         die("CSRF validation failed.");
     }
 
-    $employee_id = $_SESSION['emp_id'] ?? null; // store employee id in session when user logs in
+    $employee_id = $_SESSION['emp_id'] ?? null;
     if (!$employee_id) {
         die("Employee record not found");
     }
@@ -133,33 +296,41 @@ if ($action === 'apply') {
     $start = $_POST['start_date'] ?? '';
     $end = $_POST['end_date'] ?? '';
     $reason = trim($_POST['reason'] ?? '');
+    $commutation = $_POST['commutation'] ?? null;
 
-    // validate input
     $v = new Validator();
     $v->required('leave_type_id', $typeId)
       ->required('start_date', $start)
       ->date('start_date', $start)
       ->required('end_date', $end)
       ->date('end_date', $end);
+
     if ($v->fails()) {
         $err = implode(' ', array_map('implode', $v->getErrors()));
         header("Location: ../views/dashboard.php?toast_error=".urlencode($err));
         exit();
     }
 
-    $result = $leaveModel->apply($employee_id, $typeId, $start, $end, $reason);
+    $result = $leaveModel->apply(
+        (int)$employee_id,
+        $typeId,
+        $start,
+        $end,
+        $reason,
+        $userId,
+        $role,
+        $commutation
+    );
 
-    // send notification to admin that a new leave was submitted
     if (strpos($result, 'successfully') !== false) {
-        // basic mail; in production use a real templating engine
         $dbType = new LeaveType($db);
         $typeInfo = $dbType->get($typeId);
+
         $subject = "New leave request from employee {$employee_id}";
         $body = "Employee {$employee_id} has applied for {$typeInfo['name']} leave from {$start} to {$end}.";
         Mail::send('hr@example.com', $subject, $body);
 
-        // if auto-approved, notify the employee
-        if ($typeInfo && $typeInfo['auto_approve']) {
+        if ($typeInfo && !empty($typeInfo['auto_approve'])) {
             $userEmail = $_SESSION['user_email'] ?? null;
             if ($userEmail) {
                 Mail::send($userEmail, "Your leave has been approved", "Your {$typeInfo['name']} leave from {$start} to {$end} was auto-approved.");
@@ -167,7 +338,6 @@ if ($action === 'apply') {
         }
     }
 
-    // use toast based on success or failure
     if (strpos($result, 'successfully') !== false) {
         header("Location: ../views/dashboard.php?toast_success=".urlencode($result));
     } else {

@@ -35,6 +35,8 @@ if (!$e) {
     exit();
 }
 
+$departments = $db->query("SELECT * FROM departments ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+
 $managers = $db->query("SELECT e.id, e.first_name, e.last_name
     FROM employees e
     JOIN users u ON e.user_id = u.id
@@ -72,7 +74,12 @@ $is_own_profile = ($role === 'employee');
             <label>Last Name</label>
             <input type="text" name="last_name" value="<?= htmlspecialchars($e['last_name']); ?>" required>
             <label>Department</label>
-            <input type="text" name="department" value="<?= htmlspecialchars($e['department']); ?>" required>
+            <select name="department_id" required>
+                <option value="">Select Department</option>
+                <?php foreach($departments as $d): ?>
+                    <option value="<?= $d['id']; ?>" <?= ($e['department_id'] == $d['id']) ? 'selected' : ''; ?>><?= htmlspecialchars($d['name']); ?></option>
+                <?php endforeach; ?>
+            </select>
             <label>Position</label>
             <input type="text" name="position" value="<?= htmlspecialchars($e['position'] ?? ''); ?>">
             <label>Status</label>

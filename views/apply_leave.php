@@ -2,7 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
 
-if ($_SESSION['role'] != 'employee') {
+if (!in_array($_SESSION['role'], ['employee','manager','department_head','admin'], true)) {
     die("Access denied");
 }
 
@@ -15,7 +15,6 @@ if ($emp_id) {
     $balances = $stmt->fetch(PDO::FETCH_ASSOC) ?: $balances;
 }
 
-// fetch leave types for dropdown
 $typesStmt = $db->query("SELECT * FROM leave_types ORDER BY name");
 $leaveTypes = $typesStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -30,7 +29,6 @@ if (empty($_SESSION['csrf_token'])) {
     <link rel="stylesheet" href="../assets/css/styles.css">
     <script src="../assets/js/script.js"></script>
     <script>
-        // helper to show balance for chosen leave type
         function updateBalanceInfo() {
             var typeElem = document.getElementById('leave_type');
             if(!typeElem) return;
@@ -38,9 +36,8 @@ if (empty($_SESSION['csrf_token'])) {
             var info = document.getElementById('balance-info');
             var balanceMap = {
                 <?php foreach ($leaveTypes as $lt): 
-                    // Map leave type names to the correct balance columns
                     $typeName = strtolower($lt['name']);
-                    $col = 'annual_balance'; // default
+                    $col = 'annual_balance';
                     if ($typeName === 'sick') $col = 'sick_balance';
                     elseif ($typeName === 'force') $col = 'force_balance';
                     elseif ($typeName === 'vacational' || $typeName === 'vacation' || $typeName === 'annual') $col = 'annual_balance';
@@ -63,22 +60,6 @@ if (empty($_SESSION['csrf_token'])) {
                 });
             }
         });
-
-        function checkBalanceWarning(days) {
-            var balanceInfo = document.getElementById('balance-info');
-            var text = balanceInfo.textContent || balanceInfo.innerText;
-            var parts = text.split(':');
-            if (parts.length >= 2) {
-                var bal = parseFloat(parts[1]);
-                if (!isNaN(bal) && days > bal) {
-                    balanceInfo.style.color = 'red';
-                    balanceInfo.innerHTML += ' <span style="font-weight:bold;">(insufficient)</span>';
-                } else {
-                    balanceInfo.style.color = '';
-                }
-            }
-        }
-
     </script>
 </head>
 <body>
@@ -87,7 +68,10 @@ if (empty($_SESSION['csrf_token'])) {
 
 <div class="content">
     <div class="card" style="margin:0 auto;max-width:620px;">
-        <h2 style="text-align:center;margin-bottom:24px;">Apply for Leave</h2>
+        <h2 style="text-align:center;margin-bottom:12px;">Apply for Leave</h2>
+        <p style="text-align:center;font-size:13px;color:#6b7280;margin-bottom:24px;">
+            New requests now follow the workflow: <strong>Department Head → Personnel → Finalization</strong>.
+        </p>
 
         <form method="POST" action="../controllers/LeaveController.php" style="display:flex;flex-direction:column;align-items:stretch;gap:0;">
 
@@ -123,6 +107,14 @@ if (empty($_SESSION['csrf_token'])) {
             <div class="form-group">
                 <label for="reason">Reason for Leave</label>
                 <textarea name="reason" id="reason" required rows="5" style="width:100%;padding:10px 12px;box-sizing:border-box;background:#ffffff;color:#111827;border-radius:10px;border:1px solid var(--border);font-family:inherit;font-size:14px;resize:vertical;"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="commutation">Commutation</label>
+                <select name="commutation" id="commutation" style="width:100%;padding:10px 12px;box-sizing:border-box;background:#ffffff;color:#111827;border-radius:10px;border:1px solid var(--border);font-size:14px;">
+                    <option value="">Not Requested</option>
+                    <option value="Requested">Requested</option>
+                </select>
             </div>
 
             <div style="text-align:center;margin-top:16px;">

@@ -12,11 +12,17 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-$employees = $db->query("SELECT e.*, u.email FROM employees e JOIN users u ON e.user_id = u.id")->fetchAll(PDO::FETCH_ASSOC);
+$employees = $db->query("SELECT e.*, u.email, u.role FROM employees e JOIN users u ON e.user_id = u.id")->fetchAll(PDO::FETCH_ASSOC);
 
-$managers = $db->query("SELECT e.id, e.first_name, e.last_name FROM employees e JOIN users u ON e.user_id = u.id WHERE u.role = 'manager'")->fetchAll(PDO::FETCH_ASSOC);
+$departments = $db->query("SELECT * FROM departments ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 
-// if admin requests to view an employee's leave history
+$managers = $db->query("
+    SELECT e.id, e.first_name, e.middle_name, e.last_name
+    FROM employees e
+    JOIN users u ON e.user_id = u.id
+    WHERE u.role IN ('manager','department_head')
+")->fetchAll(PDO::FETCH_ASSOC);
+
 $historyEmployee = null;
 if (isset($_GET['view_history'])) {
     $eid = intval($_GET['view_history']);
@@ -24,130 +30,7 @@ if (isset($_GET['view_history'])) {
     $stmt->execute([$eid]);
     $historyEmployee = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
-// export leave budget CSV
-if (isset($_GET['export_budget'])) {
-    $eid = intval($_GET['export_budget']);
-    $stmt = $db->prepare("SELECT first_name, last_name, annual_balance, sick_balance, force_balance FROM employees WHERE id = ?");
-    $stmt->execute([$eid]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($row) {
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="budget_' . $eid . '.csv"');
-        $out = fopen('php://output', 'w');
-        fputcsv($out, array_keys($row));
-        fputcsv($out, $row);
-        exit();
-    }
-}
-
-// export employee leave card
-if (isset($_GET['export_leave_card'])) {
-    $eid = intval($_GET['export_leave_card']);
-    $empStmt = $db->prepare("SELECT * FROM employees WHERE id = ?");
-    $empStmt->execute([$eid]);
-    $emp = $empStmt->fetch(PDO::FETCH_ASSOC);
-    if (!$emp) die("Employee not found");
-    
-    // build set of months from accruals and undertime logs
-    $months = [];
-    $stmt = $db->prepare("SELECT DISTINCT month_reference FROM accrual_history WHERE employee_id = ? ORDER BY month_reference");
-    $stmt->execute([$eid]);
-    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
-        $months[$m] = true;
-    }
-    $stmt = $db->prepare("SELECT DISTINCT DATE_FORMAT(created_at,'%Y-%m') FROM leave_balance_logs WHERE employee_id = ?");
-    $stmt->execute([$eid]);
-    foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $m) {
-        $months[$m] = true;
-    }
-    ksort($months);
-    
-    // build data
-    $rows = [];
-    foreach(array_keys($months) as $m) {
-        // earned is accrual amount (annual & sick)
-        $stmt = $db->prepare("SELECT SUM(amount) FROM accrual_history WHERE employee_id=? AND month_reference=?");
-        $stmt->execute([$eid, $m]);
-        $earned = floatval($stmt->fetchColumn() ?: 0);
-        // undertime paid
-        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_paid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
-        $stmt->execute([$eid, $m]);
-        $utPaid = floatval($stmt->fetchColumn() ?: 0);
-        // undertime unpaid
-        $stmt = $db->prepare("SELECT SUM(ABS(change_amount)) FROM leave_balance_logs WHERE employee_id=? AND reason='undertime_unpaid' AND DATE_FORMAT(created_at,'%Y-%m')=?");
-        $stmt->execute([$eid, $m]);
-        $utUnpaid = floatval($stmt->fetchColumn() ?: 0);
-        // calculate end-of-month balances
-        $firstDayNext = date('Y-m-d', strtotime($m . '-01 +1 month'));
-        $balStmt = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type IN ('Annual','Vacational','Vacation') AND created_at < ? ORDER BY created_at DESC LIMIT 1");
-        $balStmt->execute([$eid, $firstDayNext]);
-        $vacBal = floatval($balStmt->fetchColumn() ?: 0);
-        $balStmt2 = $db->prepare("SELECT new_balance FROM budget_history WHERE employee_id=? AND leave_type='Sick' AND created_at < ? ORDER BY created_at DESC LIMIT 1");
-        $balStmt2->execute([$eid, $firstDayNext]);
-        $sickBal = floatval($balStmt2->fetchColumn() ?: 0);
-        $rows[] = [
-            'month' => $m,
-            'earned' => $earned,
-            'ut_paid' => $utPaid,
-            'ut_unpaid' => $utUnpaid,
-            'vac_bal' => $vacBal,
-            'sick_bal' => $sickBal
-        ];
-    }
-    
-    // output as Excel (HTML)
-    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-    header('Content-Disposition: attachment; filename="leave_card_'.$eid.'_'.date('Y-m-d').'.xls"');
-    echo "<table border=1>\n";
-    // Add employee information header
-    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";
-    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($emp['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($emp['first_name'].' '.$emp['last_name'])."</td><td><strong>Position</strong></td><td>".htmlspecialchars($emp['position'] ?? '')."</td><td><strong>Department</strong></td><td>".htmlspecialchars($emp['department'])."</td></tr>\n";
-    echo "<tr><td><strong>Status</strong></td><td>".htmlspecialchars($emp['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($emp['civil_status'] ?? '')."</td><td><strong>Entrance to Duty</strong></td><td>".htmlspecialchars($emp['entrance_to_duty'] ?? '')."</td><td><strong>Unit</strong></td><td>".htmlspecialchars($emp['unit'] ?? '')."</td></tr>\n";
-    echo "<tr><td colspan='11'>&nbsp;</td></tr>\n";
-    echo "<tr><td colspan='11' style='font-weight:bold;background-color:#d3d3d3;'><strong>LEAVE HISTORY</strong></td></tr>\n";
-    // header row with merged columns for Vacation and Sick
-    echo "<tr style='background-color:#e0e0e0;'>";
-    echo "<th>Period</th>";
-    echo "<th>Particulars</th>";
-    echo "<th colspan='4' style='text-align:center;'>Vacational Leave</th>";
-    echo "<th colspan='4' style='text-align:center;'>Sick Leave</th>";
-    echo "<th>Remarks</th>";
-    echo "</tr>\n";
-    // sub-header row
-    echo "<tr style='background-color:#f0f0f0;'>";
-    echo "<th></th>";
-    echo "<th></th>";
-    echo "<th>Earned</th>";
-    echo "<th>Undertime Paid</th>";
-    echo "<th>Balance</th>";
-    echo "<th>Undertime Unpaid</th>";
-    echo "<th>Earned</th>";
-    echo "<th>Undertime Paid</th>";
-    echo "<th>Balance</th>";
-    echo "<th>Undertime Unpaid</th>";
-    echo "<th></th>";
-    echo "</tr>\n";
-    foreach($rows as $r) {
-        echo "<tr>";
-        echo "<td>".htmlspecialchars($r['month'])."</td>";
-        echo "<td></td>";
-        echo "<td>".number_format($r['earned'], 3)."</td>";
-        echo "<td>".number_format($r['ut_paid'], 3)."</td>";
-        echo "<td>".number_format($r['vac_bal'], 3)."</td>";
-        echo "<td>".number_format($r['ut_unpaid'], 3)."</td>";
-        echo "<td>".number_format($r['earned'], 3)."</td>";
-        echo "<td>".number_format($r['ut_paid'], 3)."</td>";
-        echo "<td>".number_format($r['sick_bal'], 3)."</td>";
-        echo "<td>".number_format($r['ut_unpaid'], 3)."</td>";
-        echo "<td></td>";
-        echo "</tr>\n";
-    }
-    echo "</table>";
-    exit();
-}
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -162,7 +45,6 @@ if (isset($_GET['export_leave_card'])) {
 
     <button id="openCreateModal" class="btn" style="margin:48px 0 0 0;">+ New Employee</button>
 
-    <!-- Compact modal for creating employee -->
     <div id="createModal" class="modal" style="display:none;">
         <div class="modal-content small">
             <span class="modal-close" id="closeCreateModal">&times;</span>
@@ -171,43 +53,79 @@ if (isset($_GET['export_leave_card'])) {
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                 <label>Email</label>
                 <input type="email" name="email" required>
+
                 <label>Profile Picture</label>
                 <input type="file" name="profile_pic" accept="image/*">
+
                 <label>First Name</label>
                 <input type="text" name="first_name" required>
+
+                <label>Middle Name</label>
+                <input type="text" name="middle_name">
+
                 <label>Last Name</label>
                 <input type="text" name="last_name" required>
+
                 <label>Department</label>
-                <input type="text" name="department" required>
+                <select name="department_id" required>
+                    <option value="">Select Department</option>
+                    <?php foreach($departments as $d): ?>
+                        <option value="<?= $d['id']; ?>"><?= htmlspecialchars($d['name']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+
                 <label>Position</label>
                 <input type="text" name="position">
+
+                <label>Salary</label>
+                <input type="number" step="0.01" name="salary">
+
                 <label>Status</label>
                 <input type="text" name="status">
+
                 <label>Civil Status</label>
                 <input type="text" name="civil_status">
+
                 <label>Entrance to Duty</label>
                 <input type="date" name="entrance_to_duty">
+
                 <label>Unit</label>
                 <input type="text" name="unit">
+
                 <label>GSIS Policy No.</label>
                 <input type="text" name="gsis_policy_no">
+
                 <label>National Reference Card No.</label>
                 <input type="text" name="national_reference_card_no">
+
                 <label>Password</label>
                 <input type="password" name="password" required placeholder="Set temporary password">
+
                 <label>Role</label>
-                <select name="role">
+                <select name="role" id="roleSelect">
                     <option value="employee" selected>Employee</option>
-                    <option value="manager">Manager</option>
-                    <option value="hr">HR</option>
+                    <option value="department_head">Department Head</option>
+                    <option value="personnel">Personnel</option>
+                    <option value="manager">Manager (Legacy)</option>
+                    <option value="hr">HR (Legacy)</option>
+                    <option value="admin">Admin</option>
                 </select>
-                <label>Assign Manager</label>
+
+                <div id="deptHeadField" style="display:none;">
+                    <label>Department Head Of (auto-assigned based on department)</label>
+                    <p style="font-size:12px;color:#666;">This will be set automatically when department is selected.</p>
+                </div>
+
+                <label>Assign Department Head</label>
                 <select name="manager_id">
                     <option value="">None</option>
                     <?php foreach($managers as $m): ?>
-                        <option value="<?= $m['id']; ?>"><?= $m['first_name']." ".$m['last_name']; ?></option>
+                        <option value="<?= $m['id']; ?>">
+                            <?= htmlspecialchars(trim($m['first_name'].' '.($m['middle_name'] ?? '').' '.$m['last_name'])); ?>
+                        </option>
                     <?php endforeach; ?>
                 </select>
+
                 <div style="text-align:right;">
                     <button type="submit">Create</button>
                 </div>
@@ -226,6 +144,15 @@ if (isset($_GET['export_leave_card'])) {
         window.addEventListener('click', function(e){
             if(e.target == document.getElementById('createModal')) document.getElementById('createModal').style.display = 'none';
         });
+
+        document.getElementById('roleSelect').addEventListener('change', function(){
+            const deptHeadField = document.getElementById('deptHeadField');
+            if(this.value === 'department_head'){
+                deptHeadField.style.display = 'block';
+            } else {
+                deptHeadField.style.display = 'none';
+            }
+        });
     </script>
 
     <div class="card" style="margin-top:30px;">
@@ -236,8 +163,10 @@ if (isset($_GET['export_leave_card'])) {
                 <th>Photo</th>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Role</th>
                 <th>Department</th>
                 <th>Position</th>
+                <th>Salary</th>
                 <th>Status</th>
                 <th>Vacational</th>
                 <th>Sick</th>
@@ -247,11 +176,13 @@ if (isset($_GET['export_leave_card'])) {
 
             <?php foreach($employees as $e): ?>
             <tr>
-                <td><?php if(!empty($e['profile_pic'])) echo "<img src='".$e['profile_pic']."' style='width:40px;height:40px;border-radius:50%;cursor:pointer;' onclick=\"openImageModal('".$e['profile_pic']."', '".htmlspecialchars($e['first_name'].' '.$e['last_name'])."')\">"; ?></td>
-                <td><?= $e['first_name']." ". $e['last_name']; ?></td>
-                <td><?= $e['email']; ?></td>
-                <td><?= $e['department']; ?></td>
+                <td><?php if(!empty($e['profile_pic'])) echo "<img src='".$e['profile_pic']."' style='width:40px;height:40px;border-radius:50%;cursor:pointer;' onclick=\"openImageModal('".$e['profile_pic']."', '".htmlspecialchars(trim($e['first_name'].' '.($e['middle_name'] ?? '').' '.$e['last_name']))."')\">"; ?></td>
+                <td><?= htmlspecialchars(trim($e['first_name']." ".($e['middle_name'] ?? '')." ".$e['last_name'])); ?></td>
+                <td><?= htmlspecialchars($e['email']); ?></td>
+                <td><?= htmlspecialchars($e['role']); ?></td>
+                <td><?= htmlspecialchars($e['department']); ?></td>
                 <td><?= htmlspecialchars($e['position'] ?? ''); ?></td>
+                <td><?= ($e['salary'] !== null && $e['salary'] !== '') ? number_format((float)$e['salary'], 2) : '—'; ?></td>
                 <td><?= htmlspecialchars($e['status'] ?? ''); ?></td>
                 <td><?= isset($e['annual_balance']) ? number_format($e['annual_balance'],3) : '0.000'; ?></td>
                 <td><?= isset($e['sick_balance']) ? number_format($e['sick_balance'],3) : '0.000'; ?></td>
@@ -273,13 +204,14 @@ if (isset($_GET['export_leave_card'])) {
     <div class="card" style="margin-top:30px;">
         <h3>Leave History for Employee</h3>
         <table>
-            <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Comments</th></tr>
+            <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Workflow</th><th>Comments</th></tr>
             <?php foreach($historyEmployee as $h): ?>
             <tr>
                 <td><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type']); ?></td>
-                <td><?= $h['start_date'].' to '.$h['end_date']; ?></td>
-                <td><?= intval($h['total_days']); ?></td>
+                <td><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
+                <td><?= number_format((float)($h['total_days'] ?? 0), 3); ?></td>
                 <td><?= ucfirst($h['status']); ?></td>
+                <td><?= htmlspecialchars($h['workflow_status'] ?? '—'); ?></td>
                 <td><?= htmlspecialchars($h['manager_comments'] ?? ''); ?></td>
             </tr>
             <?php endforeach; ?>
@@ -290,34 +222,33 @@ if (isset($_GET['export_leave_card'])) {
 </div>
 
 <script>
-    // filter employee table based on search box
-    document.getElementById('empSearch').addEventListener('keyup', function(){
-        var filter = this.value.toLowerCase();
-        var rows = document.querySelectorAll('table tr');
-        rows.forEach(function(row, index){
-            if(index === 0) return; // skip header row
-            var text = row.textContent.toLowerCase();
-            row.style.display = text.indexOf(filter) > -1 ? '' : 'none';
-        });
+document.getElementById('empSearch').addEventListener('keyup', function(){
+    var filter = this.value.toLowerCase();
+    var rows = document.querySelectorAll('table tr');
+    rows.forEach(function(row, index){
+        if(index === 0) return;
+        var text = row.textContent.toLowerCase();
+        row.style.display = text.indexOf(filter) > -1 ? '' : 'none';
     });
+});
 
-    function openImageModal(src, name) {
-        document.getElementById('modalImage').src = src;
-        document.getElementById('modalImageName').textContent = name;
-        document.getElementById('imageModal').style.display = 'flex';
-    }
+function openImageModal(src, name) {
+    document.getElementById('modalImage').src = src;
+    document.getElementById('modalImageName').textContent = name;
+    document.getElementById('imageModal').style.display = 'flex';
+}
 
-    function closeImageModal() {
-        document.getElementById('imageModal').style.display = 'none';
-    }
+function closeImageModal() {
+    document.getElementById('imageModal').style.display = 'none';
+}
 
-    document.getElementById('imageModal').addEventListener('click', function(e) {
-        if(e.target === this) closeImageModal();
-    });
+document.getElementById('imageModal').addEventListener('click', function(e) {
+    if(e.target === this) closeImageModal();
+});
 </script>
 
 <div id="imageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:2000;justify-content:center;align-items:center;flex-direction:column;">
-    <span style="color:white;font-size:20px;;margin-bottom:24px;" id="modalImageName"></span>
+    <span style="color:white;font-size:20px;margin-bottom:24px;" id="modalImageName"></span>
     <img id="modalImage" style="max-width:80%;max-height:80%;border-radius:8px;">
     <button onclick="closeImageModal()" style="margin-top:20px;padding:10px 20px;background:var(--primary);color:white;border:none;border-radius:4px;cursor:pointer;">Close</button>
 </div>
