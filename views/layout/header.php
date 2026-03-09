@@ -21,32 +21,34 @@ if (!empty($_SESSION['emp_id'])) {
 }
 ?>
 <header class="app-header">
-    <div class="header-container">
+    <div class="header-content-wrapper">
         <div class="header-left">
             <div class="header-brand-area">
                 <h1 class="app-title">Leave System</h1>
             </div>
         </div>
-        <div class="header-right">
-            <div class="profile-section">
-                <div class="profile-info">
-                    <div class="profile-name"><?= htmlspecialchars($displayName); ?></div>
-                    <div class="profile-email"><?= htmlspecialchars($userEmail); ?></div>
-                </div>
-                <button class="profile-button" id="profileButton" onclick="toggleProfileMenu()">
-                    <?php if (!empty($profilePic)): ?>
-                        <img src="<?= htmlspecialchars($profilePic); ?>" alt="Profile" class="profile-avatar">
-                    <?php else: ?>
-                        <div class="profile-avatar profile-avatar-placeholder">
-                            <span><?= strtoupper(substr($displayName, 0, 1)); ?></span>
-                        </div>
-                    <?php endif; ?>
-                </button>
-                <div id="profileMenu" class="profile-menu" style="display: none;">
-                    <a href="employee_profile.php?id=<?= $_SESSION['emp_id'] ?? ''; ?>" class="profile-menu-item">Profile</a>
-                    <a href="change_password.php" class="profile-menu-item">Settings</a>
-                    <hr style="margin: 4px 0; border: none; border-top: 1px solid var(--border);">
-                    <a href="../controllers/logout.php" class="profile-menu-item">Logout</a>
+        <div class="header-right-container">
+            <div class="header-right">
+                <div class="profile-section">
+                    <div class="profile-info">
+                        <div class="profile-name"><?= htmlspecialchars($displayName); ?></div>
+                        <div class="profile-email"><?= htmlspecialchars($userEmail); ?></div>
+                    </div>
+                    <button class="profile-button" id="profileButton" onclick="toggleProfileMenu()">
+                        <?php if (!empty($profilePic)): ?>
+                            <img src="<?= htmlspecialchars($profilePic); ?>" alt="Profile" class="profile-avatar">
+                        <?php else: ?>
+                            <div class="profile-avatar profile-avatar-placeholder">
+                                <span><?= strtoupper(substr($displayName, 0, 1)); ?></span>
+                            </div>
+                        <?php endif; ?>
+                    </button>
+                    <div id="profileMenu" class="profile-menu" style="display: none;">
+                        <a href="employee_profile.php?id=<?= $_SESSION['emp_id'] ?? ''; ?>" class="profile-menu-item">Profile</a>
+                        <a href="change_password.php" class="profile-menu-item">Settings</a>
+                        <hr style="margin: 4px 0; border: none; border-top: 1px solid var(--border);">
+                        <a href="../controllers/logout.php" class="profile-menu-item">Logout</a>
+                    </div>
                 </div>
             </div>
         </div>
