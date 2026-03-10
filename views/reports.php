@@ -399,7 +399,7 @@ if ($role === 'employee') {
 }
 
 // Access: admin/manager/hr can access all; employee only own leave_card
-if (!in_array($role, ['admin', 'manager', 'hr', 'employee'], true)) {
+if (!in_array($role, ['admin', 'manager', 'hr', 'personnel', 'employee'], true)) {
     die("Access denied");
 }
 if ($role === 'employee' && ($employeeFilter !== $sessionEmpId || $reportType !== 'leave_card')) {

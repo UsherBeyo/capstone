@@ -494,7 +494,7 @@ class Leave {
                             $col = 'sick_balance';
                             break;
                         case 'force':
-                            $col = 'annual_balance';
+                            $col = 'force_balance';
                             break;
                     }
 

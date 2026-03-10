@@ -236,10 +236,28 @@ $signatoryAPosition = trim((string)arr($request, 'personnel_signatory_position_a
 $signatoryCName = trim((string)arr($request, 'personnel_signatory_name_c', ''));
 $signatoryCPosition = trim((string)arr($request, 'personnel_signatory_position_c', ''));
 
-if ($signatoryAName === '') $signatoryAName = 'ANN GERALYN T. PELIAS';
-if ($signatoryAPosition === '') $signatoryAPosition = 'Chief Administrative Officer';
-if ($signatoryCName === '') $signatoryCName = 'ATTY. ALBERTO T. ESCOBARTE';
-if ($signatoryCPosition === '') $signatoryCPosition = 'Assistant Regional Director';
+$defaultSignatories = [];
+try {
+    $stmtDefaults = $db->query("SELECT key_name, name, position FROM system_signatories");
+    foreach ($stmtDefaults->fetchAll(PDO::FETCH_ASSOC) as $s) {
+        $defaultSignatories[$s['key_name']] = $s;
+    }
+} catch (Throwable $t) {
+    $defaultSignatories = [];
+}
+
+if ($signatoryAName === '') {
+    $signatoryAName = trim((string)($defaultSignatories['certification']['name'] ?? 'ANN GERALYN T. PELIAS'));
+}
+if ($signatoryAPosition === '') {
+    $signatoryAPosition = trim((string)($defaultSignatories['certification']['position'] ?? 'Chief Administrative Officer'));
+}
+if ($signatoryCName === '') {
+    $signatoryCName = trim((string)($defaultSignatories['final_approver']['name'] ?? 'ATTY. ALBERTO T. ESCOBARTE'));
+}
+if ($signatoryCPosition === '') {
+    $signatoryCPosition = trim((string)($defaultSignatories['final_approver']['position'] ?? 'Assistant Regional Director'));
+}
 
 $lawTitle = trim((string)arr($request, 'law_title', ''));
 $lawText = trim((string)arr($request, 'law_text', ''));

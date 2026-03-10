@@ -37,6 +37,10 @@ if (!isset($db)) {
             <a href="holidays.php">Manage Holidays</a>
         <?php endif; ?>
 
+        <?php if(in_array($role,['personnel','admin','hr'], true)): ?>
+            <a href="signatories_settings.php">Signatories Settings</a>
+        <?php endif; ?>
+
         <?php if(in_array($role,['admin','hr','personnel'], true)): ?>
             <a href="reports.php">Reports</a>
         <?php endif; ?>
@@ -110,6 +114,10 @@ function checkFlashMessage() {
     }
     if (params.has('undertime')) {
         showToast('Undertime recorded successfully!', 'success');
+        cleaned = true;
+    }
+    if (params.has('saved')) {
+        showToast('Signatories updated successfully!', 'success');
         cleaned = true;
     }
     if (cleaned) {

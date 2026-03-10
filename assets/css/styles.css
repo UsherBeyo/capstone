@@ -813,3 +813,347 @@ p { line-height: 1.6; }
     color: var(--text);
     z-index: 999;
 }
+
+.personnel-employee-cell strong {
+    display: block;
+    color: #111827;
+}
+
+.subtext {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 1px;
+    line-height: 1.3;
+}
+
+.balance-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.balance-chip {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.chip-affected {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.action-forms-vertical {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.action-forms-vertical form,
+.action-forms-vertical a,
+.action-forms-vertical button {
+    width: 100%;
+}
+
+.review-modal {
+    width: min(1200px, 96vw);
+    max-height: 92vh;
+    padding: 24px;
+    position: relative;
+}
+
+.review-modal-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.review-badge {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.review-muted {
+    margin: 0;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.review-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.review-panel {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+.review-panel h4 {
+    margin-bottom: 12px;
+    font-size: 16px;
+    color: #111827;
+}
+
+.review-kv {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dashed #e5e7eb;
+}
+
+.review-kv:last-child {
+    border-bottom: none;
+}
+
+.review-kv span {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.review-kv strong {
+    color: #111827;
+    text-align: right;
+    font-size: 13px;
+}
+
+.review-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.review-leave-card-wrap {
+    overflow: auto;
+    max-height: 420px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.review-leave-card-table {
+    width: 100%;
+    min-width: 960px;
+    margin-top: 0;
+    border-collapse: collapse;
+}
+
+.review-leave-card-table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 1;
+}
+
+.review-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+    .review-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .review-modal-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* Pending Personnel row cleanup */
+.personnel-row td {
+    vertical-align: middle;
+}
+
+.col-employee { width: 28%; }
+.col-type { width: 10%; }
+.col-dates { width: 14%; }
+.col-days { width: 7%; }
+.col-balance { width: 16%; }
+.col-action { width: 9%; min-width: 130px; }
+
+.leave-type-pill {
+    display: inline-block;
+    padding: 6px 10px;
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.date-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.35;
+}
+
+.date-arrow {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.balance-stack.compact {
+    gap: 3px;
+}
+
+.comment-preview {
+    max-width: 180px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #374151;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+.personnel-action-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
+}
+
+.icon-action-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: #111827;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: 0.2s ease;
+    padding: 0;
+}
+
+.icon-action-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+.icon-approve {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.personnel-action-panel {
+    display: none;
+    position: absolute;
+    top: 50px;
+    right: 0;
+    width: 260px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.10);
+    padding: 12px;
+    z-index: 20;
+}
+
+.personnel-action-panel.open {
+    display: block;
+}
+
+.mini-action-form {
+    margin-bottom: 10px;
+}
+
+.mini-action-form:last-child {
+    margin-bottom: 0;
+}
+
+.mini-action-form input[type="text"] {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+}
+
+.mini-action-form button {
+    width: 100%;
+}
+
+.danger-btn {
+    background: #dc2626;
+}
+
+.danger-btn:hover {
+    background: #b91c1c;
+}
+
+.table-container {
+    overflow-x: auto;
+    overflow-y: auto;
+}
+
+.table-container table {
+    min-width: 980px;
+    table-layout: auto;
+}
+
+@media (max-width: 1100px) {
+    .table-container table {
+        min-width: 980px;
+    }
+}
+
+/* Reuse compact action width in Department Head table too */
+.card .col-action {
+    position: relative;
+}
+
+/* Floating action modals for approve/reject */
+.floating-action-modal {
+    position: relative;
+}
+
+.small-action-modal {
+    width: 420px;
+    max-width: 94vw;
+    padding: 22px;
+}
+
+.small-action-modal .mini-action-form {
+    margin-bottom: 12px;
+}
+
+.small-action-modal .mini-action-form:last-child {
+    margin-bottom: 0;
+}
+
+.small-action-modal input[type="text"] {
+    margin: 0 0 12px 0;
+}
