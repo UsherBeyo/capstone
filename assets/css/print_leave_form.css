@@ -42,28 +42,40 @@ body {
     font-weight: 700;
 }
 
-.header-block {
+.header-shell {
+    position: relative;
     width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 0.8mm;
+    min-height: 52px;
+    margin-bottom: 0.6mm;
 }
 
-.logo-cell {
-    width: 11%;
-    text-align: center;
-    vertical-align: middle;
+.header-logos {
+    position: absolute;
+    left: 22px;
+    top: 6px;
+    display: flex;
+    gap: 18px;
+    align-items: center;
 }
 
-.header-center {
-    width: 78%;
+.logo-wrap {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-center-block {
+    width: 100%;
     text-align: center;
-    vertical-align: middle;
+    padding-top: 4px;
 }
 
 .seal,
 .seal-img {
-    width: 46px;
-    height: 46px;
+    width: 44px;
+    height: 44px;
     margin: 0 auto;
     display: block;
 }
@@ -74,30 +86,30 @@ body {
 }
 
 .gov-line {
-    font-size: 8.6pt;
+    font-size: 8.4pt;
     font-weight: 700;
-    line-height: 1.05;
+    line-height: 1.02;
 }
 
 .gov-region {
-    font-size: 13pt;
+    font-size: 12.5pt;
     font-weight: 800;
-    line-height: 1.05;
-    margin-top: 0.5mm;
+    line-height: 1.02;
+    margin-top: 0.4mm;
 }
 
 .gov-sub {
-    font-size: 8.1pt;
+    font-size: 7.8pt;
     font-weight: 700;
-    line-height: 1.05;
-    margin-top: 0.35mm;
+    line-height: 1.02;
+    margin-top: 0.2mm;
 }
 
 .main-title {
     text-align: center;
-    font-size: 15.5pt;
+    font-size: 15.2pt;
     font-weight: 800;
-    margin: 0.8mm 0 3mm;
+    margin: 1.2mm 0 4.2mm;
     letter-spacing: 0;
 }
 
@@ -139,23 +151,34 @@ body {
 }
 
 .value-row {
-    height: 18px;
+    height: 22px;
     text-align: center;
     vertical-align: middle !important;
-    font-size: 9.1px;
+    font-size: 9.2px;
 }
 
 .office-value {
     text-align: left;
-    padding-left: 12px !important;
+    padding-left: 10px !important;
 }
 
 .cell-line {
     text-align: center;
-    vertical-align: bottom !important;
+    vertical-align: middle !important;
     height: 18px;
-    padding-top: 6px !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
     font-size: 9px;
+}
+.field-line {
+    text-align: center;
+    vertical-align: middle !important;
+    font-size: 9px;
+    border-left: none !important;
+    border-right: none !important;
+    border-top: 0.55px solid #000 !important;
+    border-bottom: 0.55px solid #000 !important;
+    padding: 2px 6px !important;
 }
 
 .strong {
@@ -163,8 +186,57 @@ body {
     font-size: 9.8px;
 }
 
-.blank-top {
-    height: 18px;
+.no-top-row {
+    border-top: none !important;
+}
+
+.no-bottom-row {
+    border-bottom: none !important;
+}
+
+.no-bottom-cell {
+    border-bottom: none !important;
+}
+
+.salary-inline-cell {
+    vertical-align: middle !important;
+    padding: 2px 6px !important;
+    text-align: left;
+}
+
+.salary-inline-label {
+    display: inline-block;
+    font-size: 8.8px;
+    margin-right: 6px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.salary-inline-line {
+    display: inline-block;
+    width: 78px;
+    max-width: 78px;
+    border-bottom: 0.55px solid #000;
+    text-align: center;
+    vertical-align: middle;
+    padding-bottom: 1px;
+    min-height: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.line-top-value {
+    position: relative;
+    min-height: 16px;
+}
+
+.days-line-value {
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    background: #fff;
+    padding-right: 6px;
+    font-size: 9.3px;
 }
 
 .name-guide {
@@ -240,13 +312,25 @@ body {
 
 .days-block {
     height: 66px;
-    padding: 4px 8px !important;
+    padding: 4px 8px 0 !important;
 }
 
-.days-value {
+.days-line-wrap {
+    position: relative;
+    margin-bottom: 4px;
+}
+
+.line-top-value {
+    position: relative;
+}
+
+.days-line-value {
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    background: #fff;
+    padding-right: 6px;
     font-size: 9.3px;
-    margin-bottom: 5px;
-    min-height: 10px;
 }
 
 .line-wide {
@@ -269,7 +353,7 @@ body {
 
 .commutation-block {
     height: 66px;
-    padding: 7px 9px 3px !important;
+    padding: 7px 9px 0 !important;
 }
 
 .comm-row {
@@ -346,6 +430,11 @@ body {
 .sig-name.final {
     width: 74%;
     margin: 18px auto 1px;
+}
+
+.dept-head-sign {
+    font-size: 8.2pt;
+    margin-top: 2px;
 }
 
 .sig-line {

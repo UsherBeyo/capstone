@@ -38,7 +38,7 @@ function fmtDisplayDate(?string $date): string
     if ($date === '') return '';
 
     $ts = strtotime($date);
-    if ($ts === false) return e($date);
+    if ($ts === false) return $date;
 
     return date('F j, Y', $ts);
 }
@@ -68,6 +68,7 @@ try {
             COALESCE(lt.name, lr.leave_type) AS leave_type_name,
             lt.law_title,
             lt.law_text,
+
             lf.office_department,
             lf.employee_last_name,
             lf.employee_first_name,
@@ -92,12 +93,22 @@ try {
             lf.personnel_signatory_name_a,
             lf.personnel_signatory_position_a,
             lf.personnel_signatory_name_c,
-            lf.personnel_signatory_position_c
+            lf.personnel_signatory_position_c,
+
+            udh.email AS department_head_email,
+            edh.first_name AS department_head_first_name,
+            edh.middle_name AS department_head_middle_name,
+            edh.last_name AS department_head_last_name
+
         FROM leave_requests lr
         JOIN employees e ON lr.employee_id = e.id
         LEFT JOIN users u ON e.user_id = u.id
         LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
         LEFT JOIN leave_request_forms lf ON lf.leave_request_id = lr.id
+
+        LEFT JOIN users udh ON udh.id = lr.department_head_user_id
+        LEFT JOIN employees edh ON edh.user_id = udh.id
+
         WHERE lr.id = ?
           AND (lr.workflow_status = 'finalized' OR lr.status = 'approved')
         LIMIT 1
@@ -112,11 +123,21 @@ try {
             u.email,
             COALESCE(lt.name, lr.leave_type) AS leave_type_name,
             lt.law_title,
-            lt.law_text
+            lt.law_text,
+
+            udh.email AS department_head_email,
+            edh.first_name AS department_head_first_name,
+            edh.middle_name AS department_head_middle_name,
+            edh.last_name AS department_head_last_name
+
         FROM leave_requests lr
         JOIN employees e ON lr.employee_id = e.id
         LEFT JOIN users u ON e.user_id = u.id
         LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+
+        LEFT JOIN users udh ON udh.id = lr.department_head_user_id
+        LEFT JOIN employees edh ON edh.user_id = udh.id
+
         WHERE lr.id = ?
           AND (lr.workflow_status = 'finalized' OR lr.status = 'approved')
         LIMIT 1
@@ -180,10 +201,18 @@ $lastName = trim((string)(arr($request, 'employee_last_name') ?: arr($request, '
 $firstName = trim((string)(arr($request, 'employee_first_name') ?: arr($request, 'first_name', '')));
 $middleName = trim((string)(arr($request, 'employee_middle_name') ?: arr($request, 'middle_name', '')));
 $dateOfFiling = arr($request, 'date_of_filing') ?: arr($request, 'created_at', date('Y-m-d'));
-$position = trim((string)(arr($request, 'position_title') ?: arr($request, 'position', '')));
-$salary = (arr($request, 'form_salary') !== null && arr($request, 'form_salary') !== '')
-    ? safeFloat(arr($request, 'form_salary'))
-    : safeFloat(arr($request, 'salary', 0));
+$formPosition = trim((string)arr($request, 'position_title', ''));
+$employeePosition = trim((string)arr($request, 'position', ''));
+$position = $formPosition !== '' ? $formPosition : $employeePosition;
+$formSalaryRaw = arr($request, 'form_salary', null);
+$employeeSalaryRaw = arr($request, 'salary', 0);
+
+$formSalary = safeFloat($formSalaryRaw);
+$employeeSalary = safeFloat($employeeSalaryRaw);
+
+// Use form salary only when it is actually filled with a positive value.
+// Otherwise fallback to employee salary.
+$salary = $formSalary > 0 ? $formSalary : $employeeSalary;
 
 $recommendationStatus = strtolower(trim((string)arr($request, 'recommendation_status', '')));
 $recommendationReason = trim((string)(
@@ -214,6 +243,15 @@ if ($signatoryCPosition === '') $signatoryCPosition = 'Assistant Regional Direct
 
 $lawTitle = trim((string)arr($request, 'law_title', ''));
 $lawText = trim((string)arr($request, 'law_text', ''));
+
+$departmentHeadFullName = trim(
+    (string)arr($request, 'department_head_first_name', '') . ' ' .
+    (string)arr($request, 'department_head_middle_name', '') . ' ' .
+    (string)arr($request, 'department_head_last_name', '')
+);
+if ($departmentHeadFullName === '') {
+    $departmentHeadFullName = 'Chief of the Division/Section or Unit Head';
+}
 
 $leaveTypeChecks = [
     'vacation leave' => false,
@@ -316,15 +354,13 @@ $otherDetailText = trim((string)arr($request, 'reason', ''));
 
 // optional logos
 $depedLogo = firstExistingPath([
-    '/../pictures/DEPED.jpg',
-    '/../pictures/deped.jpg',
+    'pictures/deped.jpg',
     '/../assets/img/deped.png',
     '/../assets/img/deped.jpg'
 ]);
 
 $regionLogo = firstExistingPath([
-    '/../pictures/region4a.png',
-    '/../pictures/region.png',
+    'pictures/region4.jpg',
     '/../assets/img/region4a.png',
     '/../assets/img/region.png'
 ]);
@@ -349,30 +385,31 @@ $regionLogo = firstExistingPath([
         </tr>
     </table>
 
-    <table class="header-block">
-        <tr>
-            <td class="logo-cell">
+    <div class="header-shell">
+        <div class="header-logos">
+            <div class="logo-wrap">
                 <?php if ($depedLogo): ?>
                     <img src="<?= e($depedLogo); ?>" alt="DepEd Seal" class="seal-img">
                 <?php else: ?>
                     <div class="seal"></div>
                 <?php endif; ?>
-            </td>
-            <td class="logo-cell">
+            </div>
+            <div class="logo-wrap">
                 <?php if ($regionLogo): ?>
                     <img src="<?= e($regionLogo); ?>" alt="Region Seal" class="seal-img">
                 <?php else: ?>
                     <div class="seal"></div>
                 <?php endif; ?>
-            </td>
-            <td class="header-center">
-                <div class="gov-line">Republic of the Philippines</div>
-                <div class="gov-line">Department of Education</div>
-                <div class="gov-region">Region IV-A CALABARZON</div>
-                <div class="gov-sub">Gate 2 Karangalan Village, Cainta, Rizal</div>
-            </td>
-        </tr>
-    </table>
+            </div>
+        </div>
+
+        <div class="header-center-block">
+            <div class="gov-line">Republic of the Philippines</div>
+            <div class="gov-line">Department of Education</div>
+            <div class="gov-region">Region IV-A CALABARZON</div>
+            <div class="gov-sub">Gate 2 Karangalan Village, Cainta, Rizal</div>
+        </div>
+    </div>
 
     <div class="main-title">APPLICATION FOR LEAVE</div>
 
@@ -380,12 +417,12 @@ $regionLogo = firstExistingPath([
         <colgroup>
             <col style="width:12%">
             <col style="width:13%">
-            <col style="width:13%">
             <col style="width:15%">
-            <col style="width:10%">
             <col style="width:14%">
-            <col style="width:11%">
             <col style="width:12%">
+            <col style="width:14%">
+            <col style="width:10%">
+            <col style="width:10%">
         </colgroup>
 
         <tr>
@@ -398,21 +435,21 @@ $regionLogo = firstExistingPath([
             </td>
         </tr>
         <tr>
-            <td colspan="3" class="cell-value value-row office-value"><?= e($department); ?></td>
+            <td colspan="3" class="cell-value value-row office-value">DEPED REGION IV-A CALABARZON</td>
             <td colspan="2" class="cell-value value-row"><?= e($lastName); ?></td>
             <td colspan="2" class="cell-value value-row"><?= e($firstName); ?></td>
             <td colspan="1" class="cell-value value-row"><?= e($middleName); ?></td>
         </tr>
+
         <tr>
             <td colspan="2" class="cell-label head-cell">3.&nbsp; DATE OF FILING</td>
-            <td colspan="2" class="cell-line centered strong"><?= e(fmtDisplayDate($dateOfFiling)); ?></td>
-            <td colspan="2" class="cell-label head-cell">4.&nbsp; POSITION</td>
-            <td colspan="2" class="cell-line centered"><?= e($position); ?></td>
-        </tr>
-        <tr>
-            <td colspan="6" class="blank-top"></td>
-            <td class="cell-label head-cell">5.&nbsp; SALARY</td>
-            <td class="cell-line centered"><?= $salary > 0 ? number_format($salary, 2) : ''; ?></td>
+            <td colspan="2" class="field-line centered strong"><?= e(fmtDisplayDate($dateOfFiling)); ?></td>
+            <td colspan="1" class="cell-label head-cell">4.&nbsp; POSITION</td>
+            <td colspan="2" class="field-line centered"><?= e($position); ?></td>
+            <td colspan="1" class="salary-inline-cell">
+                <span class="salary-inline-label">5.&nbsp; SALARY</span>
+                <span class="salary-inline-line"><?= $salary > 0 ? number_format($salary, 2) : ''; ?></span>
+            </td>
         </tr>
 
         <tr>
@@ -471,14 +508,17 @@ $regionLogo = firstExistingPath([
         </tr>
 
         <tr>
-            <td colspan="4" class="subsection-header head-cell">6.C NUMBER OF WORKING DAYS APPLIED FOR</td>
-            <td colspan="4" class="subsection-header head-cell">6.D COMMUTATION</td>
+            <td colspan="4" class="subsection-header head-cell no-bottom-cell">6.C NUMBER OF WORKING DAYS APPLIED FOR</td>
+            <td colspan="4" class="subsection-header head-cell no-bottom-cell">6.D COMMUTATION</td>
         </tr>
 
         <tr>
-            <td colspan="4" class="days-block top-align">
-                <div class="days-value"><?= number_format($deduct, 3); ?></div>
-                <div class="line-wide"></div>
+            <td colspan="4" class="days-block top-align no-top-row no-bottom-row">
+                <div class="days-line-wrap">
+                    <div class="line-wide line-top-value">
+                        <span class="days-line-value"><?= number_format($deduct, 3); ?></span>
+                    </div>
+                </div>
                 <div class="inclusive-label">INCLUSIVE DATES</div>
                 <div class="line-wide centered-date">
                     <?= e(fmtDisplayDate(arr($request, 'start_date', ''))); ?>
@@ -486,7 +526,7 @@ $regionLogo = firstExistingPath([
                     <?= e(fmtDisplayDate(arr($request, 'end_date', ''))); ?>
                 </div>
             </td>
-            <td colspan="4" class="commutation-block top-align">
+            <td colspan="4" class="commutation-block top-align no-top-row no-bottom-row">
                 <div class="comm-row"><?= checkbox($commNotRequested); ?> <span>Not Requested</span></div>
                 <div class="comm-row"><?= checkbox($commRequested); ?> <span>Requested</span></div>
                 <div class="applicant-signature">(Signature of Applicant)</div>
@@ -545,6 +585,7 @@ $regionLogo = firstExistingPath([
 
                 <div class="sig-area lower">
                     <div class="sig-line"></div>
+                    <div class="sig-name dept-head-sign"><?= e($departmentHeadFullName); ?></div>
                     <div class="sig-pos">Chief of the Division/Section or Unit Head</div>
                 </div>
             </td>
