@@ -153,20 +153,43 @@ if (!$request) {
 $selectedLeaveType = strtolower(trim((string)arr($request, 'leave_type_name', '')));
 $deduct = safeFloat(arr($request, 'total_days', 0));
 
-$vacTotalEarned = (arr($request, 'cert_vacation_total_earned') !== null && arr($request, 'cert_vacation_total_earned') !== '')
-    ? safeFloat(arr($request, 'cert_vacation_total_earned'))
-    : safeFloat(arr($request, 'snapshot_annual_balance', 0));
+$leaveSubtype = strtolower(trim((string)arr($request, 'leave_subtype', '')));
+$detailsJsonRaw = arr($request, 'details_json', '');
+$detailsData = [];
 
-$sickTotalEarned = (arr($request, 'cert_sick_total_earned') !== null && arr($request, 'cert_sick_total_earned') !== '')
-    ? safeFloat(arr($request, 'cert_sick_total_earned'))
-    : safeFloat(arr($request, 'snapshot_sick_balance', 0));
+if (!empty($detailsJsonRaw)) {
+    $decoded = json_decode($detailsJsonRaw, true);
+    if (is_array($decoded)) {
+        $detailsData = $decoded;
+    }
+}
+
+$supportingDocumentsRaw = arr($request, 'supporting_documents_json', '');
+$supportingDocuments = [];
+if (!empty($supportingDocumentsRaw)) {
+    $decodedDocs = json_decode($supportingDocumentsRaw, true);
+    if (is_array($decodedDocs)) {
+        $supportingDocuments = $decodedDocs;
+    }
+}
+
+$medicalCertificateAttached = !empty(arr($request, 'medical_certificate_attached', 0));
+$affidavitAttached = !empty(arr($request, 'affidavit_attached', 0));
+$emergencyCase = !empty(arr($request, 'emergency_case', 0));
 
 $isVacationBucket = in_array($selectedLeaveType, [
-    'annual', 'vacation', 'vacational', 'vacation leave',
-    'force', 'mandatory/forced leave', 'mandatory', 'forced'
+    'annual', 'vacation', 'vacational', 'vacation leave'
+], true);
+
+$isForceBucket = in_array($selectedLeaveType, [
+    'force', 'mandatory/forced leave', 'mandatory / forced leave', 'mandatory', 'forced'
 ], true);
 
 $isSickBucket = in_array($selectedLeaveType, ['sick', 'sick leave'], true);
+
+$vacBalanceAfter = safeFloat(arr($request, 'snapshot_annual_balance', 0));
+$sickBalanceAfter = safeFloat(arr($request, 'snapshot_sick_balance', 0));
+$forceBalanceAfter = safeFloat(arr($request, 'snapshot_force_balance', 0));
 
 $vacLess = (arr($request, 'cert_vacation_less_this_application') !== null && arr($request, 'cert_vacation_less_this_application') !== '')
     ? safeFloat(arr($request, 'cert_vacation_less_this_application'))
@@ -176,15 +199,29 @@ $sickLess = (arr($request, 'cert_sick_less_this_application') !== null && arr($r
     ? safeFloat(arr($request, 'cert_sick_less_this_application'))
     : ($isSickBucket ? $deduct : 0.0);
 
+$vacTotalEarned = (arr($request, 'cert_vacation_total_earned') !== null && arr($request, 'cert_vacation_total_earned') !== '')
+    ? safeFloat(arr($request, 'cert_vacation_total_earned'))
+    : ($vacBalanceAfter + $vacLess);
+
+$sickTotalEarned = (arr($request, 'cert_sick_total_earned') !== null && arr($request, 'cert_sick_total_earned') !== '')
+    ? safeFloat(arr($request, 'cert_sick_total_earned'))
+    : ($sickBalanceAfter + $sickLess);
+
 $vacBalance = (arr($request, 'cert_vacation_balance') !== null && arr($request, 'cert_vacation_balance') !== '')
     ? safeFloat(arr($request, 'cert_vacation_balance'))
-    : max(0, $vacTotalEarned - $vacLess);
+    : $vacBalanceAfter;
 
 $sickBalance = (arr($request, 'cert_sick_balance') !== null && arr($request, 'cert_sick_balance') !== '')
     ? safeFloat(arr($request, 'cert_sick_balance'))
-    : max(0, $sickTotalEarned - $sickLess);
+    : $sickBalanceAfter;
 
-$availableForPay = $isSickBucket ? $sickTotalEarned : $vacTotalEarned;
+if ($isSickBucket) {
+    $availableForPay = $sickTotalEarned;
+} elseif ($isForceBucket) {
+    $availableForPay = $forceBalanceAfter + $deduct;
+} else {
+    $availableForPay = $vacTotalEarned;
+}
 
 $daysWithPay = (arr($request, 'approved_for_days_with_pay') !== null && arr($request, 'approved_for_days_with_pay') !== '')
     ? safeFloat(arr($request, 'approved_for_days_with_pay'))
@@ -200,7 +237,7 @@ $department = trim((string)(arr($request, 'office_department') ?: arr($request, 
 $lastName = trim((string)(arr($request, 'employee_last_name') ?: arr($request, 'last_name', '')));
 $firstName = trim((string)(arr($request, 'employee_first_name') ?: arr($request, 'first_name', '')));
 $middleName = trim((string)(arr($request, 'employee_middle_name') ?: arr($request, 'middle_name', '')));
-$dateOfFiling = arr($request, 'date_of_filing') ?: arr($request, 'created_at', date('Y-m-d'));
+$dateOfFiling = arr($request, 'date_of_filing') ?: arr($request, 'filing_date') ?: arr($request, 'created_at', date('Y-m-d'));
 $formPosition = trim((string)arr($request, 'position_title', ''));
 $employeePosition = trim((string)arr($request, 'position', ''));
 $position = $formPosition !== '' ? $formPosition : $employeePosition;
@@ -354,21 +391,73 @@ $detailChecks = [
     'terminal' => false,
 ];
 
-if ($leaveTypeChecks['vacation leave'] || $leaveTypeChecks['special privilege leave']) {
+if ($leaveSubtype === 'within_ph') {
     $detailChecks['within_ph'] = true;
 }
-if ($leaveTypeChecks['sick leave']) {
+if ($leaveSubtype === 'abroad') {
+    $detailChecks['abroad'] = true;
+}
+if ($leaveSubtype === 'in_hospital') {
     $detailChecks['in_hospital'] = true;
 }
+if ($leaveSubtype === 'out_patient') {
+    $detailChecks['out_patient'] = true;
+}
+if ($leaveSubtype === 'masters') {
+    $detailChecks['masters'] = true;
+}
+if ($leaveSubtype === 'bar_review') {
+    $detailChecks['bar_review'] = true;
+}
+
 if ($leaveTypeChecks['special leave benefits for women']) {
     $detailChecks['women_special'] = true;
 }
-if ($leaveTypeChecks['study leave']) {
-    $detailChecks['masters'] = true;
+if ($selectedLeaveType === 'monetization of leave credits') {
+    $detailChecks['monetization'] = true;
+}
+if ($selectedLeaveType === 'terminal leave') {
+    $detailChecks['terminal'] = true;
 }
 
 $otherLeaveLabel = (!$leaveTypeChecks['others']) ? '' : (arr($request, 'leave_type_name', ''));
-$otherDetailText = trim((string)arr($request, 'reason', ''));
+
+$sickIllnessText = '';
+if ($isSickBucket && ($detailChecks['in_hospital'] || $detailChecks['out_patient'])) {
+    $sickIllnessText = trim((string)($detailsData['illness'] ?? ''));
+}
+
+$womenIllnessText = '';
+if ($leaveTypeChecks['special leave benefits for women']) {
+    $womenIllnessText = trim((string)(
+        $detailsData['surgery_details']
+        ?? $detailsData['illness']
+        ?? ''
+    ));
+}
+
+$studyOtherPurposeText = '';
+if ($leaveTypeChecks['study leave']) {
+    $studyOtherPurposeText = trim((string)(
+        $detailsData['other_purpose']
+        ?? arr($request, 'reason', '')
+    ));
+}
+
+$showStudyOthers = $leaveTypeChecks['study leave']
+    && !$detailChecks['masters']
+    && !$detailChecks['bar_review']
+    && $studyOtherPurposeText !== '';
+
+$monetizationReasonText = '';
+if ($detailChecks['monetization']) {
+    $monetizationReasonText = trim((string)($detailsData['monetization_reason'] ?? ''));
+}
+
+$terminalReasonText = '';
+if ($detailChecks['terminal']) {
+    $terminalReasonText = trim((string)($detailsData['terminal_reason'] ?? ''));
+}
 
 // optional logos
 $depedLogo = firstExistingPath([
@@ -382,6 +471,17 @@ $regionLogo = firstExistingPath([
     '/../assets/img/region4a.png',
     '/../assets/img/region.png'
 ]);
+
+$certificationAsOf = trim((string)arr($request, 'certification_as_of', ''));
+if ($certificationAsOf === '') {
+    $certificationAsOf = trim((string)(
+        arr($request, 'finalized_at')
+        ?: arr($request, 'personnel_checked_at')
+        ?: arr($request, 'department_head_approved_at')
+        ?: arr($request, 'created_at')
+        ?: date('Y-m-d')
+    ));
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -505,22 +605,64 @@ $regionLogo = firstExistingPath([
             <td colspan="4" class="top-align list-cell">
                 <table class="inner-list details-list">
                     <tr><td colspan="2" class="italic-head">In case of Vacation/Special Privilege Leave:</td></tr>
-                    <tr><td class="box"><?= checkbox($detailChecks['within_ph']); ?></td><td>Within the Philippines <span class="inline-line"></span></td></tr>
-                    <tr><td class="box"><?= checkbox($detailChecks['abroad']); ?></td><td>Abroad (Specify) <span class="inline-line"></span></td></tr>
+                    <tr>
+                        <td class="box"><?= checkbox($detailChecks['within_ph']); ?></td>
+                        <td>Within the Philippines <span class="inline-line"><?= e($detailChecks['within_ph'] ? ($detailsData['location'] ?? '') : ''); ?></span></td>
+                    </tr>
+                    <tr>
+                        <td class="box"><?= checkbox($detailChecks['abroad']); ?></td>
+                        <td>Abroad (Specify) <span class="inline-line"><?= e($detailChecks['abroad'] ? ($detailsData['location'] ?? '') : ''); ?></span></td>
+                    </tr>
 
                     <tr><td colspan="2" class="italic-head">In case of Sick Leave:</td></tr>
-                    <tr><td class="box"><?= checkbox($detailChecks['in_hospital']); ?></td><td>In Hospital (Specify Illness) <span class="inline-line"></span></td></tr>
-                    <tr><td class="box"><?= checkbox($detailChecks['out_patient']); ?></td><td>Out Patient (Specify Illness) <span class="inline-line"></span></td></tr>
+                        <tr>
+                            <td class="box"><?= checkbox($detailChecks['in_hospital']); ?></td>
+                            <td>
+                                In Hospital (Specify Illness)
+                                <span class="inline-line"><?= e($detailChecks['in_hospital'] ? $sickIllnessText : ''); ?></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="box"><?= checkbox($detailChecks['out_patient']); ?></td>
+                            <td>
+                                Out Patient (Specify Illness)
+                                <span class="inline-line"><?= e($detailChecks['out_patient'] ? $sickIllnessText : ''); ?></span>
+                            </td>
+                        </tr>
 
-                    <tr><td colspan="2" class="italic-head">In case of Special Leave Benefits for Women:</td></tr>
-                    <tr><td class="box"></td><td>(Specify Illness) <span class="inline-line"><?= e($detailChecks['women_special'] ? $otherDetailText : ''); ?></span></td></tr>
+                        <tr><td colspan="2" class="italic-head">In case of Special Leave Benefits for Women:</td></tr>
+                        <tr>
+                            <td class="box"></td>
+                            <td>
+                                (Specify Illness)
+                                <span class="inline-line"><?= e($detailChecks['women_special'] ? $womenIllnessText : ''); ?></span>
+                            </td>
+                        </tr>
 
-                    <tr><td colspan="2" class="italic-head">In case of Study Leave:</td></tr>
-                    <tr><td class="box"><?= checkbox($detailChecks['masters']); ?></td><td>Completion of Master's Degree</td></tr>
-                    <tr><td class="box"><?= checkbox($detailChecks['bar_review']); ?></td><td>BAR/Board Examination Review <em>Other purpose:</em> <span class="inline-line"><?= e($otherDetailText); ?></span></td></tr>
-
-                    <tr><td class="box"><?= checkbox($detailChecks['monetization']); ?></td><td>Monetization of Leave Credits</td></tr>
-                    <tr><td class="box"><?= checkbox($detailChecks['terminal']); ?></td><td>Terminal Leave</td></tr>
+                        <tr><td colspan="2" class="italic-head">In case of Study Leave:</td></tr>
+                            <tr>
+                                <td class="box"><?= checkbox($detailChecks['masters']); ?></td>
+                                <td>Completion of Master's Degree</td>
+                            </tr>
+                            <tr>
+                                <td class="box"><?= checkbox($detailChecks['bar_review']); ?></td>
+                                <td>BAR/Board Examination Review</td>
+                            </tr>
+                            <tr>
+                                <td class="box"><?= checkbox($detailChecks['monetization']); ?></td>
+                                <td>Monetization of Leave Credits</td>
+                            </tr>
+                            <tr>
+                                <td class="box"><?= checkbox($detailChecks['terminal']); ?></td>
+                                <td>Terminal Leave</td>
+                            </tr>
+                            <tr>
+                                <td class="box"></td>
+                                <td>
+                                    <em>Others:</em>
+                                    <span class="inline-line"><?= e($showStudyOthers ? $studyOtherPurposeText : ''); ?></span>
+                                </td>
+                            </tr>
                 </table>
             </td>
         </tr>
@@ -562,7 +704,7 @@ $regionLogo = firstExistingPath([
 
         <tr>
             <td colspan="4" class="top-align cert-cell">
-                <div class="as-of-wrap">As of <span class="as-of-line"><?= e(fmtDisplayDate(arr($request, 'certification_as_of', date('Y-m-d')))); ?></span></div>
+                <div class="as-of-wrap">As of <span class="as-of-line"><?= e(fmtDisplayDate($certificationAsOf)); ?></span></div>
 
                 <table class="credits-table">
                     <tr>
@@ -602,8 +744,8 @@ $regionLogo = firstExistingPath([
                 <div class="reason-line big"></div>
 
                 <div class="sig-area lower">
-                    <div class="sig-line"></div>
                     <div class="sig-name dept-head-sign"><?= e($departmentHeadFullName); ?></div>
+                    <div class="sig-line"></div>
                     <div class="sig-pos">Chief of the Division/Section or Unit Head</div>
                 </div>
             </td>

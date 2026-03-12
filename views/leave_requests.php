@@ -8,17 +8,6 @@ if (!in_array($_SESSION['role'], ['admin','manager','department_head','hr','pers
 
 $db = (new Database())->connect();
 
-$signatories = [];
-
-try {
-    $stmt = $db->query("SELECT key_name, name, position FROM system_signatories");
-
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
-        $signatories[$s['key_name']] = $s;
-    }
-} catch (Throwable $t) {
-    $signatories = [];
-}
 $role = $_SESSION['role'];
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
@@ -31,6 +20,17 @@ function trunc3($v): string {
     $n = (float)$v;
     $t = floor($n * 1000) / 1000;
     return number_format($t, 3, '.', '');
+}
+
+$signatories = [];
+
+try {
+    $stmt = $db->query("SELECT key_name, name, position FROM system_signatories");
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+        $signatories[$s['key_name']] = $s;
+    }
+} catch (Throwable $t) {
+    $signatories = [];
 }
 
 function columnExists(PDO $db, string $table, string $column): bool {
@@ -51,6 +51,7 @@ function bh_date(array $r, bool $hasTransDate): string {
 function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSnapshots): array {
     $rows = [];
 
+    // 1) LEAVE REQUESTS
     $leaveSql = "
         SELECT
             lr.id,
@@ -77,41 +78,37 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
         $statusRaw = strtolower(trim((string)$r['status']));
         $days = floatval($r['total_days']);
 
-        $txDate = !empty($r['start_date']) ? (string)$r['start_date'] : substr((string)$r['created_at'], 0, 10);
-
         if ($typeLower === 'undertime') {
             continue;
         }
 
-        $isAccrual = (strpos($typeLower, 'accrual') !== false);
+        $txDate = !empty($r['start_date'])
+            ? (string)$r['start_date']
+            : substr((string)$r['created_at'], 0, 10);
 
-        $vacEarn = 0.0; $sickEarn = 0.0;
-        $vacDed  = 0.0; $sickDed  = 0.0;
+        $vacEarn = 0.0;
+        $sickEarn = 0.0;
+        $vacDed = 0.0;
+        $sickDed = 0.0;
 
-        if ($isAccrual) {
-            $vacEarn = $days;
-            $sickEarn = $days;
-            $statusRaw = 'earning';
-        } else {
-            if ($statusRaw === 'approved') {
-                if ($typeLower === 'sick') {
-                    $sickDed = $days;
-                } else {
-                    $vacDed = $days;
-                }
+        if ($statusRaw === 'approved') {
+            if (in_array($typeLower, ['sick', 'sick leave'], true)) {
+                $sickDed = $days;
+            } else {
+                $vacDed = $days;
             }
         }
 
         $vacBal = ($r['snapshot_annual_balance'] !== null && $r['snapshot_annual_balance'] !== '')
-            ? floatval($r['snapshot_annual_balance']) : '';
+            ? floatval($r['snapshot_annual_balance'])
+            : '';
         $sickBal = ($r['snapshot_sick_balance'] !== null && $r['snapshot_sick_balance'] !== '')
-            ? floatval($r['snapshot_sick_balance']) : '';
-
-        $particulars = $isAccrual ? $leaveType : ($leaveType . ' Leave');
+            ? floatval($r['snapshot_sick_balance'])
+            : '';
 
         $rows[] = [
             'date' => $txDate,
-            'particulars' => $particulars,
+            'particulars' => $leaveType . ' Leave',
             'vac_earned' => $vacEarn,
             'vac_deducted' => $vacDed,
             'vac_balance' => $vacBal,
@@ -119,11 +116,13 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
             'sick_deducted' => $sickDed,
             'sick_balance' => $sickBal,
             'status' => ucfirst($statusRaw),
+            'entry_type' => 'leave',
             '_sort_ts' => strtotime($txDate ?: '1970-01-01'),
             '_sort_seq' => 1,
         ];
     }
 
+    // 2) BUDGET HISTORY
     $budgetSql = "
         SELECT
             id,
@@ -146,50 +145,53 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
 
         $txDate = bh_date($r, $hasTransDate);
 
-        $vacEarn = 0.0; $sickEarn = 0.0;
-        $vacDed  = 0.0; $sickDed  = 0.0;
-        $vacBal  = '';  $sickBal  = '';
+        $vacEarn = 0.0;
+        $sickEarn = 0.0;
+        $vacDed = 0.0;
+        $sickDed = 0.0;
+        $vacBal = '';
+        $sickBal = '';
 
         if ($actionLower === 'undertime_paid' || $actionLower === 'undertime_unpaid') {
-            $particulars = $actionLower . ' ' . $leaveType;
-        } else {
-            $particulars = ucfirst($actionLower) . ' ' . $leaveType;
-        }
-
-        if ($actionLower === 'undertime_paid' || $actionLower === 'undertime_unpaid') {
+            $particulars = 'Undertime';
             $meta = [];
+
             if (preg_match_all('/([A-Z_]+)=([0-9.]+)/', $notes, $m, PREG_SET_ORDER)) {
-                foreach ($m as $pair) $meta[$pair[1]] = $pair[2];
+                foreach ($m as $pair) {
+                    $meta[$pair[1]] = $pair[2];
+                }
             }
 
             if (isset($meta['UT_DEDUCT'])) $vacDed = (float)$meta['UT_DEDUCT'];
-            if (isset($meta['VAC']))  $vacBal  = (float)$meta['VAC'];
+            if (isset($meta['VAC'])) $vacBal = (float)$meta['VAC'];
             if (isset($meta['SICK'])) $sickBal = (float)$meta['SICK'];
-
-            $vacEarn = 0.0;
-            $sickEarn = 0.0;
-            $sickDed = 0.0;
         } else {
             $old = floatval($r['old_balance']);
             $new = floatval($r['new_balance']);
             $deltaEarn = max(0, $new - $old);
-            $deltaDed  = max(0, $old - $new);
+            $deltaDed = max(0, $old - $new);
 
             if (in_array($actionLower, ['accrual', 'earning'], true)) {
+                $particulars = 'Monthly Accrual';
                 $vacEarn = $deltaEarn;
                 $sickEarn = $deltaEarn;
 
-                if (strpos($typeLower, 'sick') !== false) $sickBal = $new;
-                else $vacBal = $new;
+                if (strpos($typeLower, 'sick') !== false) {
+                    $sickBal = $new;
+                } else {
+                    $vacBal = $new;
+                }
             } else {
-                if (in_array($typeLower, ['annual','vacational','vacation','force'], true)) {
+                $particulars = ucfirst($actionLower) . ' ' . $leaveType;
+
+                if (in_array($typeLower, ['annual', 'vacational', 'vacation', 'force'], true)) {
                     $vacEarn = $deltaEarn;
-                    $vacDed  = $deltaDed;
-                    $vacBal  = $new;
+                    $vacDed = $deltaDed;
+                    $vacBal = $new;
                 } elseif ($typeLower === 'sick') {
                     $sickEarn = $deltaEarn;
-                    $sickDed  = $deltaDed;
-                    $sickBal  = $new;
+                    $sickDed = $deltaDed;
+                    $sickBal = $new;
                 }
             }
         }
@@ -204,6 +206,7 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
             'sick_deducted' => $sickDed,
             'sick_balance' => ($sickBal === '' ? '' : $sickBal),
             'status' => ucfirst($actionLower),
+            'entry_type' => 'budget',
             '_sort_ts' => strtotime($txDate ?: '1970-01-01'),
             '_sort_seq' => 2,
         ];
@@ -212,7 +215,7 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
     usort($rows, function($a, $b) {
         $ta = $a['_sort_ts'] ?? 0;
         $tb = $b['_sort_ts'] ?? 0;
-        if ($ta !== $tb) return $ta <=> $tb;
+        if ($ta !== $tb) return $tb <=> $ta; // newest first
 
         $sa = $a['_sort_seq'] ?? 0;
         $sb = $b['_sort_seq'] ?? 0;
@@ -226,31 +229,35 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
     }
     unset($rr);
 
-    return $rows;
+    return array_slice($rows, 0, 8);
 }
 
 function computeProjectedBalances(array $row): array {
-    $annual = floatval($row['annual_balance'] ?? 0);
-    $sick   = floatval($row['sick_balance'] ?? 0);
-    $force  = floatval($row['force_balance'] ?? 0);
-    $days   = floatval($row['total_days'] ?? 0);
-    $type   = strtolower(trim((string)($row['leave_type_name'] ?? $row['leave_type'] ?? '')));
+    $annualBefore = floatval($row['annual_balance'] ?? 0);
+    $sickBefore   = floatval($row['sick_balance'] ?? 0);
+    $forceBefore  = floatval($row['force_balance'] ?? 0);
+
+    $days = floatval($row['total_days'] ?? 0);
+    $type = strtolower(trim((string)($row['leave_type_name'] ?? $row['leave_type'] ?? '')));
 
     $projected = [
-        'annual' => $annual,
-        'sick'   => $sick,
-        'force'  => $force,
-        'bucket' => 'none',
+        'annual_before' => $annualBefore,
+        'sick_before'   => $sickBefore,
+        'force_before'  => $forceBefore,
+        'annual_after'  => $annualBefore,
+        'sick_after'    => $sickBefore,
+        'force_after'   => $forceBefore,
+        'bucket'        => 'none',
     ];
 
-    if (in_array($type, ['annual','vacational','vacation'], true)) {
-        $projected['annual'] = max(0, $annual - $days);
+    if (in_array($type, ['annual', 'vacational', 'vacation', 'vacation leave'], true)) {
+        $projected['annual_after'] = max(0, $annualBefore - $days);
         $projected['bucket'] = 'annual';
-    } elseif ($type === 'sick') {
-        $projected['sick'] = max(0, $sick - $days);
+    } elseif (in_array($type, ['sick', 'sick leave'], true)) {
+        $projected['sick_after'] = max(0, $sickBefore - $days);
         $projected['bucket'] = 'sick';
-    } elseif ($type === 'force') {
-        $projected['force'] = max(0, $force - $days);
+    } elseif (in_array($type, ['force', 'mandatory', 'forced', 'mandatory / forced leave', 'mandatory/forced leave'], true)) {
+        $projected['force_after'] = max(0, $forceBefore - $days);
         $projected['bucket'] = 'force';
     }
 
@@ -353,7 +360,7 @@ if (empty($_SESSION['csrf_token'])) {
 
     <div class="card">
         <h3>Pending Department Head Approval</h3>
-        <?php if(empty($pendingDeptHead)): ?>
+        <?php if (empty($pendingDeptHead)): ?>
             <p>No requests pending for Department Head approval.</p>
         <?php else: ?>
             <?php $deptActionModalsHtml = ''; ?>
@@ -367,10 +374,10 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>Reason</th>
                         <th>Action</th>
                     </tr>
-                    <?php foreach($pendingDeptHead as $r): ?>
+                    <?php foreach ($pendingDeptHead as $r): ?>
                         <?php
-                            $deptEmployeeName = trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name']);
-                            ob_start();
+                        $deptEmployeeName = trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name']);
+                        ob_start();
                         ?>
                         <tr class="personnel-row">
                             <td class="col-employee">
@@ -412,10 +419,10 @@ if (empty($_SESSION['csrf_token'])) {
                             </td>
                         </tr>
                         <?php
-                            $rowHtml = ob_get_clean();
-                            echo $rowHtml;
+                        $rowHtml = ob_get_clean();
+                        echo $rowHtml;
 
-                            ob_start();
+                        ob_start();
                         ?>
                         <div id="deptActionModal_<?= (int)$r['id']; ?>" class="modal">
                             <div class="modal-content floating-action-modal small-action-modal">
@@ -440,7 +447,7 @@ if (empty($_SESSION['csrf_token'])) {
                             </div>
                         </div>
                         <?php
-                            $deptActionModalsHtml .= ob_get_clean();
+                        $deptActionModalsHtml .= ob_get_clean();
                         ?>
                     <?php endforeach; ?>
                 </table>
@@ -451,7 +458,7 @@ if (empty($_SESSION['csrf_token'])) {
 
     <div class="card">
         <h3>Pending Personnel Review</h3>
-        <?php if(empty($pendingPersonnel)): ?>
+        <?php if (empty($pendingPersonnel)): ?>
             <p>No requests pending for personnel review.</p>
         <?php else: ?>
             <?php $personnelModalHtml = ''; ?>
@@ -466,12 +473,13 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>After Approval</th>
                         <th>Action</th>
                     </tr>
-                    <?php foreach($pendingPersonnel as $r): ?>
+
+                    <?php foreach ($pendingPersonnel as $r): ?>
                         <?php
-                            $employeeName = trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name']);
-                            $projected = computeProjectedBalances($r);
-                            $modalId = 'reviewModal_' . (int)$r['id'];
-                            $previewRows = $leaveCardPreviewMap[(int)$r['employee_id']] ?? [];
+                        $employeeName = trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name']);
+                        $projected = computeProjectedBalances($r);
+                        $modalId = 'reviewModal_' . (int)$r['id'];
+                        $previewRows = $leaveCardPreviewMap[(int)$r['employee_id']] ?? [];
                         ?>
                         <tr class="personnel-row">
                             <td class="col-employee">
@@ -500,17 +508,17 @@ if (empty($_SESSION['csrf_token'])) {
 
                             <td class="col-balance">
                                 <div class="balance-stack compact">
-                                    <span class="balance-chip">Vac: <strong><?= trunc3($r['annual_balance']); ?></strong></span>
-                                    <span class="balance-chip">Sick: <strong><?= trunc3($r['sick_balance']); ?></strong></span>
-                                    <span class="balance-chip">Force: <strong><?= trunc3($r['force_balance']); ?></strong></span>
+                                    <span class="balance-chip">Vac: <strong><?= trunc3($projected['annual_before']); ?></strong></span>
+                                    <span class="balance-chip">Sick: <strong><?= trunc3($projected['sick_before']); ?></strong></span>
+                                    <span class="balance-chip">Force: <strong><?= trunc3($projected['force_before']); ?></strong></span>
                                 </div>
                             </td>
 
                             <td class="col-balance">
                                 <div class="balance-stack compact">
-                                    <span class="balance-chip <?= $projected['bucket'] === 'annual' ? 'chip-affected' : ''; ?>">Vac: <strong><?= trunc3($projected['annual']); ?></strong></span>
-                                    <span class="balance-chip <?= $projected['bucket'] === 'sick' ? 'chip-affected' : ''; ?>">Sick: <strong><?= trunc3($projected['sick']); ?></strong></span>
-                                    <span class="balance-chip <?= $projected['bucket'] === 'force' ? 'chip-affected' : ''; ?>">Force: <strong><?= trunc3($projected['force']); ?></strong></span>
+                                    <span class="balance-chip <?= $projected['bucket'] === 'annual' ? 'chip-affected' : ''; ?>">Vac: <strong><?= trunc3($projected['annual_after']); ?></strong></span>
+                                    <span class="balance-chip <?= $projected['bucket'] === 'sick' ? 'chip-affected' : ''; ?>">Sick: <strong><?= trunc3($projected['sick_after']); ?></strong></span>
+                                    <span class="balance-chip <?= $projected['bucket'] === 'force' ? 'chip-affected' : ''; ?>">Force: <strong><?= trunc3($projected['force_after']); ?></strong></span>
                                 </div>
                             </td>
 
@@ -560,59 +568,98 @@ if (empty($_SESSION['csrf_token'])) {
 
                                     <div class="review-panel">
                                         <h4>Current Balances Before Deduction</h4>
-                                        <div class="review-kv"><span>Vacational</span><strong><?= trunc3($r['annual_balance']); ?></strong></div>
-                                        <div class="review-kv"><span>Sick</span><strong><?= trunc3($r['sick_balance']); ?></strong></div>
-                                        <div class="review-kv"><span>Force</span><strong><?= trunc3($r['force_balance']); ?></strong></div>
+                                        <div class="review-kv"><span>Vacational</span><strong><?= trunc3($projected['annual_before']); ?></strong></div>
+                                        <div class="review-kv"><span>Sick</span><strong><?= trunc3($projected['sick_before']); ?></strong></div>
+                                        <div class="review-kv"><span>Force</span><strong><?= trunc3($projected['force_before']); ?></strong></div>
                                     </div>
 
                                     <div class="review-panel">
                                         <h4>Projected Balances After Final Approval</h4>
-                                        <div class="review-kv"><span>Vacational</span><strong><?= trunc3($projected['annual']); ?></strong></div>
-                                        <div class="review-kv"><span>Sick</span><strong><?= trunc3($projected['sick']); ?></strong></div>
-                                        <div class="review-kv"><span>Force</span><strong><?= trunc3($projected['force']); ?></strong></div>
+                                        <div class="review-kv"><span>Vacational</span><strong><?= trunc3($projected['annual_after']); ?></strong></div>
+                                        <div class="review-kv"><span>Sick</span><strong><?= trunc3($projected['sick_after']); ?></strong></div>
+                                        <div class="review-kv"><span>Force</span><strong><?= trunc3($projected['force_after']); ?></strong></div>
                                     </div>
                                 </div>
 
-                                <div class="review-panel" style="margin-top:18px;">
+                                <div class="review-panel review-panel-full" style="margin-top:18px;">
                                     <div class="review-panel-head">
-                                        <h4>Leave Card Preview</h4>
+                                        <div>
+                                            <h4 style="margin-bottom:4px;">Leave Card Preview</h4>
+                                            <p class="review-muted">Latest employee transactions and balance movement</p>
+                                        </div>
                                         <a href="reports.php?type=leave_card&employee_id=<?= (int)$r['employee_id']; ?>" target="_blank" class="btn-export">Open Full Leave Card</a>
                                     </div>
 
-                                    <div class="review-leave-card-wrap">
-                                        <table class="review-leave-card-table">
-                                            <tr>
-                                                <th>Date</th>
-                                                <th>Particulars</th>
-                                                <th>Vac Earned</th>
-                                                <th>Vac Deducted</th>
-                                                <th>Vac Balance</th>
-                                                <th>Sick Earned</th>
-                                                <th>Sick Deducted</th>
-                                                <th>Sick Balance</th>
-                                                <th>Status</th>
-                                            </tr>
-                                            <?php if (empty($previewRows)): ?>
-                                                <tr><td colspan="9">No leave card history available.</td></tr>
-                                            <?php else: ?>
-                                                <?php foreach ($previewRows as $row): ?>
-                                                    <?php
+                                    <?php
+                                    $latestVac = trunc3($projected['annual_before']);
+                                    $latestSick = trunc3($projected['sick_before']);
+                                    $latestForce = trunc3($projected['force_before']);
+                                    ?>
+
+                                    <div class="preview-summary-strip">
+                                        <div class="preview-summary-card">
+                                            <span class="preview-summary-label">Current Vacational</span>
+                                            <strong><?= $latestVac; ?></strong>
+                                        </div>
+                                        <div class="preview-summary-card">
+                                            <span class="preview-summary-label">Current Sick</span>
+                                            <strong><?= $latestSick; ?></strong>
+                                        </div>
+                                        <div class="preview-summary-card">
+                                            <span class="preview-summary-label">Current Force</span>
+                                            <strong><?= $latestForce; ?></strong>
+                                        </div>
+                                    </div>
+
+                                    <div class="review-leave-card-wrap modern-preview-wrap">
+                                        <table class="review-leave-card-table modern-preview-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Particulars</th>
+                                                    <th>Vac Earned</th>
+                                                    <th>Vac Deducted</th>
+                                                    <th>Vac Balance</th>
+                                                    <th>Sick Earned</th>
+                                                    <th>Sick Deducted</th>
+                                                    <th>Sick Balance</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($previewRows)): ?>
+                                                    <tr>
+                                                        <td colspan="9" class="preview-empty">No leave card history available.</td>
+                                                    </tr>
+                                                <?php else: ?>
+                                                    <?php foreach ($previewRows as $row): ?>
+                                                        <?php
                                                         $vb = $row['vac_balance'] ?? '';
                                                         $sb = $row['sick_balance'] ?? '';
-                                                    ?>
-                                                    <tr>
-                                                        <td><?= safe_h($row['date'] ?? ''); ?></td>
-                                                        <td><?= safe_h($row['particulars'] ?? ''); ?></td>
-                                                        <td><?= ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : ''); ?></td>
-                                                        <td><?= ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : ''); ?></td>
-                                                        <td><?= ($vb === '' ? '' : trunc3($vb)); ?></td>
-                                                        <td><?= ((($row['sick_earned'] ?? 0) != 0) ? trunc3($row['sick_earned']) : ''); ?></td>
-                                                        <td><?= ((($row['sick_deducted'] ?? 0) != 0) ? trunc3($row['sick_deducted']) : ''); ?></td>
-                                                        <td><?= ($sb === '' ? '' : trunc3($sb)); ?></td>
-                                                        <td><?= safe_h($row['status'] ?? ''); ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            <?php endif; ?>
+                                                        $statusTextRaw = (string)($row['status'] ?? '');
+                                                        $statusText = safe_h($statusTextRaw);
+                                                        $entryType = $row['entry_type'] ?? '';
+                                                        $rowClass = $entryType === 'leave' ? 'preview-row-leave' : 'preview-row-budget';
+                                                        $statusClass = strtolower(preg_replace('/[^a-z0-9]+/', '-', $statusTextRaw));
+                                                        ?>
+                                                        <tr class="<?= $rowClass; ?>">
+                                                            <td><?= safe_h($row['date'] ?? ''); ?></td>
+                                                            <td class="preview-particulars"><?= safe_h($row['particulars'] ?? ''); ?></td>
+                                                            <td><?= ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : '—'); ?></td>
+                                                            <td><?= ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : '—'); ?></td>
+                                                            <td><?= ($vb === '' ? '—' : trunc3($vb)); ?></td>
+                                                            <td><?= ((($row['sick_earned'] ?? 0) != 0) ? trunc3($row['sick_earned']) : '—'); ?></td>
+                                                            <td><?= ((($row['sick_deducted'] ?? 0) != 0) ? trunc3($row['sick_deducted']) : '—'); ?></td>
+                                                            <td><?= ($sb === '' ? '—' : trunc3($sb)); ?></td>
+                                                            <td>
+                                                                <span class="preview-status-badge preview-status-<?= $statusClass !== '' ? $statusClass : 'default'; ?>">
+                                                                    <?= $statusText !== '' ? $statusText : '—'; ?>
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </tbody>
                                         </table>
                                     </div>
                                 </div>
@@ -647,7 +694,7 @@ if (empty($_SESSION['csrf_token'])) {
                             </div>
                         </div>
                         <?php
-                            $personnelModalHtml .= ob_get_clean();
+                        $personnelModalHtml .= ob_get_clean();
                         ?>
                     <?php endforeach; ?>
                 </table>
@@ -658,154 +705,146 @@ if (empty($_SESSION['csrf_token'])) {
     </div>
 
     <div class="card">
-<h3>Finalized / Approved</h3>
+        <h3>Finalized / Approved</h3>
 
-<?php if(empty($finalized)): ?>
-<p>No finalized requests.</p>
-<?php else: ?>
+        <?php if (empty($finalized)): ?>
+            <p>No finalized requests.</p>
+        <?php else: ?>
+            <div class="table-container">
+                <table width="100%">
+                    <tr>
+                        <th>Employee</th>
+                        <th>Email</th>
+                        <th>Type</th>
+                        <th>Dates</th>
+                        <th>Days</th>
+                        <th>Workflow</th>
+                        <th>Print Status</th>
+                        <?php if (in_array($role, ['personnel','hr','admin'], true)): ?>
+                            <th>Action</th>
+                        <?php endif; ?>
+                    </tr>
 
-<div class="table-container">
-<table width="100%">
-<tr>
-<th>Employee</th>
-<th>Email</th>
-<th>Type</th>
-<th>Dates</th>
-<th>Days</th>
-<th>Workflow</th>
-<th>Print Status</th>
-<?php if(in_array($role, ['personnel','hr','admin'], true)): ?>
-<th>Action</th>
-<?php endif; ?>
-</tr>
+                    <?php foreach ($finalized as $r): ?>
+                        <tr>
+                            <td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
+                            <td><?= safe_h($r['email']); ?></td>
+                            <td><?= safe_h($r['leave_type_name']); ?></td>
+                            <td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
+                            <td><?= trunc3($r['total_days']); ?></td>
+                            <td><?= safe_h($r['workflow_status'] ?? 'finalized'); ?></td>
+                            <td><?= safe_h($r['print_status'] ?? '—'); ?></td>
 
-<?php foreach($finalized as $r): ?>
-<tr>
-<td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
-<td><?= safe_h($r['email']); ?></td>
-<td><?= safe_h($r['leave_type_name']); ?></td>
-<td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
-<td><?= trunc3($r['total_days']); ?></td>
-<td><?= safe_h($r['workflow_status'] ?? 'finalized'); ?></td>
-<td><?= safe_h($r['print_status'] ?? '—'); ?></td>
+                            <?php if (in_array($role, ['personnel','hr','admin'], true)): ?>
+                                <td>
+                                    <button class="icon-action-btn"
+                                            onclick="openModal('printModal_<?= (int)$r['id']; ?>')"
+                                            title="Customize signatories and print">🖨</button>
+                                </td>
+                            <?php endif; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
 
-<?php if(in_array($role, ['personnel','hr','admin'], true)): ?>
-<td>
-<button class="icon-action-btn"
-onclick="openModal('printModal_<?= (int)$r['id']; ?>')"
-title="Customize signatories and print">🖨</button>
-</td>
-<?php endif; ?>
+            <?php foreach ($finalized as $r): ?>
+                <div id="printModal_<?= (int)$r['id']; ?>" class="modal">
+                    <div class="modal-content review-modal" style="max-width:520px;">
+                        <button type="button"
+                                class="modal-close"
+                                onclick="closeModal('printModal_<?= (int)$r['id']; ?>')">&times;</button>
 
-</tr>
-<?php endforeach; ?>
+                        <h3 style="margin-bottom:10px;">Customize Signatories</h3>
 
-</table>
-</div>
+                        <p class="review-muted" style="margin-bottom:18px;">
+                            <?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?>
+                            • <?= safe_h($r['leave_type_name']); ?>
+                        </p>
 
-<!-- PRINT MODALS -->
-<?php foreach($finalized as $r): ?>
+                        <form method="POST"
+                              action="../controllers/save_signatories.php"
+                              target="_blank">
 
-<div id="printModal_<?= (int)$r['id']; ?>" class="modal">
-<div class="modal-content review-modal" style="max-width:520px;">
+                            <input type="hidden" name="leave_id" value="<?= (int)$r['id']; ?>">
+                            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
 
-<button type="button"
-class="modal-close"
-onclick="closeModal('printModal_<?= (int)$r['id']; ?>')">&times;</button>
+                            <div class="review-panel">
+                                <h4>7.A Certification of Leave Credits</h4>
 
-<h3 style="margin-bottom:10px;">Customize Signatories</h3>
+                                <label>Name</label>
+                                <input type="text"
+                                       name="name_a"
+                                       value="<?= safe_h($signatories['certification']['name'] ?? ''); ?>"
+                                       required>
 
-<p class="review-muted" style="margin-bottom:18px;">
-<?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?>
-• <?= safe_h($r['leave_type_name']); ?>
-</p>
+                                <label>Position</label>
+                                <input type="text"
+                                       name="position_a"
+                                       value="<?= safe_h($signatories['certification']['position'] ?? ''); ?>"
+                                       required>
+                            </div>
 
-<form method="POST"
-action="../controllers/save_signatories.php"
-target="_blank">
+                            <div class="review-panel" style="margin-top:16px;">
+                                <h4>7.C Final Approver</h4>
 
-<input type="hidden" name="leave_id" value="<?= (int)$r['id']; ?>">
-<input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                                <label>Name</label>
+                                <input type="text"
+                                       name="name_c"
+                                       value="<?= safe_h($signatories['final_approver']['name'] ?? ''); ?>"
+                                       required>
 
-<div class="review-panel">
+                                <label>Position</label>
+                                <input type="text"
+                                       name="position_c"
+                                       value="<?= safe_h($signatories['final_approver']['position'] ?? ''); ?>"
+                                       required>
+                            </div>
 
-<h4>7.A Certification of Leave Credits</h4>
+                            <div class="review-modal-actions" style="margin-top:20px;">
+                                <button type="submit">Save & Print</button>
 
-<label>Name</label>
-<input type="text"
-name="name_a"
-value="<?= safe_h($signatories['certification']['name'] ?? ''); ?>"
-required>
-
-<label>Position</label>
-<input type="text"
-name="position_a"
-value="<?= safe_h($signatories['certification']['position'] ?? ''); ?>"
-required>
-
-</div>
-
-<div class="review-panel" style="margin-top:16px;">
-
-<h4>7.C Final Approver</h4>
-
-<label>Name</label>
-<input type="text"
-name="name_c"
-value="<?= safe_h($signatories['final_approver']['name'] ?? ''); ?>"
-required>
-
-<label>Position</label>
-<input type="text"
-name="position_c"
-value="<?= safe_h($signatories['final_approver']['position'] ?? ''); ?>"
-required>
-
-</div>
-
-<div class="review-modal-actions" style="margin-top:20px;">
-
-<button type="submit">Save & Print</button>
-
-<button type="button"
-class="btn-secondary"
-onclick="closeModal('printModal_<?= (int)$r['id']; ?>')">
-Cancel
-</button>
-
-</div>
-
-</form>
-
-</div>
-</div>
-
-<?php endforeach; ?>
-
-<?php endif; ?>
-</div>
+                                <button type="button"
+                                        class="btn-secondary"
+                                        onclick="closeModal('printModal_<?= (int)$r['id']; ?>')">
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
 
     <div class="card">
         <h3>Rejected / Returned</h3>
-        <?php if(empty($returnedOrRejected)): ?>
+        <?php if (empty($returnedOrRejected)): ?>
             <p>No rejected or returned requests.</p>
         <?php else: ?>
-        <div class="table-container">
-            <table width="100%">
-                <tr><th>Employee</th><th>Email</th><th>Type</th><th>Dates</th><th>Status</th><th>Workflow</th><th>Comments</th></tr>
-                <?php foreach($returnedOrRejected as $r): ?>
-                <tr>
-                    <td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
-                    <td><?= safe_h($r['email']); ?></td>
-                    <td><?= safe_h($r['leave_type_name']); ?></td>
-                    <td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
-                    <td><?= safe_h($r['status']); ?></td>
-                    <td><?= safe_h($r['workflow_status'] ?? '—'); ?></td>
-                    <td><?= safe_h($r['personnel_comments'] ?? $r['department_head_comments'] ?? $r['manager_comments'] ?? ''); ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </table>
-        </div>
+            <div class="table-container">
+                <table width="100%">
+                    <tr>
+                        <th>Employee</th>
+                        <th>Email</th>
+                        <th>Type</th>
+                        <th>Dates</th>
+                        <th>Status</th>
+                        <th>Workflow</th>
+                        <th>Comments</th>
+                    </tr>
+                    <?php foreach ($returnedOrRejected as $r): ?>
+                        <tr>
+                            <td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
+                            <td><?= safe_h($r['email']); ?></td>
+                            <td><?= safe_h($r['leave_type_name']); ?></td>
+                            <td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
+                            <td><?= safe_h($r['status']); ?></td>
+                            <td><?= safe_h($r['workflow_status'] ?? '—'); ?></td>
+                            <td><?= safe_h($r['personnel_comments'] ?? $r['department_head_comments'] ?? $r['manager_comments'] ?? ''); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
         <?php endif; ?>
     </div>
 </div>

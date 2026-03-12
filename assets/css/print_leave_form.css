@@ -228,14 +228,16 @@ body {
 .line-top-value {
     position: relative;
     min-height: 16px;
+    padding-top: 0;
 }
 
 .days-line-value {
     position: absolute;
     left: 0;
-    bottom: -1px;
+    top: -1px;
     background: #fff;
     padding-right: 6px;
+    line-height: 1;
     font-size: 9.3px;
 }
 
@@ -322,15 +324,23 @@ body {
 
 .line-top-value {
     position: relative;
+    min-height: 16px;
+    padding-top: 0;
 }
 
 .days-line-value {
     position: absolute;
     left: 0;
-    bottom: -1px;
+    top: -1px;
     background: #fff;
     padding-right: 6px;
+    line-height: 1;
     font-size: 9.3px;
+}
+
+.approval-cell,
+.disapprove-cell {
+    border-bottom: none !important;
 }
 
 .line-wide {

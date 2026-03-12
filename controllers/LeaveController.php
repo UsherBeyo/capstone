@@ -293,23 +293,62 @@ if ($action === 'apply') {
     }
 
     $typeId = $_POST['leave_type_id'] ?? null;
-    $start = $_POST['start_date'] ?? '';
-    $end = $_POST['end_date'] ?? '';
+    $start = trim($_POST['start_date'] ?? '');
+    $end = trim($_POST['end_date'] ?? '');
     $reason = trim($_POST['reason'] ?? '');
-    $commutation = $_POST['commutation'] ?? null;
+    $commutation = trim($_POST['commutation'] ?? '');
+
+    // NEW FIELDS
+    $filingDate = trim($_POST['filing_date'] ?? date('Y-m-d'));
+    $leaveSubtype = trim($_POST['leave_subtype'] ?? '');
+
+    $details = $_POST['details'] ?? [];
+    if (!is_array($details)) {
+        $details = [];
+    }
+
+    $supportingDocuments = $_POST['supporting_documents'] ?? [];
+    if (!is_array($supportingDocuments)) {
+        $supportingDocuments = [];
+    }
+
+    $medicalCertificateAttached = !empty($_POST['medical_certificate_attached']) ? 1 : 0;
+    $affidavitAttached = !empty($_POST['affidavit_attached']) ? 1 : 0;
+    $emergencyCase = !empty($_POST['emergency_case']) ? 1 : 0;
+
+    $detailsJson = !empty($details) ? json_encode($details, JSON_UNESCAPED_UNICODE) : null;
+    $supportingDocumentsJson = !empty($supportingDocuments) ? json_encode(array_values($supportingDocuments), JSON_UNESCAPED_UNICODE) : null;
 
     $v = new Validator();
     $v->required('leave_type_id', $typeId)
+      ->required('filing_date', $filingDate)
+      ->date('filing_date', $filingDate)
       ->required('start_date', $start)
       ->date('start_date', $start)
       ->required('end_date', $end)
-      ->date('end_date', $end);
+      ->date('end_date', $end)
+      ->required('reason', $reason);
 
     if ($v->fails()) {
         $err = implode(' ', array_map('implode', $v->getErrors()));
-        header("Location: ../views/dashboard.php?toast_error=".urlencode($err));
+        header("Location: ../views/apply_leave.php?toast_error=" . urlencode($err));
         exit();
     }
+
+    if ($end < $start) {
+        header("Location: ../views/apply_leave.php?toast_error=" . urlencode("End date cannot be earlier than start date."));
+        exit();
+    }
+
+    $extraData = [
+        'filing_date' => $filingDate,
+        'leave_subtype' => $leaveSubtype !== '' ? $leaveSubtype : null,
+        'details_json' => $detailsJson,
+        'supporting_documents_json' => $supportingDocumentsJson,
+        'medical_certificate_attached' => $medicalCertificateAttached,
+        'affidavit_attached' => $affidavitAttached,
+        'emergency_case' => $emergencyCase,
+    ];
 
     $result = $leaveModel->apply(
         (int)$employee_id,
@@ -319,7 +358,8 @@ if ($action === 'apply') {
         $reason,
         $userId,
         $role,
-        $commutation
+        $commutation,
+        $extraData
     );
 
     if (strpos($result, 'successfully') !== false) {
@@ -339,9 +379,9 @@ if ($action === 'apply') {
     }
 
     if (strpos($result, 'successfully') !== false) {
-        header("Location: ../views/dashboard.php?toast_success=".urlencode($result));
+        header("Location: ../views/dashboard.php?toast_success=" . urlencode($result));
     } else {
-        header("Location: ../views/dashboard.php?toast_error=".urlencode($result));
+        header("Location: ../views/apply_leave.php?toast_error=" . urlencode($result));
     }
     exit();
 }
