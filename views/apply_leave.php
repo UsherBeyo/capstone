@@ -71,11 +71,15 @@ function leaveRulePreset(string $typeName): array {
                 ],
             ]);
 
-        case 'mandatory / forced leave':
+                case 'mandatory / forced leave':
         case 'mandatory/forced leave':
+        case 'mandatory / force leave':
+        case 'mandatory/force leave':
         case 'mandatory':
         case 'forced':
+        case 'forced leave':
         case 'force':
+        case 'force leave':
             return array_merge($base, [
                 'bucket' => 'force',
                 'bucket_label' => 'Force Balance',

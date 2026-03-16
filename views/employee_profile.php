@@ -6,6 +6,63 @@ require_once '../config/database.php';
 
 $db = (new Database())->connect();
 
+function normalizeLeaveTypeKey(string $name): string {
+    $key = strtolower(trim($name));
+    $key = preg_replace('/\s+/', ' ', $key);
+    $key = str_replace([' / ', ' /', '/ '], '/', $key);
+
+    $aliases = [
+        'vacation' => 'vacation leave',
+        'vacational' => 'vacation leave',
+        'annual' => 'vacation leave',
+
+        'sick' => 'sick leave',
+
+        'mandatory/force leave' => 'mandatory/forced leave',
+        'mandatory force leave' => 'mandatory/forced leave',
+        'mandatory/forced leave' => 'mandatory/forced leave',
+        'force' => 'mandatory/forced leave',
+        'force leave' => 'mandatory/forced leave',
+        'forced' => 'mandatory/forced leave',
+        'forced leave' => 'mandatory/forced leave',
+        'mandatory leave' => 'mandatory/forced leave',
+        'mandatory' => 'mandatory/forced leave',
+    ];
+
+    return $aliases[$key] ?? $key;
+}
+
+function isSickLeaveType(string $name): bool {
+    return normalizeLeaveTypeKey($name) === 'sick leave';
+}
+
+function isForceLeaveType(string $name): bool {
+    return normalizeLeaveTypeKey($name) === 'mandatory/forced leave';
+}
+
+function isAccrualLeaveType(string $name): bool {
+    return strpos(strtolower(trim($name)), 'accrual') !== false;
+}
+
+function parseBudgetHistoryMeta(?string $notes): array {
+    $meta = [];
+    $notes = (string)$notes;
+
+    if (preg_match_all('/([A-Z_]+)=([0-9.]+)/', $notes, $m, PREG_SET_ORDER)) {
+        foreach ($m as $pair) {
+            $meta[$pair[1]] = $pair[2];
+        }
+    }
+
+    return $meta;
+}
+
+function safeExportFilename(string $name, string $fallback = 'Leave Card'): string {
+    $name = preg_replace('/[\\\\\/:*?"<>|]+/', '', $name);
+    $name = preg_replace('/\s+/', ' ', trim((string)$name));
+    return $name !== '' ? $name : $fallback;
+}
+
 function trunc3($v): string {
     if ($v === null || $v === '') return '';
     $n = (float)$v;
@@ -72,50 +129,48 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         $leaveType = trim((string)$r['leave_type']);
         $statusRaw = strtolower(trim((string)$r['status']));
 
-        $typeLower = strtolower($leaveType);
-        $isAccrual = (strpos($typeLower, 'accrual') !== false);
-        
-        // Skip accrual/undertime entries from leave_requests; they'll be exported from budget_history instead
-        if (strtolower($leaveType) === 'undertime') {
+                $isAccrual = isAccrualLeaveType($leaveType);
+
+        // Skip undertime rows stored in leave_requests; undertime is represented from budget_history
+        if (strtolower(trim($leaveType)) === 'undertime') {
             continue;
-        }   
-        
-        $isSick = (strtolower($leaveType) === 'sick');
+        }
+
+        $isSick = isSickLeaveType($leaveType);
+        $isForce = isForceLeaveType($leaveType);
         $days = floatval($r['total_days']);
 
-        // Deduction only if approved
         $vacDed = 0.0; $sickDed = 0.0;
         $vacEarn = 0.0; $sickEarn = 0.0;
 
         if ($isAccrual) {
-            $vacEarn = $days;
-            $sickEarn = $days;
+            if ($isSick) {
+                $sickEarn = $days;
+            } else {
+                $vacEarn = $days;
+            }
             $statusRaw = 'earning';
         } else {
-    // ✅ Deduction only if approved
-    if ($statusRaw === 'approved') {
-        $lower = strtolower($leaveType);
-
-        if ($lower === 'sick') {
-            $sickDed = $days;
-        } else {
-            // Vacational, Annual, Vacation, Force -> treat as Vac deducted for display
-            $vacDed = $days;
+            if ($statusRaw === 'approved') {
+                if ($isSick) {
+                    $sickDed = $days;
+                } elseif (!$isForce) {
+                    $vacDed = $days;
+                }
+            }
         }
-    }
-}
 
-        // Use snapshot values EXACTLY as stored (no lookups, no calculations)
         $vacBal = ($r['snapshot_annual_balance'] !== null && $r['snapshot_annual_balance'] !== '')
             ? floatval($r['snapshot_annual_balance']) : '';
         $sickBal = ($r['snapshot_sick_balance'] !== null && $r['snapshot_sick_balance'] !== '')
             ? floatval($r['snapshot_sick_balance']) : '';
 
-        $partLabel = strtolower($leaveType);
-        if (strpos($partLabel, 'accrual') !== false) {
-            $particulars = $leaveType;
-        } else {
-            $particulars = $leaveType . ' Leave';
+        $particulars = $leaveType;
+        if (!$isAccrual && stripos($particulars, 'leave') === false) {
+            $particulars .= ' Leave';
+        }
+        if ($isForce) {
+            $particulars .= ' (Force balance)';
         }
 
         $rows[] = [
@@ -151,83 +206,85 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
     }
     $budgetStmt->execute([$empId]);
 
-    foreach ($budgetStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $leaveType = trim((string)$r['leave_type']);
-    $action = strtolower(trim((string)$r['action']));
-    $notes = (string)($r['notes'] ?? '');
+        foreach ($budgetStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $leaveType = trim((string)$r['leave_type']);
+        $action = strtolower(trim((string)$r['action']));
+        $notes = (string)($r['notes'] ?? '');
+        $meta = parseBudgetHistoryMeta($notes);
 
-    $vacDed = 0.0; $sickDed = 0.0;
-    $vacEarn = 0.0; $sickEarn = 0.0;
-
-    // Date column: ALWAYS use trans_date when present
-    $dateCol = '';
-    if ($hasTransDate && !empty($r['trans_date'])) $dateCol = (string)$r['trans_date'];
-    else $dateCol = substr((string)$r['created_at'], 0, 10);
-
-    // Particulars formatting
-    if ($action === 'undertime_paid' || $action === 'undertime_unpaid') {
-        $particulars = $action . ' ' . $leaveType;
-    } else {
-        $particulars = ucfirst($action) . ' ' . $leaveType;
-    }
-
-    // Defaults from balances in row
-    $vacBal = '';
-    $sickBal = '';
-
-    // --- SPECIAL: undertime history meta parsing ---
-    // Notes format contains: UT_DEDUCT=0.125;VAC=9.000;SICK=5.000;...
-    if ($action === 'undertime_paid' || $action === 'undertime_unpaid') {
-        $meta = [];
-        if (preg_match_all('/([A-Z_]+)=([0-9.]+)/', $notes, $m, PREG_SET_ORDER)) {
-            foreach ($m as $pair) $meta[$pair[1]] = $pair[2];
-        }
-
-        if (isset($meta['UT_DEDUCT'])) $vacDed = (float)$meta['UT_DEDUCT'];
-        if (isset($meta['VAC'])) $vacBal = (float)$meta['VAC'];
-        if (isset($meta['SICK'])) $sickBal = (float)$meta['SICK'];
-
-        // No earned amounts for undertime
+        $vacDed = 0.0; $sickDed = 0.0;
         $vacEarn = 0.0; $sickEarn = 0.0;
-        $sickDed = 0.0;
-    } else {
-        $deltaEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
-        $deltaDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
 
-        if (in_array($action, ['accrual', 'earning'], true)) {
-            $vacEarn = $deltaEarn;
-            $sickEarn = $deltaEarn;
+        $dateCol = '';
+        if ($hasTransDate && !empty($r['trans_date'])) $dateCol = (string)$r['trans_date'];
+        else $dateCol = substr((string)$r['created_at'], 0, 10);
 
-            if (strpos(strtolower($leaveType), 'sick') !== false) {
-                $sickBal = floatval($r['new_balance']);
-            } else {
+        $vacBal = '';
+        $sickBal = '';
+
+        if ($action === 'undertime_paid' || $action === 'undertime_unpaid') {
+            $deltaDed = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
+
+            $vacDed = isset($meta['UT_DEDUCT']) ? (float)$meta['UT_DEDUCT'] : $deltaDed;
+
+            if (isset($meta['VAC_NEW'])) {
+                $vacBal = (float)$meta['VAC_NEW'];
+            } elseif (isset($meta['VAC'])) {
+                $vacBal = (float)$meta['VAC'];
+            } elseif ($r['new_balance'] !== null && $r['new_balance'] !== '') {
                 $vacBal = floatval($r['new_balance']);
             }
+
+            if (isset($meta['SICK'])) {
+                $sickBal = (float)$meta['SICK'];
+            }
+
+            $particulars = 'Undertime ' . ($action === 'undertime_paid' ? '(With pay)' : '(Without pay)');
         } else {
-            if (in_array(strtolower($leaveType), ['annual','vacational','vacation','force'], true)) {
-                $vacEarn = $deltaEarn;
-                $vacDed  = $deltaDed;
-                $vacBal  = floatval($r['new_balance']);
-            } elseif (strtolower($leaveType) === 'sick') {
-                $sickEarn = $deltaEarn;
-                $sickDed  = $deltaDed;
-                $sickBal  = floatval($r['new_balance']);
+            $deltaEarn = max(0, floatval($r['new_balance']) - floatval($r['old_balance']));
+            $deltaDed  = max(0, floatval($r['old_balance']) - floatval($r['new_balance']));
+
+            $isSick = isSickLeaveType($leaveType);
+            $isForce = isForceLeaveType($leaveType);
+
+            if (in_array($action, ['accrual', 'earning'], true)) {
+                if ($isSick) {
+                    $sickEarn = $deltaEarn;
+                    $sickBal = floatval($r['new_balance']);
+                } elseif (!$isForce) {
+                    $vacEarn = $deltaEarn;
+                    $vacBal = floatval($r['new_balance']);
+                }
+            } else {
+                if ($isSick) {
+                    $sickEarn = $deltaEarn;
+                    $sickDed  = $deltaDed;
+                    $sickBal  = floatval($r['new_balance']);
+                } elseif (!$isForce) {
+                    $vacEarn = $deltaEarn;
+                    $vacDed  = $deltaDed;
+                    $vacBal  = floatval($r['new_balance']);
+                }
+            }
+
+            $particulars = ucfirst($action) . ' ' . $leaveType;
+            if ($isForce) {
+                $particulars .= ' (Force balance)';
             }
         }
-    }
 
-    $rows[] = [
-        'date' => $dateCol,
-        'particulars' => $particulars,
-        'vac_earned' => $vacEarn,
-        'vac_deducted' => $vacDed,
-        'vac_balance' => $vacBal,
-        'sick_earned' => $sickEarn,
-        'sick_deducted' => $sickDed,
-        'sick_balance' => $sickBal,
-        'status' => ucfirst($action)
-    ];
-}
+        $rows[] = [
+            'date' => $dateCol,
+            'particulars' => $particulars,
+            'vac_earned' => $vacEarn,
+            'vac_deducted' => $vacDed,
+            'vac_balance' => $vacBal,
+            'sick_earned' => $sickEarn,
+            'sick_deducted' => $sickDed,
+            'sick_balance' => $sickBal,
+            'status' => ucfirst($action)
+        ];
+    }
     // ✅ Ensure chronological order by date (and stable tie-breaker)
     usort($rows, function($a, $b) {
         $da = strtotime($a['date'] ?? '') ?: 0;
@@ -237,7 +294,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
     });
     // Output as Excel (HTML)
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-    header('Content-Disposition: attachment; filename="leave_card_'.$id.'_'.date('Y-m-d').'.xls"');
+        $employeeFullName = trim(($e['first_name'] ?? '') . ' ' . ($e['last_name'] ?? ''));
+    if ($employeeFullName === '') {
+        $employeeFullName = 'Employee ' . $id;
+    }
+
+    $leaveCardFilename = safeExportFilename('Leave Card - ' . $employeeFullName);
+    header('Content-Disposition: attachment; filename="' . $leaveCardFilename . '.xls"');
 
     echo "<table border=1>\n";
     echo "<tr><td colspan='9' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";

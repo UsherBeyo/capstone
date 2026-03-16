@@ -59,14 +59,37 @@ class Leave {
         return $val ? (int)$val : null;
     }
 
+        private function normalizeLeaveTypeKey(string $name): string {
+        $key = strtolower(trim($name));
+        $key = preg_replace('/\s+/', ' ', $key);
+        $key = str_replace([' / ', ' /', '/ '], '/', $key);
+
+        $aliases = [
+            'vacation' => 'vacation leave',
+            'vacational' => 'vacation leave',
+            'annual' => 'vacation leave',
+
+            'sick' => 'sick leave',
+
+            'mandatory/force leave' => 'mandatory/forced leave',
+            'mandatory force leave' => 'mandatory/forced leave',
+            'mandatory/forced leave' => 'mandatory/forced leave',
+            'force' => 'mandatory/forced leave',
+            'force leave' => 'mandatory/forced leave',
+            'forced' => 'mandatory/forced leave',
+            'forced leave' => 'mandatory/forced leave',
+            'mandatory leave' => 'mandatory/forced leave',
+            'mandatory' => 'mandatory/forced leave',
+        ];
+
+        return $aliases[$key] ?? $key;
+    }
+
     private function mapLeaveTypeToBalanceColumn(string $name): string {
-        $type = strtolower(trim($name));
+        $type = $this->normalizeLeaveTypeKey($name);
 
         switch ($type) {
             case 'vacation leave':
-            case 'vacation':
-            case 'vacational':
-            case 'annual':
             case 'maternity leave':
             case 'paternity leave':
             case 'special privilege leave':
@@ -84,14 +107,9 @@ class Leave {
                 return 'annual_balance';
 
             case 'sick leave':
-            case 'sick':
                 return 'sick_balance';
 
-            case 'mandatory / forced leave':
             case 'mandatory/forced leave':
-            case 'mandatory leave':
-            case 'forced leave':
-            case 'force':
                 return 'force_balance';
 
             default:

@@ -57,12 +57,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $deduct = undertimeDaysFromChart($hours, $minutes);
 
-        $stmt = $db->prepare("SELECT annual_balance FROM employees WHERE id = ?");
+                $stmt = $db->prepare("SELECT annual_balance, sick_balance, force_balance FROM employees WHERE id = ?");
         $stmt->execute([$empId]);
-        $oldBal = floatval($stmt->fetchColumn());
+        $balRow = $stmt->fetch(PDO::FETCH_ASSOC) ?: [
+            'annual_balance' => 0,
+            'sick_balance' => 0,
+            'force_balance' => 0,
+        ];
+
+        $oldBal = floatval($balRow['annual_balance']);
+        $sickBalMeta = floatval($balRow['sick_balance']);
+        $forceBalMeta = floatval($balRow['force_balance']);
 
         $newBal = max(0, $oldBal - $deduct);
         $db->prepare("UPDATE employees SET annual_balance = ? WHERE id = ?")->execute([$newBal, $empId]);
+
+        $utMeta =
+            'UT_DEDUCT=' . number_format($deduct, 3, '.', '') .
+            ';VAC_OLD=' . number_format($oldBal, 3, '.', '') .
+            ';VAC_NEW=' . number_format($newBal, 3, '.', '') .
+            ';VAC=' . number_format($newBal, 3, '.', '') .
+            ';SICK=' . number_format($sickBalMeta, 3, '.', '') .
+            ';FORCE=' . number_format($forceBalMeta, 3, '.', '') .
+            ';H=' . $hours .
+            ';M=' . $minutes;
 
         $leaveModel->logBudgetChange(
             $empId,
@@ -71,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newBal,
             $withPay ? 'undertime_paid' : 'undertime_unpaid',
             null,
-            'Undertime '.$hours.'h '.$minutes.'m',
+            'Undertime ' . $hours . 'h ' . $minutes . 'm | ' . $utMeta,
             $date
         );
 
@@ -328,12 +346,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $leave_id = $db->lastInsertId();
 
         if ($ltInfo && $ltInfo['deduct_balance']) {
-            $bucket = 'annual_balance';
-            switch (strtolower($ltInfo['name'])) {
-                case 'sick': $bucket = 'sick_balance'; break;
-                case 'force': $bucket = 'force_balance'; break;
-                default: $bucket = 'annual_balance'; break;
-            }
+            $bucket = historyBalanceBucketForLeaveName((string)($ltInfo['name'] ?? ''));
 
             $oldBalance = floatval($effectiveSnapshot[$bucket] ?? 0);
             $newBalance = max(0, $oldBalance - $days);
@@ -439,5 +452,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->rollBack();
         }
         echo "Error: " . $e->getMessage();
+    }
+}
+
+function normalizeLeaveTypeKey(string $name): string {
+    $key = strtolower(trim($name));
+    $key = preg_replace('/\s+/', ' ', $key);
+    $key = str_replace([' / ', ' /', '/ '], '/', $key);
+
+    $aliases = [
+        'vacation' => 'vacation leave',
+        'vacational' => 'vacation leave',
+        'annual' => 'vacation leave',
+
+        'sick' => 'sick leave',
+
+        'mandatory/force leave' => 'mandatory/forced leave',
+        'mandatory force leave' => 'mandatory/forced leave',
+        'mandatory/forced leave' => 'mandatory/forced leave',
+        'force' => 'mandatory/forced leave',
+        'force leave' => 'mandatory/forced leave',
+        'forced' => 'mandatory/forced leave',
+        'forced leave' => 'mandatory/forced leave',
+        'mandatory leave' => 'mandatory/forced leave',
+        'mandatory' => 'mandatory/forced leave',
+    ];
+
+    return $aliases[$key] ?? $key;
+}
+
+function historyBalanceBucketForLeaveName(string $name): string {
+    $type = normalizeLeaveTypeKey($name);
+
+    switch ($type) {
+        case 'sick leave':
+            return 'sick_balance';
+
+        case 'mandatory/forced leave':
+            return 'force_balance';
+
+        default:
+            return 'annual_balance';
     }
 }

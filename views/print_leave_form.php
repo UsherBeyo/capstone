@@ -31,6 +31,33 @@ function safeFloat($value): float
     return is_numeric($value) ? (float)$value : 0.0;
 }
 
+function normalizeLeaveTypeKey(string $name): string
+{
+    $key = strtolower(trim($name));
+    $key = preg_replace('/\s+/', ' ', $key);
+    $key = str_replace([' / ', ' /', '/ '], '/', $key);
+
+    $aliases = [
+        'vacation' => 'vacation leave',
+        'vacational' => 'vacation leave',
+        'annual' => 'vacation leave',
+
+        'sick' => 'sick leave',
+
+        'mandatory/force leave' => 'mandatory/forced leave',
+        'mandatory force leave' => 'mandatory/forced leave',
+        'mandatory/forced leave' => 'mandatory/forced leave',
+        'force' => 'mandatory/forced leave',
+        'force leave' => 'mandatory/forced leave',
+        'forced' => 'mandatory/forced leave',
+        'forced leave' => 'mandatory/forced leave',
+        'mandatory leave' => 'mandatory/forced leave',
+        'mandatory' => 'mandatory/forced leave',
+    ];
+
+    return $aliases[$key] ?? $key;
+}
+
 function fmtDisplayDate(?string $date): string
 {
     if (!$date) return '';
@@ -150,7 +177,7 @@ if (!$request) {
     die("Request not found or not finalized");
 }
 
-$selectedLeaveType = strtolower(trim((string)arr($request, 'leave_type_name', '')));
+$selectedLeaveType = normalizeLeaveTypeKey((string)arr($request, 'leave_type_name', ''));
 $deduct = safeFloat(arr($request, 'total_days', 0));
 
 $leaveSubtype = strtolower(trim((string)arr($request, 'leave_subtype', '')));
@@ -177,15 +204,9 @@ $medicalCertificateAttached = !empty(arr($request, 'medical_certificate_attached
 $affidavitAttached = !empty(arr($request, 'affidavit_attached', 0));
 $emergencyCase = !empty(arr($request, 'emergency_case', 0));
 
-$isVacationBucket = in_array($selectedLeaveType, [
-    'annual', 'vacation', 'vacational', 'vacation leave'
-], true);
-
-$isForceBucket = in_array($selectedLeaveType, [
-    'force', 'mandatory/forced leave', 'mandatory / forced leave', 'mandatory', 'forced'
-], true);
-
-$isSickBucket = in_array($selectedLeaveType, ['sick', 'sick leave'], true);
+$isVacationBucket = ($selectedLeaveType === 'vacation leave');
+$isForceBucket = ($selectedLeaveType === 'mandatory/forced leave');
+$isSickBucket = ($selectedLeaveType === 'sick leave');
 
 $vacBalanceAfter = safeFloat(arr($request, 'snapshot_annual_balance', 0));
 $sickBalanceAfter = safeFloat(arr($request, 'snapshot_sick_balance', 0));
@@ -332,9 +353,6 @@ switch ($selectedLeaveType) {
     case 'vacation leave':
         $leaveTypeChecks['vacation leave'] = true;
         break;
-    case 'force':
-    case 'mandatory':
-    case 'forced':
     case 'mandatory/forced leave':
         $leaveTypeChecks['mandatory/forced leave'] = true;
         break;
