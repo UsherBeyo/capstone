@@ -33,11 +33,16 @@ if ($role === 'employee') {
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-    
+<div class="app-main">
+    <?php
+    // page header helper
+    $title = 'Dashboard';
+    $actions = [];
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
 
     <?php if(!empty($_SESSION['message'])): ?>
-        <div class="card" style="padding:10px; border:1px solid var(--primary-hover); background:#f0faff;">
+        <div class="ui-card mb-6" style="border-color:var(--primary-hover);background:#f0faff;height:auto;">
             <?= htmlspecialchars($_SESSION['message']); ?>
         </div>
         <?php unset($_SESSION['message']); ?>
@@ -67,8 +72,8 @@ if ($role === 'employee') {
         }
         ?>
 
-        <div class="card" style="margin:24px auto;max-width:800px;">
-            <h3 style="text-align:center;">Leave Balances</h3>
+        <div class="ui-card mb-6">
+            <h3>Leave Balances</h3>
             <div style="display:flex;gap:16px;flex-wrap:wrap;max-width:100%;align-items:center;justify-content:center;">
                 <div style="flex:1;min-width:250px;max-width:300px;height:200px;">
                     <canvas id="annualChart"></canvas>
@@ -82,7 +87,7 @@ if ($role === 'employee') {
             </div>
         </div>
 
-        <div class="card" style="margin-top:24px;">
+        <div class="ui-card">
             <h3>My Leave Requests</h3>
             <?php if(empty($ownRequests)): ?>
                 <p>No leave requests submitted yet.</p>
@@ -113,32 +118,6 @@ if ($role === 'employee') {
                         </tr>
                         <?php endforeach; ?>
                     </table>
-                </div>
-                <?php endif; ?>
-                
-                <?php if(!empty($archived)): ?>
-                <div>
-                    <h4><a href="#" class="dropdown-toggle" onclick="document.getElementById('archiveSection').style.display = document.getElementById('archiveSection').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (?? records)</a></h4>
-                    <div id="archiveSection" style="display:none;margin-top:16px;">
-                        <table border="1" width="100%">
-                            <tr>
-                                <th>Type</th>
-                                <th>Dates</th>
-                                <th>Days</th>
-                                <th>Status</th>
-                                <th>Manager Notes</th>
-                            </tr>
-                            <?php foreach($archived as $r): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($r['leave_type_name'] ?? $r['leave_type']); ?></td>
-                                <td><?= $r['start_date'].' to '.$r['end_date']; ?></td>
-                                <td><?= $r['total_days']; ?></td>
-                                <td><?= ucfirst($r['status']); ?></td>
-                                <td><?= htmlspecialchars($r['manager_comments'] ?? ''); ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </table>
-                    </div>
                 </div>
                 <?php endif; ?>
             <?php endif; ?>
@@ -277,7 +256,7 @@ if ($role === 'employee') {
         $deptChartStmt = $db->query("SELECT department, COUNT(*) AS cnt FROM employees GROUP BY department");
         $deptChartData = $deptChartStmt->fetchAll(PDO::FETCH_ASSOC);
         ?>
-        <div class="card" style="margin-bottom:24px;">
+        <div class="ui-card mb-6">
             <h3>Analytics</h3>
             <?php if($mostAbsent): ?>
                 <p><strong>Most absent employee:</strong> <?= htmlspecialchars($mostAbsentName); ?> (<?= $mostAbsent['cnt']; ?> days)</p>
@@ -354,29 +333,6 @@ if ($role === 'employee') {
         }
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // fetch archived requests
-        if ($role === 'manager') {
-            $stmt = $db->prepare("
-                SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
-                FROM leave_requests lr
-                JOIN employees e ON lr.employee_id = e.id
-                LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
-                WHERE lr.status IN ('approved', 'rejected') AND e.manager_id = ?
-                ORDER BY lr.created_at DESC LIMIT 50
-            ");
-            $stmt->execute([$_SESSION['emp_id']]);
-        } else {
-            $stmt = $db->prepare("
-                SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
-                FROM leave_requests lr
-                JOIN employees e ON lr.employee_id = e.id
-                LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
-                WHERE lr.status IN ('approved', 'rejected')
-                ORDER BY lr.created_at DESC LIMIT 100
-            ");
-            $stmt->execute();
-        }
-        $archived = $stmt->fetchAll(PDO::FETCH_ASSOC);
         ?>
 
         <script>
@@ -388,7 +344,7 @@ if ($role === 'employee') {
             }
         </script>
 
-        <div class="card">
+        <div class="ui-card">
             <h3>Pending Leave Requests</h3>
 
             <table border="1" width="100%">
@@ -429,37 +385,9 @@ if ($role === 'employee') {
 
             </table>
         </div>
-        
-        <?php if(!empty($archived)): ?>
-        <div class="card" style="margin-top:24px;">
-            <h3><a href="#" class="dropdown-toggle" onclick="document.getElementById('archivePanel').style.display = document.getElementById('archivePanel').style.display === 'none' ? 'block' : 'none'; return false;">▼ Archived Requests (<?= count($archived); ?> records)</a></h3>
-            <div id="archivePanel" style="display:none;margin-top:16px;">
-                <table border="1" width="100%" style="font-size:12px;">
-                    <tr>
-                        <th>Employee</th>
-                        <th>Type</th>
-                        <th>Dates</th>
-                        <th>Days</th>
-                        <th>Status</th>
-                        <th>Reason</th>
-                    </tr>
-                    <?php foreach($archived as $r): ?>
-                    <tr>
-                        <td><?= $r['first_name']." ".$r['last_name']; ?></td>
-                        <td><?= htmlspecialchars($r['leave_type_name'] ?? $r['leave_type']); ?></td>
-                        <td><?= $r['start_date']." to ".$r['end_date']; ?></td>
-                        <td><?= $r['total_days']; ?></td>
-                        <td><?= ucfirst($r['status']); ?></td>
-                        <td><?= htmlspecialchars($r['manager_comments'] ?? $r['reason'] ?? ''); ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </table>
-            </div>
-        </div>
-        <?php endif; ?>
 
     <?php elseif($role == 'admin'): ?>
-        <div class="card" style="margin-bottom:24px;">
+        <div class="ui-card mb-6">
             <a href="change_password.php" class="btn">Change Password</a>
         </div>
         <?php
@@ -482,26 +410,26 @@ if ($role === 'employee') {
         ?>
 
         <div style="display:flex;gap:16px;margin-bottom:24px;">
-            <div class="card" style="flex:1;">
+            <div class="ui-card" style="flex:1;">
                 <h3>Total Employees</h3>
                 <p style="font-size:24px;color:var(--primary);"><?= $count ?></p>
             </div>
-            <div class="card" style="flex:1;border-left:4px solid #ff6b6b;">
+            <div class="ui-card" style="flex:1;border-left:4px solid #ff6b6b;">
                 <h3>Pending Requests</h3>
                 <p style="font-size:24px;color:#ff6b6b;"><?= $pendingCount ?></p>
             </div>
-            <div class="card" style="flex:1;border-left:4px solid #28a745;">
+            <div class="ui-card" style="flex:1;border-left:4px solid #28a745;">
                 <h3>Approved Requests</h3>
                 <p style="font-size:24px;color:#28a745;"><?= $approvedCount ?></p>
             </div>
         </div>
 
-        <div class="card" style="margin-top:24px;">
+        <div class="ui-card mb-6">
             <h3>Employees by Department</h3>
             <canvas id="deptChart"></canvas>
         </div>
 
-        <div class="card" style="margin-top:24px;">
+        <div class="ui-card">
             <h3>Employees by Role</h3>
             <canvas id="roleChart"></canvas>
         </div>

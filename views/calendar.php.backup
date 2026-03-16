@@ -170,20 +170,18 @@ $days = days_in_month($month,$year);
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="app-main">
-    <div class="calendar-container">
-        <div class="calendar-main">
-            <?php
-            $title = 'Leave Calendar';
-            $actions = [
-                '<a href="?m='.($month==1?12:$month-1).'&y='.($month==1?$year-1:$year).'" class="btn btn-ghost">&lt; Prev</a>',
-                '<a href="?m='.($month==12?1:$month+1).'&y='.($month==12?$year+1:$year).'" class="btn btn-ghost">Next &gt;</a>'
-            ];
-            include __DIR__ . '/partials/ui/page-header.php';
-            ?>
+    <?php
+    $title = 'Leave Calendar';
+    $actions = [
+        '<a href="?m='.($month==1?12:$month-1).'&y='.($month==1?$year-1:$year).'" class="btn btn-ghost">&lt; Prev</a>',
+        '<a href="?m='.($month==12?1:$month+1).'&y='.($month==12?$year+1:$year).'" class="btn btn-ghost">Next &gt;</a>'
+    ];
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
 
-            <div class="ui-card">
-                <div class="table-wrap">
-                    <table class="calendar">
+    <div class="ui-card">
+        <div class="table-wrap">
+            <table class="calendar">
         <tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr>
         <?php
         $day=1; $dow=1;
@@ -193,10 +191,10 @@ $days = days_in_month($month,$year);
         while($day<=$days) {
             if($dow>7){ echo "</tr><tr>"; $dow=1; }
             $date = sprintf("%04d-%02d-%02d",$year,$month,$day);
-            $cellClass='cell-normal';
+            $cellClass='';
             if(isset($events[$date])){
                 foreach($events[$date] as $e){
-                    if($e['type']=='holiday'){$cellClass='cell-holiday'; break;}
+                    if($e['type']=='holiday'){$cellClass='holiday'; break;}
                 }
             }
             echo "<td class='$cellClass' data-date='$date'><strong>$day</strong><br>";
@@ -221,69 +219,6 @@ $days = days_in_month($month,$year);
         echo "</tr>";
         ?>
             </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="calendar-sidebar">
-            <!-- Legend Card -->
-            <div class="ui-card calendar-summary-card">
-                <h4>Legend</h4>
-                <div class="legend-item">
-                    <span class="legend-indicator approved"></span>
-                    <span>Approved Leave</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-indicator pending"></span>
-                    <span>Pending Leave</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-indicator today"></span>
-                    <span>Today</span>
-                </div>
-            </div>
-
-            <!-- Upcoming Leaves Card -->
-            <div class="ui-card calendar-summary-card">
-                <h4>Upcoming Leaves</h4>
-                <div class="upcoming-item approved">
-                    <div class="upcoming-content">
-                        <strong>Sarah Johnson</strong>
-                        <div class="upcoming-details">Sick Leave • Mar 15-17 (3 days)</div>
-                    </div>
-                </div>
-                <div class="upcoming-item pending">
-                    <div class="upcoming-content">
-                        <strong>Michael Chen</strong>
-                        <div class="upcoming-details">Vacation • Mar 20-24 (5 days)</div>
-                    </div>
-                </div>
-                <div class="upcoming-item approved">
-                    <div class="upcoming-content">
-                        <strong>Emma Wilson</strong>
-                        <div class="upcoming-details">Personal Leave • Mar 25 (1 day)</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- This Month Card -->
-            <div class="ui-card calendar-summary-card">
-                <h4>This Month</h4>
-                <div class="month-stats">
-                    <div class="stat-item">
-                        <span class="stat-label">Total Leaves</span>
-                        <span class="stat-value">9</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Approved</span>
-                        <span class="stat-value approved">4</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Pending</span>
-                        <span class="stat-value pending">5</span>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 

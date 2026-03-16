@@ -542,9 +542,13 @@ if (empty($_SESSION['csrf_token'])) {
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-    <div class="card leave-application-card">
-        <h2 style="text-align:center;margin-bottom:8px;">Application for Leave</h2>
+<div class="app-main">
+    <?php
+    $title = 'Apply Leave';
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
+    <div class="ui-card leave-application-card">
+        <h2 class="page-subtitle" style="text-align:center;margin-bottom:8px;">Application for Leave</h2>
         <p style="text-align:center;font-size:13px;color:#6b7280;margin-bottom:24px;">
             Fill out the request based on the official leave form. Extra instructions and requirements will appear only for the selected leave type.
         </p>

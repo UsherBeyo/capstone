@@ -20,8 +20,8 @@ if (empty($_SESSION['csrf_token'])) {
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-    <div class="card">
+<div class="app-main">
+    <div class="ui-card">
         <h2>Change Password</h2>
         <form method="POST" action="../controllers/UserController.php">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">

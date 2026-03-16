@@ -26,9 +26,13 @@ if (empty($_SESSION['csrf_token'])) {
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
+<div class="app-main">
+    <?php
+    $title = 'Manage Departments';
+    $actions = ['<button id="openCreateModal" class="btn btn-primary">+ New Department</button>'];
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
 
-    <button id="openCreateModal" class="btn" style="margin:48px 0 0 0;">+ New Department</button>
 
     <div id="createModal" class="modal" style="display:none;">
         <div class="modal-content small">
@@ -36,8 +40,10 @@ if (empty($_SESSION['csrf_token'])) {
             <h3>Create Department</h3>
             <form method="POST" action="../controllers/DepartmentController.php">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-                <label>Name</label>
-                <input type="text" name="name" required>
+                    <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" required class="form-control">
+                </div>
                 <div style="text-align:right;">
                     <button type="submit" name="create_department">Create</button>
                 </div>
@@ -45,14 +51,18 @@ if (empty($_SESSION['csrf_token'])) {
         </div>
     </div>
 
-    <div class="card" style="margin-top:30px;">
+    <div class="ui-card" style="margin-top:30px;">
         <h2>Departments</h2>
-        <table>
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Action</th>
-            </tr>
+        <div class="table-wrap">
+            <table class="ui-table">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Action</th>
+                </tr>
+                </thead>
+                <tbody>
             <?php foreach($departments as $d): ?>
             <tr>
                 <td><?= $d['id']; ?></td>
@@ -67,7 +77,9 @@ if (empty($_SESSION['csrf_token'])) {
                 </td>
             </tr>
             <?php endforeach; ?>
-        </table>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div id="editModal" class="modal" style="display:none;">
@@ -77,8 +89,10 @@ if (empty($_SESSION['csrf_token'])) {
             <form method="POST" action="../controllers/DepartmentController.php">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                 <input type="hidden" name="id" id="editId">
-                <label>Name</label>
-                <input type="text" name="name" id="editName" required>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" id="editName" required class="form-control">
+                </div>
                 <div style="text-align:right;">
                     <button type="submit" name="update_department">Update</button>
                 </div>

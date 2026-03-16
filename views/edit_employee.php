@@ -56,8 +56,8 @@ $is_own_profile = ($role === 'employee');
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-    <div class="card">
+<div class="app-main">
+    <div class="ui-card">
         <h2>Edit Employee</h2>
         <form method="POST" action="../controllers/AdminController.php" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">

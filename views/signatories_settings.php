@@ -30,10 +30,13 @@ $labels = [
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-    <h2>Signatories Settings</h2>
+<div class="app-main">
+    <?php
+    $title = 'Signatories Settings';
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
 
-    <div class="card">
+    <div class="ui-card">
         <p style="margin-bottom:16px;color:#6b7280;">
             These default signatories will auto-fill the print form modal for Personnel, HR, and Admin.
         </p>
@@ -41,12 +44,16 @@ $labels = [
         <form method="POST" action="../controllers/update_signatories.php">
             <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token'] ?? ''); ?>">
 
-            <table width="100%">
-                <tr>
-                    <th>Section</th>
-                    <th>Name</th>
-                    <th>Position</th>
-                </tr>
+            <div class="table-wrap">
+                <table class="ui-table">
+                    <thead>
+                    <tr>
+                        <th>Section</th>
+                        <th>Name</th>
+                        <th>Position</th>
+                    </tr>
+                    </thead>
+                    <tbody>
 
                 <?php foreach ($rows as $r): ?>
                     <tr>
@@ -55,17 +62,19 @@ $labels = [
                             <input type="hidden" name="id[]" value="<?= (int)$r['id']; ?>">
                         </td>
                         <td>
-                            <input type="text" name="name[]" value="<?= e($r['name']); ?>" required>
+                            <input class="form-control" type="text" name="name[]" value="<?= e($r['name']); ?>" required>
                         </td>
                         <td>
-                            <input type="text" name="position[]" value="<?= e($r['position']); ?>" required>
+                            <input class="form-control" type="text" name="position[]" value="<?= e($r['position']); ?>" required>
                         </td>
                     </tr>
                 <?php endforeach; ?>
+                </tbody>
             </table>
+        </div>
 
             <div style="margin-top:18px;">
-                <button type="submit">Save Changes</button>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
             </div>
         </form>
     </div>

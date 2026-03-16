@@ -22,7 +22,7 @@ if (empty($_SESSION['csrf_token'])) {
 </head>
 <body style="display:flex;justify-content:center;align-items:center;height:100vh;">
 
-<div class="card" style="width:350px;">
+<div class="ui-card" style="width:350px;">
     <h2 style="text-align:center;">Login</h2>
 
     <?php if(isset($_GET['error'])): ?>

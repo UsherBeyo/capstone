@@ -138,10 +138,10 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
+<div class="app-main">
     <h2>Manage Accruals</h2>
 
-    <div class="card" style="margin-bottom:20px;">
+    <div class="ui-card" style="margin-bottom:20px;">
         <h3>Bulk Accrual for All Employees</h3>
         <p style="font-size:13px;opacity:0.9;margin-bottom:16px;">
             This will add the selected accrual amount to both <strong>Vacational</strong> and <strong>Sick</strong> balances
@@ -170,7 +170,7 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
     </div>
 
     <div class="card-container" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
-        <div class="card" style="flex:1;min-width:300px;max-width:500px;">
+        <div class="ui-card" style="flex:1;min-width:300px;max-width:500px;">
             <h3>Record Manual Accrual</h3>
             <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.</p>
 
@@ -201,7 +201,7 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
             </div>
         </div>
 
-        <div class="card" style="flex:1;min-width:300px;max-width:700px;">
+        <div class="ui-card" style="flex:1;min-width:300px;max-width:700px;">
             <h3>Accrual History (Last 50)</h3>
             <table style="font-size:13px;">
                 <tr>

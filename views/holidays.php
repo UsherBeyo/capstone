@@ -22,26 +22,40 @@ if (empty($_SESSION['csrf_token'])) {
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-    <div class="card">
+<div class="app-main">
+    <?php
+    $title = 'Manage Holidays';
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
+    <div class="ui-card">
         <h2>Manage Holidays</h2>
         <form method="POST" action="../controllers/HolidayController.php">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-            <label>Date</label>
-            <input type="date" name="date" required>
-            <label>Type</label>
-            <select name="type">
-                <option value="Non-working Holiday">Non-working Holiday</option>
-                <option value="Special Working Holiday">Special Working Holiday</option>
-                <option value="Company Event">Company Event</option>
-                <option value="Other">Other</option>
-            </select>
-            <label>Description</label>
-            <input type="text" name="description">
-            <button type="submit" name="add">Add</button>
+            <div class="form-group">
+                <label>Date</label>
+                <input type="date" name="date" required class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select name="type" class="form-select">
+                    <option value="Non-working Holiday">Non-working Holiday</option>
+                    <option value="Special Working Holiday">Special Working Holiday</option>
+                    <option value="Company Event">Company Event</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <input type="text" name="description" class="form-control">
+            </div>
+            <button type="submit" name="add" class="btn btn-primary">Add</button>
         </form>
-        <table border="1" style="margin-top:24px;">
-            <tr><th>Date</th><th>Description</th><th>Type</th><th>Action</th></tr>
+        <div class="table-wrap" style="margin-top:24px;">
+            <table class="ui-table">
+                <thead>
+                <tr><th>Date</th><th>Description</th><th>Type</th><th>Action</th></tr>
+                </thead>
+                <tbody>
             <?php foreach($hols as $h): ?>
             <tr>
                 <td><?= $h['holiday_date']; ?></td>
@@ -70,7 +84,9 @@ if (empty($_SESSION['csrf_token'])) {
                 </td>
             </tr>
             <?php endforeach; ?>
-        </table>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 </body>

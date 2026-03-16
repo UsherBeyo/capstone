@@ -570,10 +570,10 @@ if ($reportType === 'balance') {
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
+<div class="app-main">
     <h2><?= safe_h($reportTitle); ?></h2>
 
-    <div class="card" style="margin-bottom:24px;">
+    <div class="ui-card" style="margin-bottom:24px;">
         <h3>Report Filter</h3>
         <form method="GET" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
             <?php if($role !== 'employee'): ?>
@@ -641,7 +641,7 @@ if ($reportType === 'balance') {
     </div>
 
     <?php if ($reportType === 'summary'): ?>
-        <div class="card">
+        <div class="ui-card">
             <h3>System Summary</h3>
             <table>
                 <tr><th>Metric</th><th>Value</th></tr>
@@ -653,7 +653,7 @@ if ($reportType === 'balance') {
         </div>
 
     <?php elseif ($reportType === 'balance'): ?>
-        <div class="card">
+        <div class="ui-card">
             <table>
                 <tr>
                     <th>Name</th>
@@ -675,7 +675,7 @@ if ($reportType === 'balance') {
         </div>
 
     <?php elseif ($reportType === 'leave_card' && $employeeFilter): ?>
-        <div class="card">
+        <div class="ui-card">
             <h3>
                 Leave Card - Complete Transaction History for
                 <?= safe_h($currentEmp ? (($currentEmp['first_name'] ?? '') . ' ' . ($currentEmp['last_name'] ?? '')) : 'Unknown Employee'); ?>
@@ -719,7 +719,7 @@ if ($reportType === 'balance') {
         </div>
 
     <?php elseif ($reportType === 'usage'): ?>
-        <div class="card">
+        <div class="ui-card">
             <table>
                 <tr>
                     <th>Department</th>

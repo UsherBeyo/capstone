@@ -11,6 +11,13 @@ $db = (new Database())->connect();
 $role = $_SESSION['role'];
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
+// tab filter controls (all / pending / approved / rejected / archived)
+$tab = $_GET['tab'] ?? 'all';
+$validTabs = ['all','pending','approved','rejected','archived'];
+if (!in_array($tab, $validTabs, true)) {
+    $tab = 'all';
+}
+
 function safe_h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
@@ -342,6 +349,34 @@ foreach ($personnelEmployeeIds as $empId) {
     $leaveCardPreviewMap[$empId] = buildLeaveCardRows($db, $empId, $hasTransDate, $hasSnapshots);
 }
 
+// Prepare archived requests for the "Archived" toggle
+if ($role === 'manager') {
+    $archivedQuery = $db->prepare("
+        SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
+        FROM leave_requests lr
+        JOIN employees e ON lr.employee_id = e.id
+        LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+        WHERE lr.status IN ('approved', 'rejected', 'cancelled') AND e.manager_id = ?
+          AND lr.created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
+        ORDER BY lr.created_at DESC
+        LIMIT 50
+    ");
+    $archivedQuery->execute([$_SESSION['emp_id'] ?? 0]);
+} else {
+    $archivedQuery = $db->prepare("
+        SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
+        FROM leave_requests lr
+        JOIN employees e ON lr.employee_id = e.id
+        LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+        WHERE lr.status IN ('approved', 'rejected', 'cancelled')
+          AND lr.created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
+        ORDER BY lr.created_at DESC
+        LIMIT 100
+    ");
+    $archivedQuery->execute();
+}
+$archived = $archivedQuery->fetchAll(PDO::FETCH_ASSOC);
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -349,23 +384,43 @@ if (empty($_SESSION['csrf_token'])) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Leave Requests Workflow</title>
+    <title>Leave Requests</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-    <h2>Leave Requests Workflow</h2>
+<div class="app-main">
+    <h2>Leave Requests</h2>
 
-    <div class="card">
-        <h3>Pending Department Head Approval</h3>
+    <div class="filter-row" style="margin-bottom:16px;">
+        <div class="filter-tabs" id="leaveRequestTabs">
+            <?php
+            $tabs = [
+                'all' => 'All',
+                'pending' => 'Pending',
+                'approved' => 'Approved',
+                'rejected' => 'Rejected',
+                'archived' => 'Archived',
+            ];
+            foreach ($tabs as $key => $label) {
+                $active = ($tab === $key) ? ' is-active' : '';
+                echo '<a href="?tab=' . $key . '" class="filter-tab' . $active . '" data-tab="' . $key . '">' . htmlspecialchars($label) . '</a>';
+            }
+            ?>
+        </div>
+    </div>
+
+    <div id="section-pending" style="<?= ($tab === 'all' || $tab === 'pending') ? '' : 'display:none;'; ?>">
+        <div class="ui-card mb-6">
+            <h3>Pending Department Head Approval</h3>
         <?php if (empty($pendingDeptHead)): ?>
             <p>No requests pending for Department Head approval.</p>
         <?php else: ?>
             <?php $deptActionModalsHtml = ''; ?>
-            <div class="table-container">
-                <table width="100%">
+            <div class="table-wrap">
+                <table class="ui-table">
+                    <thead>
                     <tr>
                         <th>Employee</th>
                         <th>Type</th>
@@ -374,6 +429,8 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>Reason</th>
                         <th>Action</th>
                     </tr>
+                    </thead>
+                    <tbody>
                     <?php foreach ($pendingDeptHead as $r): ?>
                         <?php
                         $deptEmployeeName = trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name']);
@@ -412,9 +469,12 @@ if (empty($_SESSION['csrf_token'])) {
                             <td class="col-action">
                                 <div class="personnel-action-bar">
                                     <button type="button"
-                                            class="icon-action-btn icon-approve"
+                                            class="icon-action-btn labelled icon-approve"
                                             onclick="openModal('deptActionModal_<?= (int)$r['id']; ?>')"
-                                            title="Approve or reject request">⚙</button>
+                                            title="Approve or reject request">
+                                        <span class="action-icon">⚙</span>
+                                        <span class="action-label">Action</span>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -450,20 +510,22 @@ if (empty($_SESSION['csrf_token'])) {
                         $deptActionModalsHtml .= ob_get_clean();
                         ?>
                     <?php endforeach; ?>
+                    </tbody>
                 </table>
             </div>
             <?= $deptActionModalsHtml; ?>
         <?php endif; ?>
     </div>
 
-    <div class="card">
+    <div class="ui-card mb-6">
         <h3>Pending Personnel Review</h3>
         <?php if (empty($pendingPersonnel)): ?>
             <p>No requests pending for personnel review.</p>
         <?php else: ?>
             <?php $personnelModalHtml = ''; ?>
-            <div class="table-container">
-                <table width="100%">
+            <div class="table-wrap">
+                <table class="ui-table">
+                    <thead>
                     <tr>
                         <th>Employee</th>
                         <th>Type</th>
@@ -473,6 +535,8 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>After Approval</th>
                         <th>Action</th>
                     </tr>
+                    </thead>
+                    <tbody>
 
                     <?php foreach ($pendingPersonnel as $r): ?>
                         <?php
@@ -525,19 +589,28 @@ if (empty($_SESSION['csrf_token'])) {
                             <td class="col-action">
                                 <div class="personnel-action-bar">
                                     <button type="button"
-                                            class="icon-action-btn"
+                                            class="icon-action-btn labelled"
                                             onclick="openModal('<?= $modalId; ?>')"
-                                            title="Review details">👁</button>
+                                            title="Review details">
+                                        <span class="action-icon">👁</span>
+                                        <span class="action-label">View</span>
+                                    </button>
 
                                     <a href="reports.php?type=leave_card&employee_id=<?= (int)$r['employee_id']; ?>"
                                        target="_blank"
-                                       class="icon-action-btn"
-                                       title="Open full leave card">📄</a>
+                                       class="icon-action-btn labelled"
+                                       title="Open full leave card">
+                                        <span class="action-icon">📄</span>
+                                        <span class="action-label">Leave Card</span>
+                                    </a>
 
                                     <button type="button"
-                                            class="icon-action-btn icon-approve"
+                                            class="icon-action-btn labelled icon-approve"
                                             onclick="openModal('personnelActionModal_<?= (int)$r['id']; ?>')"
-                                            title="Approve or return request">⚙</button>
+                                            title="Approve or return request">
+                                        <span class="action-icon">⚙</span>
+                                        <span class="action-label">Action</span>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -697,14 +770,17 @@ if (empty($_SESSION['csrf_token'])) {
                         $personnelModalHtml .= ob_get_clean();
                         ?>
                     <?php endforeach; ?>
+                    </tbody>
                 </table>
             </div>
 
             <?= $personnelModalHtml; ?>
         <?php endif; ?>
     </div>
+</div>
 
-    <div class="card">
+<div id="section-approved" style="<?= ($tab === 'all' || $tab === 'approved') ? '' : 'display:none;'; ?>">
+    <div class="ui-card mb-6">
         <h3>Finalized / Approved</h3>
 
         <?php if (empty($finalized)): ?>
@@ -737,9 +813,12 @@ if (empty($_SESSION['csrf_token'])) {
 
                             <?php if (in_array($role, ['personnel','hr','admin'], true)): ?>
                                 <td>
-                                    <button class="icon-action-btn"
+                                    <button class="icon-action-btn labelled"
                                             onclick="openModal('printModal_<?= (int)$r['id']; ?>')"
-                                            title="Customize signatories and print">🖨</button>
+                                            title="Customize signatories and print">
+                                        <span class="action-icon">🖨</span>
+                                        <span class="action-label">Print</span>
+                                    </button>
                                 </td>
                             <?php endif; ?>
                         </tr>
@@ -815,8 +894,10 @@ if (empty($_SESSION['csrf_token'])) {
             <?php endforeach; ?>
         <?php endif; ?>
     </div>
+</div>
 
-    <div class="card">
+<div id="section-rejected" style="<?= ($tab === 'all' || $tab === 'rejected') ? '' : 'display:none;'; ?>">
+    <div class="ui-card">
         <h3>Rejected / Returned</h3>
         <?php if (empty($returnedOrRejected)): ?>
             <p>No rejected or returned requests.</p>
@@ -849,6 +930,43 @@ if (empty($_SESSION['csrf_token'])) {
     </div>
 </div>
 
+<div id="section-archived" style="<?= ($tab === 'all' || $tab === 'archived') ? '' : 'display:none;'; ?>">
+    <div id="archiveCard" class="ui-card">
+        <h3>Archived Requests (<?= count($archived); ?>)</h3>
+
+        <?php if (empty($archived)): ?>
+            <p>No archived requests found.</p>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table class="ui-table">
+                    <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Type</th>
+                        <th>Dates</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                        <th>Reason</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach($archived as $r): ?>
+                        <tr>
+                            <td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
+                            <td><?= safe_h($r['leave_type_name'] ?? $r['leave_type']); ?></td>
+                            <td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
+                            <td><?= trunc3($r['total_days']); ?></td>
+                            <td><?= safe_h(ucfirst($r['status'])); ?></td>
+                            <td><?= safe_h($r['manager_comments'] ?? $r['reason'] ?? ''); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <script>
 function openModal(id) {
     var el = document.getElementById(id);
@@ -867,6 +985,45 @@ document.querySelectorAll('.modal').forEach(function(modal) {
         }
     });
 });
+
+var activeTab = '<?= $tab; ?>';
+
+function setActiveTab(tab) {
+    var tabs = document.querySelectorAll('.filter-tab');
+    tabs.forEach(function(tabEl) {
+        tabEl.classList.toggle('is-active', tabEl.getAttribute('data-tab') === tab);
+    });
+
+    var sections = {
+        all: ['section-pending', 'section-approved', 'section-rejected', 'section-archived'],
+        pending: ['section-pending'],
+        approved: ['section-approved'],
+        rejected: ['section-rejected'],
+        archived: ['section-archived'],
+    };
+
+    var visible = sections[tab] || sections.all;
+
+    ['section-pending', 'section-approved', 'section-rejected', 'section-archived'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = visible.includes(id) ? '' : 'none';
+    });
+
+    activeTab = tab;
+}
+
+document.querySelectorAll('.filter-tab').forEach(function(tab) {
+    tab.addEventListener('click', function(e) {
+        e.preventDefault();
+        var selected = this.getAttribute('data-tab');
+        if (!selected) return;
+        setActiveTab(selected);
+    });
+});
+
+// initialize (in case server-side default differs)
+setActiveTab(activeTab);
 </script>
 
 </body>

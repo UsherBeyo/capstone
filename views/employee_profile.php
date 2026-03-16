@@ -329,7 +329,9 @@ if ($stmtTypes) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Employee Profile</title>
+    <title><?= htmlspecialchars(
+        $pageTitle ?? 'Employee Profile'
+    ); ?></title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <style>
         .profile-header { display:flex; gap:16px; align-items:center; }
@@ -339,11 +341,30 @@ if ($stmtTypes) {
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
-<div class="content">
-    
+<div class="app-main">
+    <?php
+    $title = 'Employee Profile';
+    $subtitle = htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name']));
+    $actions = [];
+    if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])) {
+        $actions[] = '<a href="edit_employee.php?id='.$e['id'].'" class="btn btn-secondary">Edit profile</a>';
+    }
+    if(($_SESSION['emp_id'] ?? 0) == $id) {
+        $actions[] = '<a href="#" onclick="openPasswordModal(); return false;" class="btn btn-secondary">Change Password</a>';
+    }
+    if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])) {
+        $actions[] = '<a href="employee_profile.php?id='.$e['id'].'&export=1" class="btn btn-ghost">Export history</a>';
+        $actions[] = '<a href="employee_profile.php?id='.$e['id'].'&export=leave_card" class="btn btn-ghost">Export leave card</a>';
+    }
+    if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])) {
+        $actions[] = '<a href="reports.php?type=leave_card&employee_id='.$e['id'].'" class="btn btn-ghost">View Leave Card</a>';
+    }
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
+
     <!-- 1. Employee Header Card -->
-    <div class="card">
-        <div style="display:flex;gap:24px;align-items:flex-start;">
+    <div class="ui-card employee-header-card">
+        <div class="two-column" style="align-items:flex-start;">
             <div>
                 <?php if(!empty($e['profile_pic'])): ?>
                     <img src="<?= htmlspecialchars($e['profile_pic']); ?>" alt="Profile" style="width:80px;height:80px;border-radius:50%;object-fit:cover;cursor:pointer;border:2px solid var(--border);" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars($e['first_name'].' '.$e['last_name']); ?>')">
@@ -357,39 +378,44 @@ if ($stmtTypes) {
                 <p style="margin:0 0 12px 0;font-size:14px;">Department: <strong><?= htmlspecialchars($e['department']); ?></strong></p>
                 <p style="margin:0 0 12px 0;font-size:14px;">Position: <strong><?= htmlspecialchars($e['position'] ?? '—'); ?></strong></p>
                 <p style="margin:0 0 12px 0;font-size:14px;">Entrance to Duty: <strong><?= htmlspecialchars($e['entrance_to_duty'] ?? '0000-00-00'); ?></strong></p>
-                <div style="display:flex;gap:8px;padding:12px;background:#f8fafc;border-radius:8px;font-size:14px;">
-                    <span>Vacational: <strong><?= trunc3($e['annual_balance'] ?? 0); ?> days</strong></span>
-                    <span style="color:#d1d5db;">|</span>
-                    <span>Sick: <strong><?= trunc3($e['sick_balance'] ?? 0); ?></strong></span>
-                    <span style="color:#d1d5db;">|</span>
-                    <span>Force: <strong><?= trunc3($e['force_balance'] ?? 0); ?></strong></span>
-                </div>
             </div>
         </div>
     </div>
 
-    <!-- 2. Action Links Row -->
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin:24px 0;">
-        <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
-            <a href="edit_employee.php?id=<?= $e['id']; ?>" class="action-btn">Edit profile</a>
-        <?php endif; ?>
-        <?php if(($_SESSION['emp_id'] ?? 0) == $id): ?>
-            <a href="#" onclick="openPasswordModal(); return false;" class="action-btn">Change Password</a>
-        <?php endif; ?>
-        <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])): ?>
-            <a href="employee_profile.php?id=<?= $e['id']; ?>&export=1" class="action-btn">Export history</a>
-            <a href="employee_profile.php?id=<?= $e['id']; ?>&export=leave_card" class="action-btn">Export leave card</a>
-        <?php endif; ?>
-        <?php if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])): ?>
-            <a href="reports.php?type=leave_card&employee_id=<?= $e['id']; ?>" class="action-btn">View Leave Card</a>
-        <?php endif; ?>
+
+    <!-- leave balances cards -->
+    <div class="leave-balance-section">
+        <h3>Leave Balances</h3>
+        <div class="leave-balance-cards">
+            <?php
+                $balances = [
+                    'Vacation' => floatval($e['annual_balance'] ?? 0),
+                    'Sick' => floatval($e['sick_balance'] ?? 0),
+                    'Force' => floatval($e['force_balance'] ?? 0)
+                ];
+                foreach($balances as $label => $val):
+                    $used = 0; // if additional logic exists, compute used, here placeholder
+                    $total = $val; // assuming total equals current balance
+                    $pct = $total > 0 ? min(100, ($used/$total)*100) : 0;
+            ?>
+            <div class="leave-balance-card">
+                <div class="label"><?= $label; ?></div>
+                <div class="value"><?= number_format($total,3); ?> days</div>
+                <div class="progress-bar"><div class="progress-bar-inner" style="width:<?= $pct; ?>%;"></div></div>
+                <div class="stats">
+                    <span><?= number_format($used,3); ?></span>
+                    <span><?= number_format($total - $used,3); ?></span>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
     </div>
 
 
 
     <!-- 4. Admin Actions (if admin/hr) -->
     <?php if(in_array($_SESSION['role'], ['admin','hr'])): ?>
-    <div class="card" style="margin-top:24px;">
+    <div class="ui-card" style="margin-top:24px;">
         <h3>Admin Actions</h3>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">
             <button id="btnUpdateBalances" class="action-btn">Update Balances</button>
@@ -411,68 +437,76 @@ if ($stmtTypes) {
     </script>
 
     <!-- 5. Leave History Table -->
-    <div class="card" style="margin-top:24px;">
+    <div class="ui-card" style="margin-top:24px;">
         <h3>Leave History</h3>
         <?php if(empty($history)): ?>
             <p>No leave history available.</p>
         <?php else: ?>
-        <div style="overflow-x:auto;">
-            <table style="width:100%;font-size:13px;">
-                <tr style="background:#f8fafc;border-bottom:2px solid var(--border);">
-                    <th style="padding:12px;text-align:left;font-weight:600;">Type</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Dates</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Days</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Status</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Submitted</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Vacational Bal</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Sick Bal</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Force Bal</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Comments</th>
+        <div class="table-wrap">
+            <table class="ui-table">
+                <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Dates</th>
+                    <th>Days</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th>Vacational Bal</th>
+                    <th>Sick Bal</th>
+                    <th>Force Bal</th>
+                    <th>Comments</th>
                 </tr>
+                </thead>
+                <tbody>
                 <?php foreach($history as $h): ?>
-                <tr style="border-bottom:1px solid var(--border);">
-                    <td style="padding:10px 12px;"><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type'] ?? ''); ?></td>
-                    <td style="padding:10px 12px;"><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
-                    <td style="padding:10px 12px;"><?= isset($h['total_days']) ? trunc3($h['total_days']) : ''; ?></td>
-                    <td style="padding:10px 12px;"><?= htmlspecialchars($h['status'] ?? ''); ?></td>
-                    <td style="padding:10px 12px;"><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
-                    <td style="padding:10px 12px;"><?= isset($h['snapshot_annual_balance']) ? trunc3($h['snapshot_annual_balance']) : '—'; ?></td>
-                    <td style="padding:10px 12px;"><?= isset($h['snapshot_sick_balance']) ? trunc3($h['snapshot_sick_balance']) : '—'; ?></td>
-                    <td style="padding:10px 12px;"><?= isset($h['snapshot_force_balance']) ? trunc3($h['snapshot_force_balance']) : '—'; ?></td>
-                    <td style="padding:10px 12px;"><?= htmlspecialchars($h['manager_comments'] ?? $h['reason'] ?? ''); ?></td>
+                <tr>
+                    <td><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type'] ?? ''); ?></td>
+                    <td><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
+                    <td><?= isset($h['total_days']) ? trunc3($h['total_days']) : ''; ?></td>
+                    <td><?= htmlspecialchars($h['status'] ?? ''); ?></td>
+                    <td><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
+                    <td><?= isset($h['snapshot_annual_balance']) ? trunc3($h['snapshot_annual_balance']) : '—'; ?></td>
+                    <td><?= isset($h['snapshot_sick_balance']) ? trunc3($h['snapshot_sick_balance']) : '—'; ?></td>
+                    <td><?= isset($h['snapshot_force_balance']) ? trunc3($h['snapshot_force_balance']) : '—'; ?></td>
+                    <td><?= htmlspecialchars($h['manager_comments'] ?? $h['reason'] ?? ''); ?></td>
                 </tr>
                 <?php endforeach; ?>
+                </tbody>
             </table>
         </div>
         <?php endif; ?>
     </div>
 
     <!-- 6. Budget History Table -->
-    <div class="card" style="margin-top:24px;">
+    <div class="ui-card" style="margin-top:24px;">
         <h3>Budget History</h3>
         <?php if(empty($budgetHistory)): ?>
             <p>No budget change history available.</p>
         <?php else: ?>
-        <div style="overflow-x:auto;">
-            <table style="width:100%;font-size:13px;">
-                <tr style="background:#f8fafc;border-bottom:2px solid var(--border);">
-                    <th style="padding:12px;text-align:left;font-weight:600;">Leave Type</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Action</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Old Balance</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">New Balance</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Date</th>
-                    <th style="padding:12px;text-align:left;font-weight:600;">Notes</th>
+        <div class="table-wrap">
+            <table class="ui-table">
+                <thead>
+                <tr>
+                    <th>Leave Type</th>
+                    <th>Action</th>
+                    <th>Old Balance</th>
+                    <th>New Balance</th>
+                    <th>Date</th>
+                    <th>Notes</th>
                 </tr>
+                </thead>
+                <tbody>
                 <?php foreach($budgetHistory as $bh): ?>
-                <tr style="border-bottom:1px solid var(--border);">
-                    <td style="padding:10px 12px;"><?= htmlspecialchars($bh['leave_type'] ?? ''); ?></td>
-                    <td style="padding:10px 12px;"><?= htmlspecialchars($bh['action'] ?? ''); ?></td>
-                    <td style="padding:10px 12px;"><?= isset($bh['old_balance']) ? trunc3($bh['old_balance']) : ''; ?></td>
-                    <td style="padding:10px 12px;"><?= isset($bh['new_balance']) ? trunc3($bh['new_balance']) : ''; ?></td>
-                    <td style="padding:10px 12px;"><?= !empty($bh['created_at']) ? date('M d, Y H:i', strtotime($bh['created_at'])) : ''; ?></td>
-                    <td style="padding:10px 12px;"><?= htmlspecialchars($bh['notes'] ?? ''); ?></td>
+                <tr>
+                    <td><?= htmlspecialchars($bh['leave_type'] ?? ''); ?></td>
+                    <td><?= htmlspecialchars($bh['action'] ?? ''); ?></td>
+                    <td><?= isset($bh['old_balance']) ? trunc3($bh['old_balance']) : ''; ?></td>
+                    <td><?= isset($bh['new_balance']) ? trunc3($bh['new_balance']) : ''; ?></td>
+                    <td><?= !empty($bh['created_at']) ? date('M d, Y H:i', strtotime($bh['created_at'])) : ''; ?></td>
+                    <td><?= htmlspecialchars($bh['notes'] ?? ''); ?></td>
                 </tr>
                 <?php endforeach; ?>
+                </tbody>
             </table>
         </div>
         <?php endif; ?>

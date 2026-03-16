@@ -30,15 +30,15 @@ $total = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
+<div class="app-main">
     <h2>System Statistics</h2>
 
-    <div class="card">
+    <div class="ui-card">
         <h3>Total employees</h3>
         <p><?= $total ?></p>
     </div>
 
-    <div class="card">
+    <div class="ui-card">
         <h3>By department</h3>
         <table border="1">
             <tr><th>Department</th><th>Count</th></tr>
@@ -48,7 +48,7 @@ $total = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
         </table>
     </div>
 
-    <div class="card" style="margin-top:24px;">
+    <div class="ui-card" style="margin-top:24px;">
         <h3>By role</h3>
         <table border="1">
             <tr><th>Role</th><th>Count</th></tr>

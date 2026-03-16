@@ -41,9 +41,12 @@ if (isset($_GET['view_history'])) {
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="content">
-
-    <button id="openCreateModal" class="btn" style="margin:48px 0 0 0;">+ New Employee</button>
+<div class="app-main">
+    <?php
+    $title = 'Manage Employees';
+    $actions = ['<button id="openCreateModal" class="btn btn-primary">+ New Employee</button>'];
+    include __DIR__ . '/partials/ui/page-header.php';
+    ?>
 
     <div id="createModal" class="modal" style="display:none;">
         <div class="modal-content small">
@@ -51,80 +54,114 @@ if (isset($_GET['view_history'])) {
             <h3>Create Employee</h3>
             <form method="POST" action="../controllers/AdminController.php" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-                <label>Email</label>
-                <input type="email" name="email" required>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" required class="form-control">
+                </div>
 
-                <label>Profile Picture</label>
-                <input type="file" name="profile_pic" accept="image/*">
+                <div class="form-group">
+                    <label>Profile Picture</label>
+                    <input type="file" name="profile_pic" accept="image/*" class="form-control">
+                </div>
 
-                <label>First Name</label>
-                <input type="text" name="first_name" required>
+                <div class="form-group">
+                    <label>First Name</label>
+                    <input type="text" name="first_name" required class="form-control">
+                </div>
 
-                <label>Middle Name</label>
-                <input type="text" name="middle_name">
+                <div class="form-group">
+                    <label>Middle Name</label>
+                    <input type="text" name="middle_name" class="form-control">
+                </div>
 
-                <label>Last Name</label>
-                <input type="text" name="last_name" required>
+                <div class="form-group">
+                    <label>Last Name</label>
+                    <input type="text" name="last_name" required class="form-control">
+                </div>
 
-                <label>Department</label>
-                <select name="department_id" required>
-                    <option value="">Select Department</option>
-                    <?php foreach($departments as $d): ?>
-                        <option value="<?= $d['id']; ?>"><?= htmlspecialchars($d['name']); ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <div class="form-group">
+                    <label>Department</label>
+                    <select name="department_id" required class="form-select">
+                        <option value="">Select Department</option>
+                        <?php foreach($departments as $d): ?>
+                            <option value="<?= $d['id']; ?>"><?= htmlspecialchars($d['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
 
-                <label>Position</label>
-                <input type="text" name="position">
+                <div class="form-group">
+                    <label>Position</label>
+                    <input type="text" name="position" class="form-control">
+                </div>
 
-                <label>Salary</label>
-                <input type="number" step="0.01" name="salary">
+                <div class="form-group">
+                    <label>Salary</label>
+                    <input type="number" step="0.01" name="salary" class="form-control">
+                </div>
 
-                <label>Status</label>
-                <input type="text" name="status">
+                <div class="form-group">
+                    <label>Status</label>
+                    <input type="text" name="status" class="form-control">
+                </div>
 
-                <label>Civil Status</label>
-                <input type="text" name="civil_status">
+                <div class="form-group">
+                    <label>Civil Status</label>
+                    <input type="text" name="civil_status" class="form-control">
+                </div>
 
-                <label>Entrance to Duty</label>
-                <input type="date" name="entrance_to_duty">
+                <div class="form-group">
+                    <label>Entrance to Duty</label>
+                    <input type="date" name="entrance_to_duty" class="form-control">
+                </div>
 
-                <label>Unit</label>
-                <input type="text" name="unit">
+                <div class="form-group">
+                    <label>Unit</label>
+                    <input type="text" name="unit" class="form-control">
+                </div>
 
-                <label>GSIS Policy No.</label>
-                <input type="text" name="gsis_policy_no">
+                <div class="form-group">
+                    <label>GSIS Policy No.</label>
+                    <input type="text" name="gsis_policy_no" class="form-control">
+                </div>
 
-                <label>National Reference Card No.</label>
-                <input type="text" name="national_reference_card_no">
+                <div class="form-group">
+                    <label>National Reference Card No.</label>
+                    <input type="text" name="national_reference_card_no" class="form-control">
+                </div>
 
-                <label>Password</label>
-                <input type="password" name="password" required placeholder="Set temporary password">
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" required placeholder="Set temporary password" class="form-control">
+                </div>
 
-                <label>Role</label>
-                <select name="role" id="roleSelect">
-                    <option value="employee" selected>Employee</option>
-                    <option value="department_head">Department Head</option>
-                    <option value="personnel">Personnel</option>
-                    <option value="manager">Manager (Legacy)</option>
-                    <option value="hr">HR (Legacy)</option>
-                    <option value="admin">Admin</option>
-                </select>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select name="role" id="roleSelect" class="form-select">
+                        <option value="employee" selected>Employee</option>
+                        <option value="department_head">Department Head</option>
+                        <option value="personnel">Personnel</option>
+                        <option value="manager">Manager (Legacy)</option>
+                        <option value="hr">HR (Legacy)</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
 
                 <div id="deptHeadField" style="display:none;">
                     <label>Department Head Of (auto-assigned based on department)</label>
                     <p style="font-size:12px;color:#666;">This will be set automatically when department is selected.</p>
                 </div>
 
-                <label>Assign Department Head</label>
-                <select name="manager_id">
-                    <option value="">None</option>
-                    <?php foreach($managers as $m): ?>
-                        <option value="<?= $m['id']; ?>">
-                            <?= htmlspecialchars(trim($m['first_name'].' '.($m['middle_name'] ?? '').' '.$m['last_name'])); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
+                <div class="form-group">
+                    <label>Assign Department Head</label>
+                    <select name="manager_id" class="form-select">
+                        <option value="">None</option>
+                        <?php foreach($managers as $m): ?>
+                            <option value="<?= $m['id']; ?>">
+                                <?= htmlspecialchars(trim($m['first_name'].' '.($m['middle_name'] ?? '').' '.$m['last_name'])); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
 
                 <div style="text-align:right;">
                     <button type="submit">Create</button>
@@ -155,24 +192,30 @@ if (isset($_GET['view_history'])) {
         });
     </script>
 
-    <div class="card" style="margin-top:30px;">
+    <div class="ui-card" style="margin-top:30px;">
         <h2>Employee List</h2>
-        <input type="text" id="empSearch" placeholder="Search employees..." style="margin-bottom:10px;">
-        <table>
-            <tr>
-                <th>Photo</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Department</th>
-                <th>Position</th>
-                <th>Salary</th>
-                <th>Status</th>
-                <th>Vacational</th>
-                <th>Sick</th>
-                <th>Force</th>
-                <th>Action</th>
-            </tr>
+        <div class="search-input" style="margin: 20px 0;">
+            <input class="form-control" type="text" id="empSearch" placeholder="Search employees...">
+        </div>
+        <div class="table-wrap" style="margin-top: 16px;">
+            <table class="ui-table">
+                <thead>
+                <tr>
+                    <th>Photo</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Department</th>
+                    <th>Position</th>
+                    <th>Salary</th>
+                    <th>Status</th>
+                    <th>Vacational</th>
+                    <th>Sick</th>
+                    <th>Force</th>
+                    <th>Action</th>
+                </tr>
+                </thead>
+                <tbody>
 
             <?php foreach($employees as $e): ?>
             <tr>
@@ -188,20 +231,29 @@ if (isset($_GET['view_history'])) {
                 <td><?= isset($e['sick_balance']) ? number_format($e['sick_balance'],3) : '0.000'; ?></td>
                 <td><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></td>
                 <td>
-                    <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">&#128100;</a>
-                    &nbsp;
-                    <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link">✏️</a>
-                    &nbsp;
-                    <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link">📊</a>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link" style="display: flex; align-items: center; gap: 4px;">
+                            <span>&#128100;</span>
+                            <span>View</span>
+                        </a>
+                        <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link" style="display: flex; align-items: center; gap: 4px;">
+                            <span>✏️</span>
+                            <span>Edit</span>
+                        </a>
+                        <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link" style="display: flex; align-items: center; gap: 4px;">
+                            <span>📊</span>
+                            <span>Export</span>
+                        </a>
+                    </div>
                 </td>
             </tr>
             <?php endforeach; ?>
-
+            </tbody>
         </table>
     </div>
 
     <?php if(!empty($historyEmployee)): ?>
-    <div class="card" style="margin-top:30px;">
+    <div class="ui-card" style="margin-top:30px;">
         <h3>Leave History for Employee</h3>
         <table>
             <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Workflow</th><th>Comments</th></tr>

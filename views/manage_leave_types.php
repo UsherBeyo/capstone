@@ -19,9 +19,9 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
-<div class="content">
+<div class="app-main">
     <h2>Leave Types</h2>
-    <div class="card">
+    <div class="ui-card">
         <table border="1" width="100%">
             <tr><th>ID</th><th>Name</th><th>Deduct?</th><th>Requires Approval</th><th>Max/yr</th><th>Auto approve</th><th>Actions</th></tr>
             <?php foreach ($types as $t): ?>
@@ -44,7 +44,7 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
             <?php endforeach; ?>
         </table>
     </div>
-    <div class="card" style="margin-top:20px;">
+    <div class="ui-card" style="margin-top:20px;">
         <h3>Add New Type</h3>
         <form method="POST" action="../controllers/LeaveTypeController.php">
             <input type="hidden" name="action" value="create">
