@@ -3,6 +3,7 @@ session_start();
 
 require_once '../config/database.php';
 require_once '../models/Department.php';
+require_once '../helpers/Flash.php';
 
 if (empty($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     die("Access denied");
@@ -19,33 +20,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['create_department'])) {
         $name = trim($_POST['name']);
         if (empty($name)) {
-            header("Location: ../views/manage_departments.php?toast_error=Department+name+required");
-            exit();
+            flash_redirect('../views/manage_departments.php', 'error', 'Department name required');
         }
         $departmentModel->create($name);
-        header("Location: ../views/manage_departments.php?toast_success=Department+created");
-        exit();
+        flash_redirect('../views/manage_departments.php', 'success', 'Department created');
     }
 
     if (isset($_POST['update_department'])) {
         $id = intval($_POST['id']);
         $name = trim($_POST['name']);
         if (empty($name)) {
-            header("Location: ../views/manage_departments.php?toast_error=Department+name+required");
-            exit();
+            flash_redirect('../views/manage_departments.php', 'error', 'Department name required');
         }
         $departmentModel->update($id, $name);
-        header("Location: ../views/manage_departments.php?toast_success=Department+updated");
-        exit();
+        flash_redirect('../views/manage_departments.php', 'success', 'Department updated');
     }
 
     if (isset($_POST['delete_department'])) {
         $id = intval($_POST['id']);
         if ($departmentModel->delete($id)) {
-            header("Location: ../views/manage_departments.php?toast_success=Department+deleted");
+            flash_redirect('../views/manage_departments.php', 'success', 'Department deleted');
         } else {
-            header("Location: ../views/manage_departments.php?toast_error=Cannot+delete+department+in+use");
+            flash_redirect('../views/manage_departments.php', 'error', 'Cannot delete department in use');
         }
-        exit();
     }
 }

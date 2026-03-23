@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Flash.php';
 
 if (!in_array($_SESSION['role'] ?? '', ['personnel','hr','admin'], true)) {
     die("Access denied");
@@ -55,5 +56,4 @@ $stmt->execute([
     $posC
 ]);
 
-header("Location: ../views/print_leave_form.php?id=".$leaveId);
-exit;
+flash_redirect('../views/print_leave_form.php?id=' . $leaveId, 'success', 'Signatories saved successfully');

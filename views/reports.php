@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/DateHelper.php';
 
 $db = (new Database())->connect();
 
@@ -161,7 +162,7 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
             if ($statusRaw === 'approved') {
                 if ($isSick) {
                     $sickDed = $days;
-                } elseif (!$isForce) {
+                } else {
                     $vacDed = $days;
                 }
             }
@@ -176,9 +177,6 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
                 $particulars = $leaveType;
         if (!$isAccrual && stripos($particulars, 'leave') === false) {
             $particulars .= ' Leave';
-        }
-        if ($isForce) {
-            $particulars .= ' (Force balance)';
         }
 
         $rows[] = [
@@ -276,7 +274,7 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
 
             $particulars = ucfirst($actionLower) . ' ' . $leaveType;
             if ($isForce) {
-                $particulars .= ' (Force balance)';
+                $particulars .= ' (Force balance entry)';
             }
         }
 
@@ -331,7 +329,7 @@ function exportCsv(array $headers, array $rows, string $filename): void {
             $vb = $row['vac_balance'] ?? '';
             $sb = $row['sick_balance'] ?? '';
             fputcsv($out, [
-                $row['date'] ?? '',
+                app_format_date($row['date'] ?? ''),
                 $row['particulars'] ?? '',
                 (($row['vac_earned'] ?? 0) != 0 ? trunc3($row['vac_earned']) : ''),
                 (($row['vac_deducted'] ?? 0) != 0 ? trunc3($row['vac_deducted']) : ''),
@@ -382,7 +380,7 @@ function exportExcelPhpSpreadsheet(array $headers, array $rows, string $filename
 
     $rownum = 5;
     foreach ($rows as $row) {
-        $sheet->setCellValueByColumnAndRow(1, $rownum, $row['date'] ?? '');
+        $sheet->setCellValueByColumnAndRow(1, $rownum, app_format_date($row['date'] ?? ''));
         $sheet->setCellValueByColumnAndRow(2, $rownum, $row['particulars'] ?? '');
         $sheet->setCellValueByColumnAndRow(3, $rownum, (($row['vac_earned'] ?? 0) != 0 ? trunc3($row['vac_earned']) : ''));
         $sheet->setCellValueByColumnAndRow(4, $rownum, (($row['vac_deducted'] ?? 0) != 0 ? trunc3($row['vac_deducted']) : ''));
@@ -430,7 +428,7 @@ function exportPdfTcpdf(array $headers, array $rows, string $filename, ?array $c
         $vb = $row['vac_balance'] ?? '';
         $sb = $row['sick_balance'] ?? '';
         $html .= '<tr>';
-        $html .= '<td>' . safe_h($row['date'] ?? '') . '</td>';
+        $html .= '<td>' . safe_h(app_format_date($row['date'] ?? '')) . '</td>';
         $html .= '<td>' . safe_h($row['particulars'] ?? '') . '</td>';
         $html .= '<td>' . ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : '') . '</td>';
         $html .= '<td>' . ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : '') . '</td>';
@@ -771,7 +769,7 @@ if ($reportType === 'balance') {
                 </tr>
                 <?php foreach($reportData as $row): ?>
                 <tr>
-                    <td><?= safe_h($row['date'] ?? ''); ?></td>
+                    <td><?= safe_h(app_format_date($row['date'] ?? '')); ?></td>
                     <td><?= safe_h($row['particulars'] ?? ''); ?></td>
                     <td><?= ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : ''); ?></td>
                     <td><?= ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : ''); ?></td>

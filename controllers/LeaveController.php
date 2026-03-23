@@ -9,6 +9,7 @@ if (empty($_SESSION['user_id'])) {
 }
 
 require_once '../models/Leave.php';
+require_once '../helpers/Flash.php';
 require_once '../models/LeaveType.php';
 require_once '../services/Mail.php';
 require_once '../helpers/Validator.php';
@@ -49,8 +50,7 @@ if ($action === 'approve') {
     $comments = trim($_POST['comments'] ?? '');
     $row = fetchLeaveForWorkflow($db, $leave_id);
     if (!$row) {
-        header("Location: ../views/leave_requests.php?toast_error=Leave+request+not+found");
-        exit();
+        flash_redirect('../views/leave_requests.php', 'error', 'Leave request not found');
     }
 
     $workflow = trim((string)($row['workflow_status'] ?? ''));
@@ -96,8 +96,7 @@ if ($action === 'approve') {
             );
         }
 
-        header("Location: ../views/leave_requests.php?toast_success=Leave+approved+by+Department+Head+and+forwarded+to+Personnel");
-        exit();
+        flash_redirect('../views/leave_requests.php', 'success', 'Leave approved by Department Head and forwarded to Personnel');
     }
 
     // Stage 2: Personnel final approval
@@ -108,8 +107,7 @@ if ($action === 'approve') {
 
         $ok = $leaveModel->respondToLeave($leave_id, $userId, 'approve', $comments);
         if (!$ok) {
-            header("Location: ../views/leave_requests.php?toast_error=Unable+to+finalize+approval");
-            exit();
+            flash_redirect('../views/leave_requests.php', 'error', 'Unable to finalize approval');
         }
 
         $stmt = $db->prepare("
@@ -132,12 +130,10 @@ if ($action === 'approve') {
             );
         }
 
-        header("Location: ../views/leave_requests.php?toast_success=Leave+fully+approved+by+Personnel");
-        exit();
+flash_redirect('../views/leave_requests.php', 'success', 'Leave fully approved by Personnel');
     }
 
-    header("Location: ../views/leave_requests.php?toast_warning=This+request+is+not+in+an+approvable+workflow+stage");
-    exit();
+flash_redirect('../views/leave_requests.php', 'warning', 'This request is not in an approvable workflow stage');
 }
 
 if ($action === 'reject') {
@@ -152,8 +148,7 @@ if ($action === 'reject') {
     $comments = trim($_POST['comments'] ?? '');
     $row = fetchLeaveForWorkflow($db, $leave_id);
     if (!$row) {
-        header("Location: ../views/leave_requests.php?toast_error=Leave+request+not+found");
-        exit();
+        flash_redirect('../views/leave_requests.php', 'error', 'Leave request not found');
     }
 
     $workflow = trim((string)($row['workflow_status'] ?? ''));
@@ -201,8 +196,7 @@ if ($action === 'reject') {
             );
         }
 
-        header("Location: ../views/leave_requests.php?toast_warning=Leave+rejected+by+Department+Head");
-        exit();
+flash_redirect('../views/leave_requests.php', 'warning', 'Leave rejected by Department Head');
     }
 
     if ($workflow === 'pending_personnel') {
@@ -231,12 +225,10 @@ if ($action === 'reject') {
             );
         }
 
-        header("Location: ../views/leave_requests.php?toast_warning=Leave+returned+by+Personnel");
-        exit();
+flash_redirect('../views/leave_requests.php', 'warning', 'Leave returned by Personnel');
     }
 
-    header("Location: ../views/leave_requests.php?toast_warning=This+request+is+not+in+a+rejectable+workflow+stage");
-    exit();
+flash_redirect('../views/leave_requests.php', 'warning', 'This request is not in a rejectable workflow stage');
 }
 
 if ($action === 'cancel') {
@@ -274,8 +266,7 @@ if ($action === 'cancel') {
     $stmt = $db->prepare("DELETE FROM leave_requests WHERE id = ?");
     $stmt->execute([$leave_id]);
 
-    header("Location: ../views/dashboard.php?toast_success=Leave+request+cancelled");
-    exit();
+flash_redirect('../views/dashboard.php', 'success', 'Leave request cancelled');
 }
 
 if ($action === 'apply') {
@@ -331,13 +322,11 @@ if ($action === 'apply') {
 
     if ($v->fails()) {
         $err = implode(' ', array_map('implode', $v->getErrors()));
-        header("Location: ../views/apply_leave.php?toast_error=" . urlencode($err));
-        exit();
+flash_redirect('../views/apply_leave.php', 'error', $err);
     }
 
     if ($end < $start) {
-        header("Location: ../views/apply_leave.php?toast_error=" . urlencode("End date cannot be earlier than start date."));
-        exit();
+flash_redirect('../views/apply_leave.php', 'error', 'End date cannot be earlier than start date.');
     }
 
     $extraData = [
@@ -379,9 +368,8 @@ if ($action === 'apply') {
     }
 
     if (strpos($result, 'successfully') !== false) {
-        header("Location: ../views/dashboard.php?toast_success=" . urlencode($result));
+        flash_redirect('../views/dashboard.php', 'success', $result);
     } else {
-        header("Location: ../views/apply_leave.php?toast_error=" . urlencode($result));
+        flash_redirect('../views/apply_leave.php', 'error', $result);
     }
-    exit();
 }

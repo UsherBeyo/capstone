@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../helpers/Flash.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../views/login.php');
@@ -24,11 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($row && password_verify($_POST['current'], $row['password'])) {
             $hash = password_hash($_POST['new'], PASSWORD_DEFAULT);
             $db->prepare("UPDATE users SET password = ? WHERE id = ?")->execute([$hash, $userId]);
-            $_SESSION['message'] = "Password updated";
+            flash_set('success', 'Password updated');
         } else {
-            $_SESSION['message'] = "Current password incorrect";
+            flash_set('error', 'Current password incorrect');
         }
-        header('Location: ../views/dashboard.php');
-        exit();
+        flash_redirect('../views/dashboard.php');
     }
 }

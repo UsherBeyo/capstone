@@ -3,9 +3,8 @@ session_start();
 
 require_once '../config/database.php';
 require_once '../models/User.php';
+require_once '../helpers/Flash.php';
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
 
 $db = (new Database())->connect();
 $userModel = new User($db);
@@ -39,11 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['emp_id'] = $emp['id'];
         }
 
-        header("Location: ../views/dashboard.php?toast_success=Login+successful");
-        exit();
+        flash_redirect('../views/dashboard.php', 'success', 'Login successful');
 
     } else {
-        header("Location: ../views/login.php?toast_error=Invalid+email+or+password");
-        exit();
+        flash_redirect('../views/login.php', 'error', 'Invalid email or password');
     }
 }

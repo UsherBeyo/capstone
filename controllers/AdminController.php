@@ -4,6 +4,7 @@ session_start();
 require_once '../config/database.php';
 require_once '../models/User.php';
 require_once '../models/Leave.php';
+require_once '../helpers/Flash.php';
 
 if (empty($_SESSION['role'])) {
     die("Access denied");
@@ -96,8 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt2 = $db->prepare("INSERT INTO leave_balance_logs (employee_id, change_amount, reason) VALUES (?, ?, ?)");
         $stmt2->execute([$empId, -1 * $deduct, $withPay ? 'undertime_paid' : 'undertime_unpaid']);
 
-        header("Location: ../views/employee_profile.php?id=$empId&undertime=1");
-        exit();
+        flash_redirect("../views/employee_profile.php?id=$empId", 'success', 'Undertime recorded successfully');
     }
 
     if (isset($_POST['update_employee'])) {
@@ -198,8 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $leaveModel->logBudgetChange($empId, 'Force', $oldBalances['force_balance'], $force, 'adjustment', null, 'Admin/personnel manual adjustment');
             }
 
-            header("Location: ../views/manage_employees.php?toast_success=Employee+record+updated");
-            exit();
+            flash_redirect('../views/manage_employees.php', 'success', 'Employee record updated');
         }
 
         if ($picPath) {
@@ -210,8 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$first_name,$middle_name,$last_name,$department_name,$department_id,$position,$salary,$statusField,$civil_status,$entrance_to_duty,$unit,$gsis_policy_no,$national_ref,$empId]);
         }
 
-        header("Location: ../views/employee_profile.php?id=$empId&toast_success=Profile+updated");
-        exit();
+        flash_redirect("../views/employee_profile.php?id=$empId", 'success', 'Profile updated');
     }
 
     if (isset($_POST['add_history'])) {
@@ -253,8 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($typeId === 0) {
             if ($earningAmount <= 0) {
-                header("Location: ../views/employee_profile.php?id=$empId&toast_error=Earning+amount+required+for+accrual");
-                exit();
+                flash_redirect("../views/employee_profile.php?id=$empId", 'error', 'Earning amount required for accrual');
             }
 
             $stmt = $db->prepare("
@@ -295,8 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $start
             );
 
-            header("Location: ../views/employee_profile.php?id=$empId&added_history=1");
-            exit();
+            flash_redirect("../views/employee_profile.php?id=$empId", 'success', 'Historical entry added successfully');
         }
 
         if ($typeId === -1) {
@@ -307,8 +303,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $totalUTMin = ($undertimeHours * 60) + $undertimeMinutes;
 
             if ($totalUTMin <= 0) {
-                header("Location: ../views/employee_profile.php?id=$empId&toast_error=Undertime+minutes+required");
-                exit();
+                flash_redirect("../views/employee_profile.php?id=$empId", 'error', 'Undertime minutes required');
             }
 
             $deductUT = undertimeDaysFromChart($undertimeHours, $undertimeMinutes);
@@ -337,8 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $start
             );
 
-            header("Location: ../views/employee_profile.php?id=$empId&undertime=1");
-            exit();
+            flash_redirect("../views/employee_profile.php?id=$empId", 'success', 'Historical undertime recorded successfully');
         }
 
         $stmt = $db->prepare("INSERT INTO leave_requests (employee_id, leave_type, leave_type_id, start_date, end_date, total_days, reason, status, approved_by, workflow_status, snapshot_annual_balance, snapshot_sick_balance, snapshot_force_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -367,8 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtLog->execute([$empId, -1 * $days, 'historical_deduction', $leave_id]);
         }
 
-        header("Location: ../views/employee_profile.php?id=$empId&added_history=1");
-        exit();
+        flash_redirect("../views/employee_profile.php?id=$empId", 'success', 'Historical entry added successfully');
     }
 
     if ($_SESSION['role'] !== 'admin') {
@@ -445,8 +438,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $db->commit();
-        header("Location: ../views/manage_employees.php?success=1");
-        exit();
+        flash_redirect('../views/manage_employees.php', 'success', 'Employee created successfully');
     } catch (Exception $e) {
         if ($db->inTransaction()) {
             $db->rollBack();

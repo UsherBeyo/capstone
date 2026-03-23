@@ -27,6 +27,8 @@ function leaveRulePreset(string $typeName): array {
     $base = [
         'bucket' => 'annual',
         'bucket_label' => 'Vacational Balance',
+        'secondary_bucket' => null,
+        'secondary_bucket_label' => null,
         'show_rules' => true,
         'min_days_notice' => 0,
         'max_days' => null,
@@ -83,6 +85,8 @@ function leaveRulePreset(string $typeName): array {
             return array_merge($base, [
                 'bucket' => 'force',
                 'bucket_label' => 'Force Balance',
+                'secondary_bucket' => 'annual',
+                'secondary_bucket_label' => 'Vacational Balance',
                 'min_days_notice' => 0,
                 'rules_text' => [
                     'Annual five-day vacation leave shall be forfeited if not taken during the year.',
@@ -353,6 +357,7 @@ foreach ($leaveTypes as $lt) {
     $preset['id'] = (int)$lt['id'];
     $preset['name'] = (string)$lt['name'];
     $preset['current_balance'] = $balanceMap[$preset['bucket']] ?? 0;
+    $preset['secondary_balance'] = !empty($preset['secondary_bucket']) ? ($balanceMap[$preset['secondary_bucket']] ?? 0) : null;
     $leaveTypeRulesById[(int)$lt['id']] = $preset;
 }
 
@@ -861,7 +866,11 @@ function updateLeaveTypeUI() {
     detailsSection.classList.toggle('active', !!rule);
 
     if (rule) {
-        balanceBanner.innerHTML = `<strong>${rule.name}</strong> deducts from <strong>${rule.bucket_label}</strong> · Current balance: <strong>${Number(rule.current_balance).toFixed(3)}</strong> day(s)`;
+        if (rule.secondary_bucket_label && rule.secondary_balance !== null) {
+            balanceBanner.innerHTML = `<strong>${rule.name}</strong> deducts from <strong>${rule.bucket_label}</strong> and <strong>${rule.secondary_bucket_label}</strong> · Current balances: <strong>${Number(rule.current_balance).toFixed(3)}</strong> + <strong>${Number(rule.secondary_balance).toFixed(3)}</strong> day(s)`;
+        } else {
+            balanceBanner.innerHTML = `<strong>${rule.name}</strong> deducts from <strong>${rule.bucket_label}</strong> · Current balance: <strong>${Number(rule.current_balance).toFixed(3)}</strong> day(s)`;
+        }
         balanceBanner.classList.add('active');
     } else {
         balanceBanner.classList.remove('active');

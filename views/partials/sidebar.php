@@ -1,11 +1,13 @@
 <?php
 if (!isset($_SESSION)) session_start();
+require_once __DIR__ . '/../../helpers/Flash.php';
 
 if (empty($_SESSION['user_id'])) {
     header('Location: ../views/login.php');
     exit();
 }
 $role = $_SESSION['role'] ?? '';
+$flashMessages = flash_get_all();
 
 if (!isset($db)) {
     require_once __DIR__ . '/../../config/database.php';
@@ -156,9 +158,20 @@ function showToast(message, type = 'info', duration = 3000) {
         }, 300);
     }, duration);
 }
+const sessionFlashMessages = <?= json_encode($flashMessages, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+
 function checkFlashMessage() {
     var params = new URLSearchParams(window.location.search);
     var cleaned = false;
+
+    if (Array.isArray(sessionFlashMessages)) {
+        sessionFlashMessages.forEach(function(item) {
+            if (item && item.message) {
+                showToast(item.message, item.type || 'info');
+            }
+        });
+    }
+
     if (params.has('toast_success')) {
         showToast(decodeURIComponent(params.get('toast_success')), 'success');
         cleaned = true;
@@ -169,6 +182,10 @@ function checkFlashMessage() {
     }
     if (params.has('toast_warning')) {
         showToast(decodeURIComponent(params.get('toast_warning')), 'warning');
+        cleaned = true;
+    }
+    if (params.has('toast_info')) {
+        showToast(decodeURIComponent(params.get('toast_info')), 'info');
         cleaned = true;
     }
     if (params.has('added_history')) {

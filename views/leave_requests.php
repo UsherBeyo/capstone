@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/DateHelper.php';
 
 if (!in_array($_SESSION['role'], ['admin','manager','department_head','hr','personnel'], true)) {
     die("Access denied");
@@ -239,13 +240,37 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
     return array_slice($rows, 0, 8);
 }
 
+function normalizeLeaveTypePreviewKey(string $name): string {
+    $key = strtolower(trim($name));
+    $key = preg_replace('/\s+/', ' ', $key);
+    $key = str_replace([' / ', ' /', '/ '], '/', $key);
+
+    $aliases = [
+        'vacation' => 'vacation leave',
+        'vacational' => 'vacation leave',
+        'annual' => 'vacation leave',
+        'sick' => 'sick leave',
+        'mandatory/force leave' => 'mandatory/forced leave',
+        'mandatory force leave' => 'mandatory/forced leave',
+        'mandatory/forced leave' => 'mandatory/forced leave',
+        'force' => 'mandatory/forced leave',
+        'force leave' => 'mandatory/forced leave',
+        'forced' => 'mandatory/forced leave',
+        'forced leave' => 'mandatory/forced leave',
+        'mandatory leave' => 'mandatory/forced leave',
+        'mandatory' => 'mandatory/forced leave',
+    ];
+
+    return $aliases[$key] ?? $key;
+}
+
 function computeProjectedBalances(array $row): array {
     $annualBefore = floatval($row['annual_balance'] ?? 0);
     $sickBefore   = floatval($row['sick_balance'] ?? 0);
     $forceBefore  = floatval($row['force_balance'] ?? 0);
 
     $days = floatval($row['total_days'] ?? 0);
-    $type = strtolower(trim((string)($row['leave_type_name'] ?? $row['leave_type'] ?? '')));
+    $type = normalizeLeaveTypePreviewKey((string)($row['leave_type_name'] ?? $row['leave_type'] ?? ''));
 
     $projected = [
         'annual_before' => $annualBefore,
@@ -257,15 +282,16 @@ function computeProjectedBalances(array $row): array {
         'bucket'        => 'none',
     ];
 
-    if (in_array($type, ['annual', 'vacational', 'vacation', 'vacation leave'], true)) {
+    if ($type === 'vacation leave') {
         $projected['annual_after'] = max(0, $annualBefore - $days);
         $projected['bucket'] = 'annual';
-    } elseif (in_array($type, ['sick', 'sick leave'], true)) {
+    } elseif ($type === 'sick leave') {
         $projected['sick_after'] = max(0, $sickBefore - $days);
         $projected['bucket'] = 'sick';
-    } elseif (in_array($type, ['force', 'mandatory', 'forced', 'mandatory / forced leave', 'mandatory/forced leave'], true)) {
+    } elseif ($type === 'mandatory/forced leave') {
+        $projected['annual_after'] = max(0, $annualBefore - $days);
         $projected['force_after'] = max(0, $forceBefore - $days);
-        $projected['bucket'] = 'force';
+        $projected['bucket'] = 'annual_force';
     }
 
     return $projected;
@@ -450,9 +476,9 @@ if (empty($_SESSION['csrf_token'])) {
 
                             <td class="col-dates">
                                 <div class="date-stack">
-                                    <span><?= safe_h($r['start_date']); ?></span>
+                                    <span><?= safe_h(app_format_date($r['start_date'] ?? '')); ?></span>
                                     <span class="date-arrow">to</span>
-                                    <span><?= safe_h($r['end_date']); ?></span>
+                                    <span><?= safe_h(app_format_date($r['end_date'] ?? '')); ?></span>
                                 </div>
                             </td>
 
@@ -560,9 +586,9 @@ if (empty($_SESSION['csrf_token'])) {
 
                             <td class="col-dates">
                                 <div class="date-stack">
-                                    <span><?= safe_h($r['start_date']); ?></span>
+                                    <span><?= safe_h(app_format_date($r['start_date'] ?? '')); ?></span>
                                     <span class="date-arrow">to</span>
-                                    <span><?= safe_h($r['end_date']); ?></span>
+                                    <span><?= safe_h(app_format_date($r['end_date'] ?? '')); ?></span>
                                 </div>
                             </td>
 
@@ -633,7 +659,7 @@ if (empty($_SESSION['csrf_token'])) {
                                     <div class="review-panel">
                                         <h4>Leave Request Summary</h4>
                                         <div class="review-kv"><span>Leave Type</span><strong><?= safe_h($r['leave_type_name']); ?></strong></div>
-                                        <div class="review-kv"><span>Date Range</span><strong><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></strong></div>
+                                        <div class="review-kv"><span>Date Range</span><strong><?= safe_h(app_format_date_range($r['start_date'] ?? '', $r['end_date'] ?? '')); ?></strong></div>
                                         <div class="review-kv"><span>Total Days</span><strong><?= trunc3($r['total_days']); ?></strong></div>
                                         <div class="review-kv"><span>Reason</span><strong><?= safe_h($r['reason'] ?? ''); ?></strong></div>
                                         <div class="review-kv"><span>Dept Head Comment</span><strong><?= safe_h($r['department_head_comments'] ?? ''); ?></strong></div>
@@ -716,7 +742,7 @@ if (empty($_SESSION['csrf_token'])) {
                                                         $statusClass = strtolower(preg_replace('/[^a-z0-9]+/', '-', $statusTextRaw));
                                                         ?>
                                                         <tr class="<?= $rowClass; ?>">
-                                                            <td><?= safe_h($row['date'] ?? ''); ?></td>
+                                                            <td><?= safe_h(app_format_date($row['date'] ?? '')); ?></td>
                                                             <td class="preview-particulars"><?= safe_h($row['particulars'] ?? ''); ?></td>
                                                             <td><?= ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : '—'); ?></td>
                                                             <td><?= ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : '—'); ?></td>
@@ -806,7 +832,7 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
                             <td><?= safe_h($r['email']); ?></td>
                             <td><?= safe_h($r['leave_type_name']); ?></td>
-                            <td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
+                            <td><?= safe_h(app_format_date_range($r['start_date'] ?? '', $r['end_date'] ?? '')); ?></td>
                             <td><?= trunc3($r['total_days']); ?></td>
                             <td><?= safe_h($r['workflow_status'] ?? 'finalized'); ?></td>
                             <td><?= safe_h($r['print_status'] ?? '—'); ?></td>
@@ -918,7 +944,7 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
                             <td><?= safe_h($r['email']); ?></td>
                             <td><?= safe_h($r['leave_type_name']); ?></td>
-                            <td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
+                            <td><?= safe_h(app_format_date_range($r['start_date'] ?? '', $r['end_date'] ?? '')); ?></td>
                             <td><?= safe_h($r['status']); ?></td>
                             <td><?= safe_h($r['workflow_status'] ?? '—'); ?></td>
                             <td><?= safe_h($r['personnel_comments'] ?? $r['department_head_comments'] ?? $r['manager_comments'] ?? ''); ?></td>
@@ -954,7 +980,7 @@ if (empty($_SESSION['csrf_token'])) {
                         <tr>
                             <td><?= safe_h(trim($r['first_name'].' '.($r['middle_name'] ?? '').' '.$r['last_name'])); ?></td>
                             <td><?= safe_h($r['leave_type_name'] ?? $r['leave_type']); ?></td>
-                            <td><?= safe_h($r['start_date'].' to '.$r['end_date']); ?></td>
+                            <td><?= safe_h(app_format_date_range($r['start_date'] ?? '', $r['end_date'] ?? '')); ?></td>
                             <td><?= trunc3($r['total_days']); ?></td>
                             <td><?= safe_h(ucfirst($r['status'])); ?></td>
                             <td><?= safe_h($r['manager_comments'] ?? $r['reason'] ?? ''); ?></td>

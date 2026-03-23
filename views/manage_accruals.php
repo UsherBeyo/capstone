@@ -1,7 +1,9 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/DateHelper.php';
 require_once '../models/Leave.php';
+require_once '../helpers/Flash.php';
 
 if ($_SESSION['role'] !== 'admin') {
     die("Access denied");
@@ -25,13 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
     $month = trim($_POST['month'] ?? date('Y-m'));
 
     if ($employee_id <= 0) {
-        header("Location: manage_accruals.php?toast_error=Please+select+an+employee");
-        exit();
+        flash_redirect('manage_accruals.php', 'error', 'Please select an employee');
     }
 
     if ($amount <= 0) {
-        header("Location: manage_accruals.php?toast_error=Accrual+amount+must+be+greater+than+zero");
-        exit();
+        flash_redirect('manage_accruals.php', 'error', 'Accrual amount must be greater than zero');
     }
 
     $ok = $leaveModel->accrueSingleEmployee(
@@ -43,11 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
     );
 
     if ($ok) {
-        header("Location: manage_accruals.php?toast_success=Manual+accrual+recorded+successfully");
+        flash_redirect('manage_accruals.php', 'success', 'Manual accrual recorded successfully');
     } else {
-        header("Location: manage_accruals.php?toast_error=Failed+to+record+manual+accrual");
+        flash_redirect('manage_accruals.php', 'error', 'Failed to record manual accrual');
     }
-    exit();
 }
 
 // Handle bulk accrual for all employees
@@ -60,8 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_bulk_accrual']
     $month = trim($_POST['bulk_month'] ?? date('Y-m'));
 
     if ($amount <= 0) {
-        header("Location: manage_accruals.php?toast_error=Bulk+accrual+amount+must+be+greater+than+zero");
-        exit();
+        flash_redirect('manage_accruals.php', 'error', 'Bulk accrual amount must be greater than zero');
     }
 
     $result = $leaveModel->accrueAllEmployees(
@@ -73,11 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_bulk_accrual']
 
     if (!empty($result['success'])) {
         $count = intval($result['count'] ?? 0);
-        header("Location: manage_accruals.php?toast_success=" . urlencode("Bulk accrual completed for {$count} employee(s)."));
+        flash_redirect('manage_accruals.php', 'success', "Bulk accrual completed for {$count} employee(s).");
     } else {
-        header("Location: manage_accruals.php?toast_error=" . urlencode($result['message'] ?? 'Failed to perform bulk accrual.'));
+        flash_redirect('manage_accruals.php', 'error', $result['message'] ?? 'Failed to perform bulk accrual.');
     }
-    exit();
 }
 
 // Get employees for dropdown
@@ -214,8 +211,8 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
                 <tr>
                     <td><?= htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?></td>
                     <td><?= number_format((float)$a['amount'], 3); ?> days</td>
-                    <td><?= htmlspecialchars($a['month_reference'] ?? '—'); ?></td>
-                    <td><?= !empty($a['created_at']) ? date('M d, Y', strtotime($a['created_at'])) : ''; ?></td>
+                    <td><?= htmlspecialchars(!empty($a['month_reference']) ? app_format_month_ref($a['month_reference']) : '—'); ?></td>
+                    <td><?= !empty($a['created_at']) ? htmlspecialchars(app_format_date($a['created_at'])) : ''; ?></td>
                 </tr>
                 <?php endforeach; ?>
             </table>

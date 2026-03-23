@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/database.php';
 require_once '../models/LeaveType.php';
+require_once '../helpers/Flash.php';
 
 if (!in_array($_SESSION['role'], ['admin','hr'])) {
     die("Unauthorized");
@@ -28,8 +29,7 @@ if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'auto_approve' => isset($_POST['auto_approve']) ? 1 : 0,
     ];
     $typeModel->create($data);
-    header('Location: ../controllers/LeaveTypeController.php');
-    exit();
+    flash_redirect('../controllers/LeaveTypeController.php', 'success', 'Leave type updated');
 }
 
 if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -43,14 +43,12 @@ if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         isset($_POST['auto_approve']) ? 1 : 0,
         $id
     ]);
-    header('Location: ../controllers/LeaveTypeController.php');
-    exit();
+    flash_redirect('../controllers/LeaveTypeController.php', 'success', 'Leave type deleted');
 }
 
 if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = intval($_POST['type_id']);
     $stmt = $db->prepare("DELETE FROM leave_types WHERE id=?");
     $stmt->execute([$id]);
-    header('Location: ../controllers/LeaveTypeController.php');
-    exit();
+    flash_redirect('../controllers/LeaveTypeController.php', 'success', 'Leave type created');
 }

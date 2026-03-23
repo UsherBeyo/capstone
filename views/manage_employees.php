@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/DateHelper.php';
 
 if ($_SESSION['role'] !== 'admin') {
     die("Access denied");
@@ -36,12 +37,344 @@ if (isset($_GET['view_history'])) {
 <head>
     <title>Manage Employees</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+
+    <style>
+        .employee-page-shell {
+            display: grid;
+            gap: 24px;
+        }
+        .employee-list-card {
+            margin-top: 24px;
+        }
+        .employee-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .employee-list-meta {
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .employee-search-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+        .employee-search-row .search-input {
+            flex: 1 1 280px;
+            min-width: 220px;
+        }
+        .employee-list-card .table-wrap {
+            overflow-x: auto;
+            overflow-y: visible;
+            padding-bottom: 8px;
+            scrollbar-gutter: stable both-edges;
+        }
+        .employee-list-card .table-wrap::after {
+            content: 'Scroll sideways to see more columns';
+            display: block;
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .employee-table {
+            width: 100%;
+            min-width: 1180px;
+            table-layout: fixed;
+        }
+        .employee-table th,
+        .employee-table td {
+            white-space: nowrap;
+            vertical-align: middle;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .employee-table th:nth-child(1),
+        .employee-table td:nth-child(1) { width: 70px; }
+        .employee-table th:nth-child(2),
+        .employee-table td:nth-child(2) { width: 150px; }
+        .employee-table th:nth-child(3),
+        .employee-table td:nth-child(3) { width: 220px; }
+        .employee-table th:nth-child(4),
+        .employee-table td:nth-child(4) { width: 120px; }
+        .employee-table th:nth-child(5),
+        .employee-table td:nth-child(5) { width: 120px; }
+        .employee-table th:nth-child(6),
+        .employee-table td:nth-child(6) { width: 130px; }
+        .employee-table th:nth-child(7),
+        .employee-table td:nth-child(7) { width: 110px; }
+        .employee-table th:nth-child(8),
+        .employee-table td:nth-child(8) { width: 100px; }
+        .employee-table th:nth-child(9),
+        .employee-table td:nth-child(9),
+        .employee-table th:nth-child(10),
+        .employee-table td:nth-child(10),
+        .employee-table th:nth-child(11),
+        .employee-table td:nth-child(11) { width: 96px; }
+        .employee-table th:nth-child(12),
+        .employee-table td:nth-child(12) { width: 132px; }
+        .employee-table th:last-child,
+        .employee-table td:last-child {
+            position: sticky;
+            right: 0;
+            z-index: 2;
+            box-shadow: -8px 0 18px rgba(15,23,42,.04);
+        }
+        .employee-table thead th:last-child {
+            background: #fff;
+            z-index: 3;
+        }
+        .employee-table tbody tr:nth-child(odd) td:last-child {
+            background: #fff;
+        }
+        .employee-table tbody tr:nth-child(even) td:last-child {
+            background: #f8fafc;
+        }
+        .employee-avatar-thumb {
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            object-fit: cover;
+            cursor: pointer;
+            border: 2px solid #dbeafe;
+            box-shadow: 0 6px 14px rgba(37,99,235,.12);
+        }
+        .employee-name-cell {
+            min-width: 180px;
+        }
+        .employee-role-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .employee-balance-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 84px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            font-weight: 600;
+            color: #0f172a;
+            white-space: nowrap;
+        }
+        .employee-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: nowrap;
+            min-width: 0;
+        }
+        .employee-actions .profile-link {
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            text-decoration: none;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text);
+            font-weight: 600;
+            font-size: 13px;
+            line-height: 1;
+            transition: all .18s ease;
+            box-shadow: 0 4px 12px rgba(15,23,42,.04);
+            flex: 0 0 32px;
+            overflow: hidden;
+        }
+        .employee-actions .profile-link span:first-child {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            font-size: 13px;
+            line-height: 1;
+        }
+        .employee-actions .profile-link span:last-child {
+            display: none !important;
+        }
+        .employee-actions .profile-link:hover {
+            border-color: #bfdbfe;
+            background: #eff6ff;
+            color: var(--primary);
+            transform: translateY(-1px);
+        }
+        .history-card table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .history-card th,
+        .history-card td {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .history-card th {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--muted);
+        }
+        .employee-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        @media (max-width: 1600px) {
+            .employee-table th,
+            .employee-table td {
+                padding: 10px 10px;
+                font-size: 13px;
+            }
+            .employee-table th:nth-child(2),
+            .employee-table td:nth-child(2) { width: 132px; }
+            .employee-table th:nth-child(3),
+            .employee-table td:nth-child(3) { width: 190px; }
+            .employee-table th:nth-child(12),
+            .employee-table td:nth-child(12) { width: 132px; }
+        }
+        @media (max-width: 1500px) {
+            .employee-table th:nth-child(8),
+            .employee-table td:nth-child(8) { display: none; }
+            .employee-table { min-width: 1080px; }
+        }
+        @media (max-width: 1380px) {
+            .employee-table th:nth-child(7),
+            .employee-table td:nth-child(7),
+            .employee-table th:nth-child(6),
+            .employee-table td:nth-child(6) { display: none; }
+            .employee-table { min-width: 930px; }
+        }
+        @media (max-width: 1260px) {
+            .employee-table th:nth-child(5),
+            .employee-table td:nth-child(5) { display: none; }
+            .employee-table { min-width: 820px; }
+        }
+        @media (max-width: 1120px) {
+            .employee-table th:nth-child(1),
+            .employee-table td:nth-child(1),
+            .employee-table th:nth-child(4),
+            .employee-table td:nth-child(4) { display: none; }
+            .employee-table { min-width: 720px; }
+        }
+        @media (max-width: 920px) {
+            .responsive-admin-table {
+                min-width: 100%;
+                border-collapse: separate;
+            }
+            .employee-list-card .table-wrap::after {
+                display: none;
+            }
+            .responsive-admin-table thead {
+                display: none;
+            }
+            .responsive-admin-table tbody {
+                display: grid;
+                gap: 14px;
+            }
+            .responsive-admin-table tr {
+                display: grid;
+                gap: 10px;
+                padding: 14px;
+                border: 1px solid var(--border);
+                border-radius: 16px;
+                background: #fff;
+                box-shadow: 0 10px 24px rgba(15,23,42,.05);
+            }
+            .responsive-admin-table td,
+            .responsive-admin-table th:last-child,
+            .responsive-admin-table td:last-child {
+                position: static;
+                box-shadow: none;
+                background: transparent;
+            }
+            .responsive-admin-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 0;
+                border-bottom: none;
+                font-size: 13px;
+                white-space: normal;
+            }
+            .responsive-admin-table td::before {
+                content: attr(data-label);
+                flex: 0 0 110px;
+                max-width: 110px;
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                color: var(--muted);
+                font-weight: 700;
+            }
+            .responsive-admin-table td.employee-photo-cell,
+            .responsive-admin-table td.employee-actions-cell {
+                display: block;
+            }
+            .responsive-admin-table td.employee-photo-cell::before,
+            .responsive-admin-table td.employee-actions-cell::before {
+                display: block;
+                margin-bottom: 8px;
+                max-width: none;
+            }
+            .employee-actions {
+                min-width: 0;
+                flex-wrap: wrap;
+                justify-content: flex-start;
+            }
+            .employee-actions .profile-link {
+                width: auto;
+                height: auto;
+                padding: 8px 12px;
+                flex: 1 1 calc(50% - 8px);
+            }
+            .employee-actions .profile-link span:last-child {
+                display: inline !important;
+            }
+        }
+        @media (max-width: 560px) {
+            .employee-search-row {
+                margin-bottom: 14px;
+            }
+            .employee-actions .profile-link {
+                flex: 1 1 100%;
+            }
+            .modal-content.small {
+                width: min(100%, 520px);
+            }
+            #modalImage {
+                max-width: 92% !important;
+                max-height: 72% !important;
+            }
+        }
+    </style>
+
 </head>
 <body>
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="app-main">
+<div class="app-main employee-page-shell">
     <?php
     $title = 'Manage Employees';
     $actions = ['<button id="openCreateModal" class="btn btn-primary">+ New Employee</button>'];
@@ -163,8 +496,9 @@ if (isset($_GET['view_history'])) {
                     </select>
                 </div>
 
-                <div style="text-align:right;">
-                    <button type="submit">Create</button>
+                <div class="employee-modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelCreateModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
                 </div>
             </form>
         </div>
@@ -176,6 +510,9 @@ if (isset($_GET['view_history'])) {
             document.getElementById('createModal').style.display = 'flex';
         });
         document.getElementById('closeCreateModal').addEventListener('click', function(){
+            document.getElementById('createModal').style.display = 'none';
+        });
+        document.getElementById('cancelCreateModal').addEventListener('click', function(){
             document.getElementById('createModal').style.display = 'none';
         });
         window.addEventListener('click', function(e){
@@ -192,13 +529,21 @@ if (isset($_GET['view_history'])) {
         });
     </script>
 
-    <div class="ui-card" style="margin-top:30px;">
-        <h2>Employee List</h2>
-        <div class="search-input" style="margin: 20px 0;">
-            <input class="form-control" type="text" id="empSearch" placeholder="Search employees...">
+    <div class="ui-card employee-list-card">
+        <div class="employee-list-header">
+            <div>
+                <h2>Employee List</h2>
+                <div class="employee-list-meta">Manage employee profiles, balances, and quick actions in one place.</div>
+            </div>
+            <div class="employee-list-meta">Total employees: <strong><?= count($employees); ?></strong></div>
         </div>
-        <div class="table-wrap" style="margin-top: 16px;">
-            <table class="ui-table">
+        <div class="employee-search-row">
+            <div class="search-input">
+                <input class="form-control" type="text" id="empSearch" placeholder="Search by name, email, role, department, or status...">
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="ui-table employee-table responsive-admin-table">
                 <thead>
                 <tr>
                     <th>Photo</th>
@@ -219,29 +564,29 @@ if (isset($_GET['view_history'])) {
 
             <?php foreach($employees as $e): ?>
             <tr>
-                <td><?php if(!empty($e['profile_pic'])) echo "<img src='".$e['profile_pic']."' style='width:40px;height:40px;border-radius:50%;cursor:pointer;' onclick=\"openImageModal('".$e['profile_pic']."', '".htmlspecialchars(trim($e['first_name'].' '.($e['middle_name'] ?? '').' '.$e['last_name']))."')\">"; ?></td>
-                <td><?= htmlspecialchars(trim($e['first_name']." ".($e['middle_name'] ?? '')." ".$e['last_name'])); ?></td>
-                <td><?= htmlspecialchars($e['email']); ?></td>
-                <td><?= htmlspecialchars($e['role']); ?></td>
-                <td><?= htmlspecialchars($e['department']); ?></td>
-                <td><?= htmlspecialchars($e['position'] ?? ''); ?></td>
-                <td><?= ($e['salary'] !== null && $e['salary'] !== '') ? number_format((float)$e['salary'], 2) : '—'; ?></td>
-                <td><?= htmlspecialchars($e['status'] ?? ''); ?></td>
-                <td><?= isset($e['annual_balance']) ? number_format($e['annual_balance'],3) : '0.000'; ?></td>
-                <td><?= isset($e['sick_balance']) ? number_format($e['sick_balance'],3) : '0.000'; ?></td>
-                <td><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></td>
-                <td>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link" style="display: flex; align-items: center; gap: 4px;">
-                            <span>&#128100;</span>
+                <td data-label="Photo" class="employee-photo-cell"><?php if(!empty($e['profile_pic'])): ?><img src="<?= htmlspecialchars($e['profile_pic']); ?>" class="employee-avatar-thumb" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars(trim($e['first_name'].' '.($e['middle_name'] ?? '').' '.$e['last_name'])); ?>')"><?php else: ?><div class="employee-avatar-thumb" style="display:flex;align-items:center;justify-content:center;background:#eff6ff;color:#1d4ed8;font-weight:700;">👤</div><?php endif; ?></td>
+                <td data-label="Name" class="employee-name-cell"><?= htmlspecialchars(trim($e['first_name']." ".($e['middle_name'] ?? '')." ".$e['last_name'])); ?></td>
+                <td data-label="Email"><?= htmlspecialchars($e['email']); ?></td>
+                <td data-label="Role"><span class="employee-role-pill"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $e['role']))); ?></span></td>
+                <td data-label="Department"><?= htmlspecialchars($e['department']); ?></td>
+                <td data-label="Position"><?= htmlspecialchars($e['position'] ?? '—'); ?></td>
+                <td data-label="Salary"><?= ($e['salary'] !== null && $e['salary'] !== '') ? number_format((float)$e['salary'], 2) : '—'; ?></td>
+                <td data-label="Status"><?= htmlspecialchars($e['status'] ?? '—'); ?></td>
+                <td data-label="Vacational"><span class="employee-balance-chip"><?= isset($e['annual_balance']) ? number_format($e['annual_balance'],3) : '0.000'; ?></span></td>
+                <td data-label="Sick"><span class="employee-balance-chip"><?= isset($e['sick_balance']) ? number_format($e['sick_balance'],3) : '0.000'; ?></span></td>
+                <td data-label="Force"><span class="employee-balance-chip"><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></span></td>
+                <td data-label="Actions" class="employee-actions-cell">
+                    <div class="employee-actions">
+                        <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">
+                            <span aria-hidden="true">&#128100;</span>
                             <span>View</span>
                         </a>
-                        <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link" style="display: flex; align-items: center; gap: 4px;">
-                            <span>✏️</span>
+                        <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link">
+                            <span aria-hidden="true">✏️</span>
                             <span>Edit</span>
                         </a>
-                        <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link" style="display: flex; align-items: center; gap: 4px;">
-                            <span>📊</span>
+                        <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link">
+                            <span aria-hidden="true">📊</span>
                             <span>Export</span>
                         </a>
                     </div>
@@ -250,17 +595,19 @@ if (isset($_GET['view_history'])) {
             <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
     </div>
 
     <?php if(!empty($historyEmployee)): ?>
-    <div class="ui-card" style="margin-top:30px;">
+    <div class="ui-card history-card">
         <h3>Leave History for Employee</h3>
-        <table>
+        <div class="table-wrap">
+        <table class="ui-table">
             <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Workflow</th><th>Comments</th></tr>
             <?php foreach($historyEmployee as $h): ?>
             <tr>
                 <td><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type']); ?></td>
-                <td><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
+                <td><?= htmlspecialchars(app_format_date_range($h['start_date'] ?? '', $h['end_date'] ?? '')); ?></td>
                 <td><?= number_format((float)($h['total_days'] ?? 0), 3); ?></td>
                 <td><?= ucfirst($h['status']); ?></td>
                 <td><?= htmlspecialchars($h['workflow_status'] ?? '—'); ?></td>
@@ -268,6 +615,7 @@ if (isset($_GET['view_history'])) {
             </tr>
             <?php endforeach; ?>
         </table>
+        </div>
     </div>
     <?php endif; ?>
 
@@ -276,9 +624,8 @@ if (isset($_GET['view_history'])) {
 <script>
 document.getElementById('empSearch').addEventListener('keyup', function(){
     var filter = this.value.toLowerCase();
-    var rows = document.querySelectorAll('table tr');
-    rows.forEach(function(row, index){
-        if(index === 0) return;
+    var rows = document.querySelectorAll('.employee-table tbody tr');
+    rows.forEach(function(row){
         var text = row.textContent.toLowerCase();
         row.style.display = text.indexOf(filter) > -1 ? '' : 'none';
     });

@@ -3,6 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     if (session_status() === PHP_SESSION_NONE) session_start();
 }
 require_once '../config/database.php';
+require_once '../helpers/DateHelper.php';
 
 $db = (new Database())->connect();
 
@@ -154,7 +155,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
             if ($statusRaw === 'approved') {
                 if ($isSick) {
                     $sickDed = $days;
-                } elseif (!$isForce) {
+                } else {
                     $vacDed = $days;
                 }
             }
@@ -168,9 +169,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         $particulars = $leaveType;
         if (!$isAccrual && stripos($particulars, 'leave') === false) {
             $particulars .= ' Leave';
-        }
-        if ($isForce) {
-            $particulars .= ' (Force balance)';
         }
 
         $rows[] = [
@@ -269,7 +267,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
 
             $particulars = ucfirst($action) . ' ' . $leaveType;
             if ($isForce) {
-                $particulars .= ' (Force balance)';
+                $particulars .= ' (Force balance entry)';
             }
         }
 
@@ -315,7 +313,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
 
     foreach ($rows as $row) {
         echo "<tr>";
-        echo "<td>".htmlspecialchars($row['date'])."</td>";
+        echo "<td>".htmlspecialchars(app_format_date($row['date'] ?? ''))."</td>";
         echo "<td>".htmlspecialchars($row['particulars'])."</td>";
         echo "<td>".($row['vac_earned'] != 0 ? trunc3($row['vac_earned']) : '')."</td>";
         echo "<td>".($row['vac_deducted'] != 0 ? trunc3($row['vac_deducted']) : '')."</td>";
@@ -358,6 +356,8 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
         foreach($r as $key => $cell) {
             if ($key === 'total_days') {
                 $cell = trunc3($cell);
+            } elseif (in_array($key, ['start_date', 'end_date', 'submitted_date'], true)) {
+                $cell = app_format_date((string)$cell);
             }
             echo "<td>".htmlspecialchars($cell)."</td>";
         }
@@ -382,6 +382,62 @@ $stmtBudget = $db->prepare("SELECT * FROM budget_history WHERE employee_id = ? O
 $stmtBudget->execute([$id]);
 $budgetHistory = $stmtBudget->fetchAll(PDO::FETCH_ASSOC);
 
+$balanceUsage = [
+    'annual' => 0.0,
+    'sick' => 0.0,
+    'force' => 0.0,
+];
+
+$stmtUsage = $db->prepare("SELECT leave_type, action, old_balance, new_balance, notes FROM budget_history WHERE employee_id = ? ORDER BY id ASC");
+$stmtUsage->execute([$id]);
+$usageRows = $stmtUsage->fetchAll(PDO::FETCH_ASSOC);
+
+foreach ($usageRows as $usageRow) {
+    $leaveTypeKey = normalizeLeaveTypeKey((string)($usageRow['leave_type'] ?? ''));
+    $actionKey = strtolower(trim((string)($usageRow['action'] ?? '')));
+    $notesMeta = parseBudgetHistoryMeta((string)($usageRow['notes'] ?? ''));
+    $delta = max(0, (float)($usageRow['old_balance'] ?? 0) - (float)($usageRow['new_balance'] ?? 0));
+
+    if (in_array($actionKey, ['undertime_paid', 'undertime_unpaid'], true)) {
+        $balanceUsage['annual'] += isset($notesMeta['UT_DEDUCT']) ? (float)$notesMeta['UT_DEDUCT'] : $delta;
+        continue;
+    }
+
+    if ($actionKey !== 'deduction') {
+        continue;
+    }
+
+    if ($leaveTypeKey === 'sick leave') {
+        $balanceUsage['sick'] += $delta;
+    } elseif ($leaveTypeKey === 'mandatory/forced leave') {
+        $balanceUsage['annual'] += $delta;
+        $balanceUsage['force'] += $delta;
+    } else {
+        $balanceUsage['annual'] += $delta;
+    }
+}
+
+$balanceCards = [
+    [
+        'label' => 'Vacation',
+        'remaining' => (float)($e['annual_balance'] ?? 0),
+        'used' => (float)$balanceUsage['annual'],
+        'hint' => 'Includes approved leave deductions and recorded undertime.',
+    ],
+    [
+        'label' => 'Sick',
+        'remaining' => (float)($e['sick_balance'] ?? 0),
+        'used' => (float)$balanceUsage['sick'],
+        'hint' => 'Based on approved sick-leave deductions.',
+    ],
+    [
+        'label' => 'Force',
+        'remaining' => (float)($e['force_balance'] ?? 0),
+        'used' => (float)$balanceUsage['force'],
+        'hint' => 'Reduced when Mandatory / Forced Leave is approved.',
+    ],
+];
+
 // fetch all leave types for admin modals
 $allTypes = [];
 $stmtTypes = $db->query("SELECT * FROM leave_types ORDER BY name");
@@ -400,6 +456,134 @@ if ($stmtTypes) {
         .profile-header { display:flex; gap:16px; align-items:center; }
         .profile-pic { width:96px; height:96px; border-radius:50%; object-fit:cover; }
         .small-form input, .small-form select { width: 100%; padding:8px; margin-bottom:8px; border-radius:6px; }
+        .employee-avatar-button {
+            width: 88px;
+            height: 88px;
+            border-radius: 999px;
+            overflow: hidden;
+            border: 3px solid rgba(37, 99, 235, 0.16);
+            padding: 0;
+            background: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .employee-avatar-button:hover {
+            transform: translateY(-2px) scale(1.02);
+            border-color: rgba(37, 99, 235, 0.34);
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+        }
+        .employee-avatar-button img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .employee-avatar-fallback {
+            width: 88px;
+            height: 88px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:32px;
+            border: 3px solid rgba(37, 99, 235, 0.16);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        }
+        .employee-header-card {
+            overflow: hidden;
+        }
+        .employee-header-meta {
+            display:grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .employee-header-pill {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+        }
+        .employee-header-pill .k {
+            display:block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+        .employee-header-pill .v {
+            font-size: 14px;
+            color: var(--text);
+            font-weight: 600;
+        }
+        .leave-balance-card .progress-meta {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:12px;
+            margin-bottom: 8px;
+            font-size:12px;
+            color: var(--muted);
+        }
+        .leave-balance-card .progress-bar-inner.has-balance {
+            min-width: 10px;
+        }
+        .leave-balance-card .balance-hint {
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+        .profile-image-modal-content {
+            width: min(92vw, 760px);
+            max-width: min(92vw, 760px);
+            padding: 24px;
+            position: relative;
+            text-align: center;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+        }
+        .profile-image-modal-title {
+            margin: 0 0 16px 0;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .profile-image-modal-figure {
+            margin: 0;
+            border-radius: 18px;
+            overflow: hidden;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+        }
+        .profile-image-modal-figure img {
+            width: 100%;
+            max-height: 72vh;
+            object-fit: contain;
+            display: block;
+            background: #f8fafc;
+        }
+        .profile-image-modal-caption {
+            margin-top: 14px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+        @media (max-width: 720px) {
+            .employee-header-meta {
+                grid-template-columns: 1fr;
+            }
+            .profile-image-modal-content {
+                padding: 18px;
+                width: min(94vw, 94vw);
+            }
+        }
     </style>
 </head>
 <body>
@@ -427,20 +611,37 @@ if ($stmtTypes) {
 
     <!-- 1. Employee Header Card -->
     <div class="ui-card employee-header-card">
-        <div class="two-column" style="align-items:flex-start;">
+        <div class="two-column" style="align-items:flex-start;gap:20px;">
             <div>
                 <?php if(!empty($e['profile_pic'])): ?>
-                    <img src="<?= htmlspecialchars($e['profile_pic']); ?>" alt="Profile" style="width:80px;height:80px;border-radius:50%;object-fit:cover;cursor:pointer;border:2px solid var(--border);" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars($e['first_name'].' '.$e['last_name']); ?>')">
+                    <button type="button" class="employee-avatar-button" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name'])); ?>')" aria-label="Open profile image">
+                        <img src="<?= htmlspecialchars($e['profile_pic']); ?>" alt="Profile">
+                    </button>
                 <?php else: ?>
-                    <div style="width:80px;height:80px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:32px;border:2px solid var(--border);">👤</div>
+                    <div class="employee-avatar-fallback">👤</div>
                 <?php endif; ?>
             </div>
-            <div style="flex:1;">
+            <div style="flex:1;min-width:0;">
                 <h2 style="margin:0 0 8px 0;"><?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name'])); ?></h2>
-                <p style="margin:0 0 4px 0;font-size:14px;color:#6b7280;"><?= htmlspecialchars($e['email']); ?></p>
-                <p style="margin:0 0 12px 0;font-size:14px;">Department: <strong><?= htmlspecialchars($e['department']); ?></strong></p>
-                <p style="margin:0 0 12px 0;font-size:14px;">Position: <strong><?= htmlspecialchars($e['position'] ?? '—'); ?></strong></p>
-                <p style="margin:0 0 12px 0;font-size:14px;">Entrance to Duty: <strong><?= htmlspecialchars($e['entrance_to_duty'] ?? '0000-00-00'); ?></strong></p>
+                <p style="margin:0 0 4px 0;font-size:14px;color:#6b7280;word-break:break-word;"><?= htmlspecialchars($e['email']); ?></p>
+                <div class="employee-header-meta">
+                    <div class="employee-header-pill">
+                        <span class="k">Department</span>
+                        <span class="v"><?= htmlspecialchars($e['department'] ?? '—'); ?></span>
+                    </div>
+                    <div class="employee-header-pill">
+                        <span class="k">Position</span>
+                        <span class="v"><?= htmlspecialchars($e['position'] ?? '—'); ?></span>
+                    </div>
+                    <div class="employee-header-pill">
+                        <span class="k">Entrance to Duty</span>
+                        <span class="v"><?= htmlspecialchars(!empty($e['entrance_to_duty']) ? date('F j, Y', strtotime($e['entrance_to_duty'])) : '—'); ?></span>
+                    </div>
+                    <div class="employee-header-pill">
+                        <span class="k">Status</span>
+                        <span class="v"><?= htmlspecialchars($e['status'] ?? '—'); ?></span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -450,25 +651,29 @@ if ($stmtTypes) {
     <div class="leave-balance-section">
         <h3>Leave Balances</h3>
         <div class="leave-balance-cards">
+            <?php foreach($balanceCards as $card): ?>
             <?php
-                $balances = [
-                    'Vacation' => floatval($e['annual_balance'] ?? 0),
-                    'Sick' => floatval($e['sick_balance'] ?? 0),
-                    'Force' => floatval($e['force_balance'] ?? 0)
-                ];
-                foreach($balances as $label => $val):
-                    $used = 0; // if additional logic exists, compute used, here placeholder
-                    $total = $val; // assuming total equals current balance
-                    $pct = $total > 0 ? min(100, ($used/$total)*100) : 0;
+                $remaining = max(0, (float)($card['remaining'] ?? 0));
+                $used = max(0, (float)($card['used'] ?? 0));
+                $totalTracked = $remaining + $used;
+                $pct = $totalTracked > 0 ? max(0, min(100, ($remaining / $totalTracked) * 100)) : 0;
+                $pctStyle = $pct > 0 ? number_format($pct, 2, '.', '') : '0';
             ?>
             <div class="leave-balance-card">
-                <div class="label"><?= $label; ?></div>
-                <div class="value"><?= number_format($total,3); ?> days</div>
-                <div class="progress-bar"><div class="progress-bar-inner" style="width:<?= $pct; ?>%;"></div></div>
+                <div class="label"><?= htmlspecialchars($card['label']); ?></div>
+                <div class="value"><?= number_format($remaining,3); ?> days</div>
+                <div class="progress-meta">
+                    <span>Remaining credit</span>
+                    <strong><?= number_format($pct,1); ?>%</strong>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-bar-inner <?= $remaining > 0 ? 'has-balance' : ''; ?>" style="width:<?= $pctStyle; ?>%;"></div>
+                </div>
                 <div class="stats">
                     <span><?= number_format($used,3); ?></span>
-                    <span><?= number_format($total - $used,3); ?></span>
+                    <span><?= number_format($remaining,3); ?></span>
                 </div>
+                <div class="balance-hint"><?= htmlspecialchars($card['hint'] ?? ''); ?></div>
             </div>
             <?php endforeach; ?>
         </div>
@@ -524,10 +729,10 @@ if ($stmtTypes) {
                 <?php foreach($history as $h): ?>
                 <tr>
                     <td><?= htmlspecialchars($h['leave_type_name'] ?? $h['leave_type'] ?? ''); ?></td>
-                    <td><?= htmlspecialchars(($h['start_date'] ?? '').' to '.($h['end_date'] ?? '')); ?></td>
+                    <td><?= htmlspecialchars(app_format_date_range($h['start_date'] ?? '', $h['end_date'] ?? '')); ?></td>
                     <td><?= isset($h['total_days']) ? trunc3($h['total_days']) : ''; ?></td>
                     <td><?= htmlspecialchars($h['status'] ?? ''); ?></td>
-                    <td><?= !empty($h['created_at']) ? date('M d, Y', strtotime($h['created_at'])) : ''; ?></td>
+                    <td><?= !empty($h['created_at']) ? htmlspecialchars(app_format_date($h['created_at'])) : ''; ?></td>
                     <td><?= isset($h['snapshot_annual_balance']) ? trunc3($h['snapshot_annual_balance']) : '—'; ?></td>
                     <td><?= isset($h['snapshot_sick_balance']) ? trunc3($h['snapshot_sick_balance']) : '—'; ?></td>
                     <td><?= isset($h['snapshot_force_balance']) ? trunc3($h['snapshot_force_balance']) : '—'; ?></td>
@@ -565,7 +770,7 @@ if ($stmtTypes) {
                     <td><?= htmlspecialchars($bh['action'] ?? ''); ?></td>
                     <td><?= isset($bh['old_balance']) ? trunc3($bh['old_balance']) : ''; ?></td>
                     <td><?= isset($bh['new_balance']) ? trunc3($bh['new_balance']) : ''; ?></td>
-                    <td><?= !empty($bh['created_at']) ? date('M d, Y H:i', strtotime($bh['created_at'])) : ''; ?></td>
+                    <td><?= !empty($bh['created_at']) ? htmlspecialchars(app_format_date($bh['created_at'])) : ''; ?></td>
                     <td><?= htmlspecialchars($bh['notes'] ?? ''); ?></td>
                 </tr>
                 <?php endforeach; ?>
@@ -575,6 +780,17 @@ if ($stmtTypes) {
         <?php endif; ?>
     </div>
 
+</div>
+
+<div id="imageModal" class="modal">
+  <div class="modal-content profile-image-modal-content">
+    <button type="button" class="modal-close" onclick="closeImageModal()" aria-label="Close image preview">&times;</button>
+    <h3 id="modalImageName" class="profile-image-modal-title">Profile photo</h3>
+    <figure class="profile-image-modal-figure">
+      <img id="modalImage" src="" alt="Profile image preview">
+    </figure>
+    <div class="profile-image-modal-caption">Click outside the image or press the close button to dismiss.</div>
+  </div>
 </div>
 <!-- admin modals -->
 <div id="passwordModal" class="modal">
@@ -704,7 +920,21 @@ if ($stmtTypes) {
 </div>
 
 <script>
+function openImageModal(src, name) {
+    var modal = document.getElementById('imageModal');
+    var img = document.getElementById('modalImage');
+    var title = document.getElementById('modalImageName');
+
+    if (!modal || !img || !title) return;
+
+    img.src = src;
+    title.textContent = name || 'Profile photo';
+    openModal('imageModal');
+}
+
 function closeImageModal() {
+    var img = document.getElementById('modalImage');
+    if (img) img.src = '';
     closeModal('imageModal');
 }
 
@@ -731,7 +961,22 @@ function closeModal(id) {
     var el = document.getElementById(id);
     if(el){
         el.addEventListener('click', function(e){
-            if(e.target === this) closeModal(id);
+            if(e.target === this) {
+                if (id === 'imageModal') closeImageModal();
+                else closeModal(id);
+            }
+        });
+    }
+});
+
+document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') {
+        ['imageModal','passwordModal','modalUpdateBalances','modalAddHistory','modalRecordUndertime'].forEach(function(id){
+            var el = document.getElementById(id);
+            if (el && el.classList.contains('open')) {
+                if (id === 'imageModal') closeImageModal();
+                else closeModal(id);
+            }
         });
     }
 });

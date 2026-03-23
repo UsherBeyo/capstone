@@ -214,7 +214,7 @@ $forceBalanceAfter = safeFloat(arr($request, 'snapshot_force_balance', 0));
 
 $vacLess = (arr($request, 'cert_vacation_less_this_application') !== null && arr($request, 'cert_vacation_less_this_application') !== '')
     ? safeFloat(arr($request, 'cert_vacation_less_this_application'))
-    : ($isVacationBucket ? $deduct : 0.0);
+    : (($isVacationBucket || $isForceBucket) ? $deduct : 0.0);
 
 $sickLess = (arr($request, 'cert_sick_less_this_application') !== null && arr($request, 'cert_sick_less_this_application') !== '')
     ? safeFloat(arr($request, 'cert_sick_less_this_application'))
@@ -239,7 +239,7 @@ $sickBalance = (arr($request, 'cert_sick_balance') !== null && arr($request, 'ce
 if ($isSickBucket) {
     $availableForPay = $sickTotalEarned;
 } elseif ($isForceBucket) {
-    $availableForPay = $forceBalanceAfter + $deduct;
+    $availableForPay = min($vacTotalEarned, $forceBalanceAfter + $deduct);
 } else {
     $availableForPay = $vacTotalEarned;
 }

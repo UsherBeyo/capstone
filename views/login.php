@@ -1,5 +1,7 @@
 <?php
 session_start();
+require_once '../helpers/Flash.php';
+$flashMessages = flash_get_all();
 // prevent caching of login page
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -19,34 +21,110 @@ if (empty($_SESSION['csrf_token'])) {
     <title>Login - Leave System</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <link rel="icon" type="image/jpeg" href="../pictures/DEPED.jpg">
+
+<script>
+    const sessionFlashMessages = <?= json_encode($flashMessages, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+
+    function showToast(message, type = 'info', duration = 3500) {
+        var container = document.getElementById('notificationContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'notificationContainer';
+            document.body.appendChild(container);
+        }
+
+        var toast = document.createElement('div');
+        toast.className = 'toast ' + type;
+        toast.textContent = message;
+        container.appendChild(toast);
+
+        setTimeout(function() {
+            toast.classList.add('removing');
+            setTimeout(function() {
+                toast.remove();
+            }, 300);
+        }, duration);
+    }
+
+    function renderFlashMessages() {
+        var params = new URLSearchParams(window.location.search);
+        var cleaned = false;
+
+        if (Array.isArray(sessionFlashMessages)) {
+            sessionFlashMessages.forEach(function(item) {
+                if (item && item.message) {
+                    showToast(item.message, item.type || 'info');
+                }
+            });
+        }
+
+        if (params.has('toast_success')) {
+            showToast(decodeURIComponent(params.get('toast_success')), 'success');
+            cleaned = true;
+        }
+        if (params.has('toast_error')) {
+            showToast(decodeURIComponent(params.get('toast_error')), 'error');
+            cleaned = true;
+        }
+        if (params.has('toast_warning')) {
+            showToast(decodeURIComponent(params.get('toast_warning')), 'warning');
+            cleaned = true;
+        }
+        if (params.has('toast_info')) {
+            showToast(decodeURIComponent(params.get('toast_info')), 'info');
+            cleaned = true;
+        }
+
+        if (cleaned) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }
+</script>
+
 </head>
-<body style="display:flex;justify-content:center;align-items:center;height:100vh;">
+<body class="login-page">
 
-<div class="ui-card" style="width:350px;">
-    <h2 style="text-align:center;">Login</h2>
+<div class="login-shell">
+    <div class="login-brand-panel">
+        <div class="login-brand-badge">Leave Management System</div>
+        <h1 class="login-brand-title">Welcome back</h1>
+        <p class="login-brand-text">Sign in to manage leave requests, balances, approvals, and employee records with clear transaction feedback.</p>
+    </div>
 
-    <?php if(isset($_GET['error'])): ?>
-        <p style="color:red;text-align:center;">Invalid credentials</p>
-    <?php endif; ?>
+    <div class="ui-card login-card">
+        <div class="login-card-head">
+            <h2>Login</h2>
+            <p>Use your work account to continue.</p>
+        </div>
 
-    <form action="../controllers/AuthController.php" method="POST" onsubmit="return validateLogin();" style="text-align:left;">
+        <?php if(isset($_GET['error'])): ?>
+            <div class="login-inline-alert error">
+                <div class="login-inline-alert-icon">!</div>
+                <div>
+                    <strong>Login failed</strong>
+                    <span>Invalid credentials. Please check your email and password, then try again.</span>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <form action="../controllers/AuthController.php" method="POST" onsubmit="return validateLogin();" class="login-form">
         <input type="hidden" name="action" value="login">
         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
 
         <label>Email</label>
-        <input type="email" name="email" required style="width:100%;padding:8px 12px;margin:8px 0;box-sizing:border-box;">
+        <input type="email" name="email" required class="login-input" placeholder="Enter your email">
 
         <label>Password</label>
-        <input type="password" name="password" required style="width:100%;padding:8px 12px;margin:8px 0;box-sizing:border-box;">
+        <input type="password" name="password" required class="login-input" placeholder="Enter your password">
 
-        <div style="margin:16px 0;display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;">
-            <input type="checkbox" id="agreePrivacy" name="agree_privacy" required style="margin:0;flex-shrink:0;vertical-align:middle;width:auto;">
-            <label for="agreePrivacy" style="margin:0;font-size:14px;line-height:1;">I agree to the <a href="#" onclick="openPrivacyModal(event)" style="color:var(--primary);text-decoration:underline;">Data Privacy and Terms</a></label>
+        <div class="login-privacy-row">
+            <input type="checkbox" id="agreePrivacy" name="agree_privacy" required>
+            <label for="agreePrivacy">I agree to the <a href="#" onclick="openPrivacyModal(event)">Data Privacy and Terms</a></label>
         </div>
 
-        <br>
-        <button type="submit" style="padding:12px 24px;font-size:16px;width:100%;cursor:pointer;">Login</button>
+        <button type="submit" class="login-submit-btn">Login</button>
     </form>
+    </div>
 </div>
 
 <!-- Privacy/Terms Modal -->
@@ -100,6 +178,8 @@ if (empty($_SESSION['csrf_token'])) {
         var modal = document.getElementById('privacyModal');
         if(e.target === modal) modal.style.display = 'none';
     });
+
+    document.addEventListener('DOMContentLoaded', renderFlashMessages);
 
     function validateLogin() {
         if (!document.getElementById('agreePrivacy').checked) {

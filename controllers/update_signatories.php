@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Flash.php';
 
 if (!in_array($_SESSION['role'] ?? '', ['personnel','admin','hr'], true)) {
     die("Access denied");
@@ -43,5 +44,4 @@ for ($i = 0; $i < $count; $i++) {
     $stmt->execute([$name, $position, $id]);
 }
 
-header("Location: ../views/signatories_settings.php?saved=1");
-exit;
+flash_redirect('../views/signatories_settings.php', 'success', 'Signatories updated successfully');

@@ -85,6 +85,21 @@ class Leave {
         return $aliases[$key] ?? $key;
     }
 
+    private function isDualDeductionLeaveType(string $name): bool {
+        return $this->normalizeLeaveTypeKey($name) === 'mandatory/forced leave';
+    }
+
+    private function getEmployeeBalanceValue(int $employeeId, string $column): float {
+        $allowed = ['annual_balance', 'sick_balance', 'force_balance'];
+        if (!in_array($column, $allowed, true)) {
+            return 0.0;
+        }
+
+        $stmt = $this->conn->prepare("SELECT {$column} FROM employees WHERE id = :id");
+        $stmt->execute([':id' => $employeeId]);
+        return (float)($stmt->fetchColumn() ?: 0);
+    }
+
     private function mapLeaveTypeToBalanceColumn(string $name): string {
         $type = $this->normalizeLeaveTypeKey($name);
 
@@ -136,9 +151,17 @@ class Leave {
         $days = $this->calculateDays($start, $end);
 
         if (!empty($leaveType['deduct_balance'])) {
-            $currentBal = (float)$this->getBalanceByType($employee_id, $leaveType['name']);
-            if ($currentBal < 0) {
-                return "Cannot apply: leave balance is negative.";
+            if ($this->isDualDeductionLeaveType((string)$leaveType['name'])) {
+                $annualBal = $this->getEmployeeBalanceValue((int)$employee_id, 'annual_balance');
+                $forceBal = $this->getEmployeeBalanceValue((int)$employee_id, 'force_balance');
+                if ($annualBal < 0 || $forceBal < 0) {
+                    return "Cannot apply: leave balance is negative.";
+                }
+            } else {
+                $currentBal = (float)$this->getBalanceByType($employee_id, $leaveType['name']);
+                if ($currentBal < 0) {
+                    return "Cannot apply: leave balance is negative.";
+                }
             }
         }
 
@@ -147,9 +170,17 @@ class Leave {
         }
 
         if (!empty($leaveType['deduct_balance'])) {
-            $balance = (float)$this->getBalanceByType($employee_id, $leaveType['name']);
-            if ($balance < $days) {
-                return "Insufficient {$leaveType['name']} leave balance.";
+            if ($this->isDualDeductionLeaveType((string)$leaveType['name'])) {
+                $annualBal = $this->getEmployeeBalanceValue((int)$employee_id, 'annual_balance');
+                $forceBal = $this->getEmployeeBalanceValue((int)$employee_id, 'force_balance');
+                if ($annualBal < $days || $forceBal < $days) {
+                    return "Insufficient {$leaveType['name']} leave balance.";
+                }
+            } else {
+                $balance = (float)$this->getBalanceByType($employee_id, $leaveType['name']);
+                if ($balance < $days) {
+                    return "Insufficient {$leaveType['name']} leave balance.";
+                }
             }
         }
 
@@ -652,23 +683,103 @@ class Leave {
             if ($action === 'approve') {
                 $typeInfo = $this->getLeaveType($leave['leave_type_id'] ?? $leave['leave_type']);
                 if ($typeInfo && !empty($typeInfo['deduct_balance'])) {
-                    $col = $this->mapLeaveTypeToBalanceColumn($typeInfo['name']);
+                    $days = (float)$leave['total_days'];
+                    $employeeId = (int)$leave['employee_id'];
+                    $isDualDeduction = $this->isDualDeductionLeaveType((string)$typeInfo['name']);
 
-                    $stmt = $this->conn->prepare("SELECT $col FROM employees WHERE id = ?");
-                    $stmt->execute([$leave['employee_id']]);
-                    $oldBalance = (float)$stmt->fetchColumn();
+                    if ($isDualDeduction) {
+                        $oldAnnual = $this->getEmployeeBalanceValue($employeeId, 'annual_balance');
+                        $oldForce = $this->getEmployeeBalanceValue($employeeId, 'force_balance');
 
-                    $stmt = $this->conn->prepare(
-                        "UPDATE employees
-                         SET $col = $col - :days
-                         WHERE id = :employee_id"
-                    );
-                    $stmt->execute([
-                        ':days' => $leave['total_days'],
-                        ':employee_id' => $leave['employee_id']
-                    ]);
+                        $stmt = $this->conn->prepare(
+                            "UPDATE employees
+                             SET annual_balance = annual_balance - :days,
+                                 force_balance = force_balance - :days
+                             WHERE id = :employee_id"
+                        );
+                        $stmt->execute([
+                            ':days' => $days,
+                            ':employee_id' => $employeeId
+                        ]);
 
-                    $snapshots = $this->getBalanceSnapshots($leave['employee_id']);
+                        $newAnnual = max(0, $oldAnnual - $days);
+                        $newForce = max(0, $oldForce - $days);
+
+                        $this->logBudgetChange(
+                            $employeeId,
+                            'Vacational',
+                            $oldAnnual,
+                            $newAnnual,
+                            'deduction',
+                            $leave_id,
+                            'Leave approved (mandatory/forced leave dual deduction - annual side)'
+                        );
+
+                        $this->logBudgetChange(
+                            $employeeId,
+                            $typeInfo['name'],
+                            $oldForce,
+                            $newForce,
+                            'deduction',
+                            $leave_id,
+                            'Leave approved (mandatory/forced leave dual deduction - force side)'
+                        );
+
+                        $stmt = $this->conn->prepare(
+                            "INSERT INTO leave_balance_logs (employee_id, change_amount, reason, leave_id)
+                             VALUES (?, ?, ?, ?), (?, ?, ?, ?)"
+                        );
+                        $stmt->execute([
+                            $employeeId,
+                            -1 * $days,
+                            'deduction_annual_force_leave',
+                            $leave_id,
+                            $employeeId,
+                            -1 * $days,
+                            'deduction_force_leave',
+                            $leave_id
+                        ]);
+                    } else {
+                        $col = $this->mapLeaveTypeToBalanceColumn($typeInfo['name']);
+
+                        $stmt = $this->conn->prepare("SELECT $col FROM employees WHERE id = ?");
+                        $stmt->execute([$employeeId]);
+                        $oldBalance = (float)$stmt->fetchColumn();
+
+                        $stmt = $this->conn->prepare(
+                            "UPDATE employees
+                             SET $col = $col - :days
+                             WHERE id = :employee_id"
+                        );
+                        $stmt->execute([
+                            ':days' => $days,
+                            ':employee_id' => $employeeId
+                        ]);
+
+                        $newBalance = max(0, $oldBalance - $days);
+                        $this->logBudgetChange(
+                            $employeeId,
+                            $typeInfo['name'],
+                            $oldBalance,
+                            $newBalance,
+                            'deduction',
+                            $leave_id,
+                            'Leave approved'
+                        );
+
+                        $stmt = $this->conn->prepare(
+                            "INSERT INTO leave_balance_logs (employee_id, change_amount, reason, leave_id)
+                             VALUES (?, ?, ?, ?)"
+                        );
+                        $stmt->execute([
+                            $employeeId,
+                            -1 * $days,
+                            'deduction',
+                            $leave_id
+                        ]);
+                    }
+
+                    $snapshots = $this->getBalanceSnapshots($employeeId);
 
                     $this->conn->prepare(
                         "UPDATE leave_requests
@@ -678,28 +789,6 @@ class Leave {
                         $snapshots['annual_balance'],
                         $snapshots['sick_balance'],
                         $snapshots['force_balance'],
-                        $leave_id
-                    ]);
-
-                    $newBalance = max(0, $oldBalance - (float)$leave['total_days']);
-                    $this->logBudgetChange(
-                        $leave['employee_id'],
-                        $typeInfo['name'],
-                        $oldBalance,
-                        $newBalance,
-                        'deduction',
-                        $leave_id,
-                        'Leave approved'
-                    );
-
-                    $stmt = $this->conn->prepare(
-                        "INSERT INTO leave_balance_logs (employee_id, change_amount, reason, leave_id)
-                         VALUES (?, ?, ?, ?)"
-                    );
-                    $stmt->execute([
-                        $leave['employee_id'],
-                        -1 * (float)$leave['total_days'],
-                        'deduction',
                         $leave_id
                     ]);
                 }

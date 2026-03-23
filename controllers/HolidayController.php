@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/database.php';
 require_once '../models/Holiday.php';
+require_once '../helpers/Flash.php';
 
 if (!in_array($_SESSION['role'], ['admin','manager','hr'])) {
     die("Access denied");
@@ -19,7 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $desc = trim($_POST['description']);
         $type = $_POST['type'] ?? 'Other';
         $holidayModel->add($date, $desc, $type);
-        $msg = 'Holiday+added';
+        $msg = 'Holiday added';
+        $type = 'success';
     }
     if (isset($_POST['update'])) {
         $id = intval($_POST['id']);
@@ -27,17 +29,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $desc = trim($_POST['description']);
         $type = $_POST['type'] ?? 'Other';
         $holidayModel->update($id, $date, $desc, $type);
-        $msg = 'Holiday+updated';
+        $msg = 'Holiday updated';
+        $type = 'success';
     }
     if (isset($_POST['delete'])) {
         $id = $_POST['id'];
         $holidayModel->delete($id);
-        $msg = 'Holiday+removed';
+        $msg = 'Holiday removed';
+        $type = 'success';
     }
-    $redir = '../views/holidays.php';
-    if (!empty($msg)) {
-        $redir .= '?toast_success=' . $msg;
-    }
-    header("Location: $redir");
-    exit();
+    flash_redirect('../views/holidays.php', $type ?? 'success', $msg ?? 'Holiday action completed');
 }
