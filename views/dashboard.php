@@ -325,6 +325,7 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
     <title>Dashboard</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="../assets/js/script.js"></script>
     <style>
         .dashboard-hero {
             display:grid;
@@ -334,7 +335,7 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
             margin-bottom: 24px;
         }
         .dashboard-intro {
-            background: linear-gradient(135deg, rgba(37,99,235,0.10), rgba(59,130,246,0.06));
+            background: var(--card);
             border: 1px solid rgba(37,99,235,0.14);
         }
         .dashboard-intro h3 { margin: 0 0 10px; font-size: 26px; }
@@ -368,8 +369,13 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
         }
         .dashboard-panel-title {
             display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px;
+            padding-bottom: 6px; border-bottom: 1px solid rgba(148,163,184,0.2);
         }
         .dashboard-panel-title h3, .dashboard-panel-title h4 { margin: 0; }
+        .ui-card.table-card, .ui-card {
+            padding: 20px;
+        }
+        .dashboard-table-note { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
         .dashboard-link {
     display: inline-flex;
     align-items: center;
@@ -436,7 +442,7 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
     $subtitle = 'Welcome back, ' . safe_h($userName);
     $actions = [];
     if (in_array($role, ['department_head','personnel','manager','hr','admin'], true)) {
-        $actions[] = '<a href="leave_requests.php" class="btn btn-secondary">Open Leave Requests</a>';
+        $actions[] = '<a href="leave_requests.php" class="dashboard-link">Open Leave Requests</a>';
     }
     if ($role === 'employee') {
         $actions[] = '<a href="apply_leave.php" class="btn btn-primary">Apply Leave</a>';
@@ -599,20 +605,25 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
                     </table>
                 </div>
             </div>
-            <div class="ui-card">
-                <div class="dashboard-panel-title"><h3>Upcoming Team Leaves</h3></div>
-                <?php if (empty($departmentHeadDashboard['upcoming_rows'])): ?>
-                    <div class="dashboard-empty">No upcoming team leave entries found.</div>
-                <?php else: ?>
-                    <div class="dashboard-list">
-                        <?php foreach ($departmentHeadDashboard['upcoming_rows'] as $r): ?>
-                            <div class="dashboard-list-item">
-                                <strong><?= safe_h(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')); ?></strong>
-                                <div class="meta"><?= safe_h($r['leave_type_name'] ?? $r['leave_type'] ?? ''); ?> · <?= safe_h(app_format_date_range($r['start_date'] ?? '', $r['end_date'] ?? '')); ?></div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
+            <div class="ui-card collapsible-card">
+                <div class="collapsible-header">
+                    <h3 class="collapsible-title">Upcoming Team Leaves</h3>
+                    <button type="button" class="collapsible-toggle" aria-expanded="true">▾</button>
+                </div>
+                <div class="collapsible-body expanded">
+                    <?php if (empty($departmentHeadDashboard['upcoming_rows'])): ?>
+                        <div class="dashboard-empty">No upcoming team leave entries found.</div>
+                    <?php else: ?>
+                        <div class="dashboard-list scrollable-section">
+                            <?php foreach ($departmentHeadDashboard['upcoming_rows'] as $r): ?>
+                                <div class="dashboard-list-item">
+                                    <strong><?= safe_h(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')); ?></strong>
+                                    <div class="meta"><?= safe_h($r['leave_type_name'] ?? $r['leave_type'] ?? ''); ?> · <?= safe_h(app_format_date_range($r['start_date'] ?? '', $r['end_date'] ?? '')); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
 

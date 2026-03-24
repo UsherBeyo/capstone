@@ -37,7 +37,7 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
                     <form method="POST" action="../controllers/LeaveTypeController.php" style="display:inline;" onsubmit="return confirm('Delete this type?');">
                         <input type="hidden" name="action" value="delete">
                         <input type="hidden" name="type_id" value="<?= $t['id']; ?>">
-                        <button type="submit">Delete</button>
+                        <button type="submit" class="btn btn-danger">Delete</button>
                     </form>
                 </td>
             </tr>

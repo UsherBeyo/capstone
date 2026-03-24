@@ -64,12 +64,18 @@ body {
 }
 
 .app-header {
-    grid-area: header;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 64px;
     background: var(--card);
     border-bottom: 1px solid var(--border);
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    position: relative;
     z-index: 100;
+    display: flex;
+    align-items: center;
 }
 
 .app-sidebar {
@@ -157,6 +163,7 @@ body {
         width: 100%;
         height: auto;
         max-height: none;
+        margin-top: 64px;
         border-right: none;
         border-bottom: 1px solid var(--border);
     }
@@ -390,8 +397,12 @@ small, .text-small {
 .btn-danger {
     background: var(--danger);
     color: #fff;
+    border-color: var(--danger);
 }
-.btn-danger:hover { background: #dc2626; }
+.btn-danger:hover { 
+    background: #dc2626;
+    border-color: #dc2626;
+}
 
 .btn-success {
     background: var(--success);
@@ -419,6 +430,50 @@ small, .text-small {
 .ui-card-header { margin-bottom: 16px; }
 .ui-card-title { font-size: 22px; font-weight: 700; color: var(--text); margin:0; }
 .ui-card-actions { margin-top: 16px; display:flex; gap:8px; }
+
+.collapsible-card {
+    overflow: hidden; 
+    border-radius: 16px;
+}
+.collapsible-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+}
+.collapsible-title { font-size: 18px; font-weight: 700; margin: 0; color: var(--text); }
+.collapsible-toggle {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 10px;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+.collapsible-toggle:hover { background: rgba(37,99,235,0.1); }
+.collapsible-toggle[aria-expanded="false"] { transform: rotate(-90deg); }
+.collapsible-body {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.28s ease, opacity 0.28s ease;
+}
+.collapsible-body.expanded {
+    max-height: 520px;
+    overflow-y: auto;
+    opacity: 1;
+}
+.scrollable-section { max-height: 420px; overflow-y: auto; padding-right: 8px; }
+.scrollable-section table { width: 100%; border-collapse: collapse; }
+.scrollable-section table thead th { position: sticky; top: 0; background: var(--card); z-index: 2; }
+.scrollable-section table th, .scrollable-section table td { white-space: nowrap; }
 
 .stat-card {
     display: flex;
@@ -641,15 +696,7 @@ small, .text-small {
 }
 
 /* Application Header */
-.app-header {
-    background: #ffffff;
-    border-bottom: 1px solid var(--border);
-    padding: 18px 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    position: relative;
-    z-index: 10;
-    overflow: visible;
-}
+
 
 .header-content-wrapper {
     display: flex;

@@ -34,3 +34,33 @@ window.addEventListener('scroll', function() {
     if (window.scrollY > 20) document.body.classList.add('no-shadow');
     else document.body.classList.remove('no-shadow');
 });
+
+function initCollapsibleSections() {
+    document.querySelectorAll('.collapsible-card').forEach((card) => {
+        var header = card.querySelector('.collapsible-header');
+        var body = card.querySelector('.collapsible-body');
+        var toggle = card.querySelector('.collapsible-toggle');
+        if (!header || !body || !toggle) return;
+
+        var setExpanded = function(expanded) {
+            body.classList.toggle('expanded', expanded);
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            toggle.textContent = expanded ? '▾' : '▸';
+        };
+
+        setExpanded(true);
+
+        header.addEventListener('click', function() {
+            var expanded = body.classList.contains('expanded');
+            setExpanded(!expanded);
+        });
+
+        toggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var expanded = body.classList.contains('expanded');
+            setExpanded(!expanded);
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initCollapsibleSections);

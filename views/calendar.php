@@ -110,6 +110,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
 <head>
     <title>Leave Calendar</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+    <script src="../assets/js/script.js"></script>
     <style>
         .calendar-shell {
             display: grid;
@@ -705,50 +706,58 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
                 </div>
             </div>
 
-            <div class="ui-card calendar-summary-card">
-                <div class="summary-kicker">Upcoming</div>
-                <h4>Upcoming Leaves</h4>
-                <div class="summary-list">
-                    <?php if (empty($upcomingLeaves)): ?>
-                        <div class="empty-state">No upcoming leave requests found.</div>
-                    <?php else: ?>
-                        <?php foreach ($upcomingLeaves as $leave): ?>
-                            <?php $status = strtolower(trim((string)$leave['status'])); ?>
-                            <div class="summary-item">
-                                <div class="summary-item-header">
-                                    <div>
-                                        <div class="summary-item-title"><?= htmlspecialchars(trim(($leave['first_name'] ?? '') . ' ' . ($leave['last_name'] ?? ''))); ?></div>
-                                        <div class="summary-item-sub"><?= htmlspecialchars((string)$leave['leave_type']); ?></div>
+            <div class="ui-card calendar-summary-card collapsible-card">
+                <div class="collapsible-header">
+                    <h3 class="collapsible-title">Upcoming Leaves</h3>
+                    <button type="button" class="collapsible-toggle" aria-expanded="true">▾</button>
+                </div>
+                <div class="collapsible-body expanded">
+                    <div class="summary-list scrollable-section">
+                        <?php if (empty($upcomingLeaves)): ?>
+                            <div class="empty-state">No upcoming leave requests found.</div>
+                        <?php else: ?>
+                            <?php foreach ($upcomingLeaves as $leave): ?>
+                                <?php $status = strtolower(trim((string)$leave['status'])); ?>
+                                <div class="summary-item">
+                                    <div class="summary-item-header">
+                                        <div>
+                                            <div class="summary-item-title"><?= htmlspecialchars(trim(($leave['first_name'] ?? '') . ' ' . ($leave['last_name'] ?? ''))); ?></div>
+                                            <div class="summary-item-sub"><?= htmlspecialchars((string)$leave['leave_type']); ?></div>
+                                        </div>
+                                        <span class="summary-badge <?= $status === 'approved' ? 'approved' : 'pending'; ?>"><?= htmlspecialchars(ucfirst($status)); ?></span>
                                     </div>
-                                    <span class="summary-badge <?= $status === 'approved' ? 'approved' : 'pending'; ?>"><?= htmlspecialchars(ucfirst($status)); ?></span>
+                                    <div class="summary-item-meta"><?= htmlspecialchars(app_format_date_range((string)$leave['start_date'], (string)$leave['end_date'])); ?><?= !empty($leave['total_days']) ? ' • ' . number_format((float)$leave['total_days'], 3) . ' day(s)' : ''; ?></div>
                                 </div>
-                                <div class="summary-item-meta"><?= htmlspecialchars(app_format_date_range((string)$leave['start_date'], (string)$leave['end_date'])); ?><?= !empty($leave['total_days']) ? ' • ' . number_format((float)$leave['total_days'], 3) . ' day(s)' : ''; ?></div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
 
-            <div class="ui-card calendar-summary-card">
-                <div class="summary-kicker">Upcoming</div>
-                <h4>Upcoming Events</h4>
-                <div class="summary-list">
-                    <?php if (empty($upcomingEvents)): ?>
-                        <div class="empty-state">No upcoming holidays found.</div>
-                    <?php else: ?>
-                        <?php foreach ($upcomingEvents as $event): ?>
-                            <div class="summary-item">
-                                <div class="summary-item-header">
-                                    <div>
-                                        <div class="summary-item-title"><?= htmlspecialchars((string)($event['description'] ?: 'Holiday')); ?></div>
-                                        <div class="summary-item-sub"><?= htmlspecialchars((string)($event['type'] ?: 'Holiday')); ?></div>
+            <div class="ui-card calendar-summary-card collapsible-card">
+                <div class="collapsible-header">
+                    <h3 class="collapsible-title">Upcoming Events</h3>
+                    <button type="button" class="collapsible-toggle" aria-expanded="true">▾</button>
+                </div>
+                <div class="collapsible-body expanded">
+                    <div class="summary-list scrollable-section">
+                        <?php if (empty($upcomingEvents)): ?>
+                            <div class="empty-state">No upcoming holidays found.</div>
+                        <?php else: ?>
+                            <?php foreach ($upcomingEvents as $event): ?>
+                                <div class="summary-item">
+                                    <div class="summary-item-header">
+                                        <div>
+                                            <div class="summary-item-title"><?= htmlspecialchars((string)($event['description'] ?: 'Holiday')); ?></div>
+                                            <div class="summary-item-sub"><?= htmlspecialchars((string)($event['type'] ?: 'Holiday')); ?></div>
+                                        </div>
+                                        <span class="summary-badge holiday">Holiday</span>
                                     </div>
-                                    <span class="summary-badge holiday">Holiday</span>
+                                    <div class="summary-item-meta"><?= htmlspecialchars(app_format_date((string)$event['holiday_date'])); ?></div>
                                 </div>
-                                <div class="summary-item-meta"><?= htmlspecialchars(app_format_date((string)$event['holiday_date'])); ?></div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
 

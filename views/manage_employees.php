@@ -173,22 +173,22 @@ if (isset($_GET['view_history'])) {
         }
         .employee-actions {
             display: flex;
-            gap: 6px;
+            gap: 8px;
             align-items: center;
             justify-content: flex-end;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             min-width: 0;
         }
         .employee-actions .profile-link {
             display: inline-flex !important;
             align-items: center;
             justify-content: center;
-            gap: 0;
+            gap: 8px;
             text-decoration: none;
-            width: 32px;
+            min-width: 96px;
             height: 32px;
-            padding: 0;
-            border-radius: 10px;
+            padding: 0 10px;
+            border-radius: 8px;
             border: 1px solid var(--border);
             background: #fff;
             color: var(--text);
@@ -197,19 +197,14 @@ if (isset($_GET['view_history'])) {
             line-height: 1;
             transition: all .18s ease;
             box-shadow: 0 4px 12px rgba(15,23,42,.04);
-            flex: 0 0 32px;
+            flex: 0 0 auto;
             overflow: hidden;
         }
-        .employee-actions .profile-link span:first-child {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            font-size: 13px;
-            line-height: 1;
-        }
-        .employee-actions .profile-link span:last-child {
-            display: none !important;
+        .employee-actions .profile-link:hover {
+            border-color: #bfdbfe;
+            background: #eff6ff;
+            color: var(--primary);
+            transform: translateY(-1px);
         }
         .employee-actions .profile-link:hover {
             border-color: #bfdbfe;
@@ -577,16 +572,16 @@ if (isset($_GET['view_history'])) {
                 <td data-label="Force"><span class="employee-balance-chip"><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></span></td>
                 <td data-label="Actions" class="employee-actions-cell">
                     <div class="employee-actions">
-                        <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">
-                            <span aria-hidden="true">&#128100;</span>
+                                <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">
+                            <span aria-hidden="true">👁️</span>
                             <span>View</span>
                         </a>
-                        <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit" class="profile-link">
+                        <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit user" class="profile-link">
                             <span aria-hidden="true">✏️</span>
                             <span>Edit</span>
                         </a>
                         <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link">
-                            <span aria-hidden="true">📊</span>
+                            <span aria-hidden="true">🗄️</span>
                             <span>Export</span>
                         </a>
                     </div>

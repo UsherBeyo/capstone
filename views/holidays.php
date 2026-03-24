@@ -79,7 +79,7 @@ if (empty($_SESSION['csrf_token'])) {
                     <form method="POST" action="../controllers/HolidayController.php" style="display:inline;">
                         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                         <input type="hidden" name="id" value="<?= $h['id']; ?>">
-                        <button type="submit" name="delete" style="padding:4px 8px;">Delete</button>
+                        <button type="submit" name="delete" class="btn btn-danger">Delete</button>
                     </form>
                 </td>
             </tr>

@@ -130,6 +130,7 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
 <head>
     <title>Manage Accruals</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+    <script src="../assets/js/script.js"></script>
 </head>
 <body>
 
@@ -198,24 +199,33 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
             </div>
         </div>
 
-        <div class="ui-card" style="flex:1;min-width:300px;max-width:700px;">
-            <h3>Accrual History (Last 50)</h3>
-            <table style="font-size:13px;">
-                <tr>
-                    <th>Employee</th>
-                    <th>Amount</th>
-                    <th>Month Ref</th>
-                    <th>Date</th>
-                </tr>
-                <?php foreach ($accruals as $a): ?>
-                <tr>
-                    <td><?= htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?></td>
-                    <td><?= number_format((float)$a['amount'], 3); ?> days</td>
-                    <td><?= htmlspecialchars(!empty($a['month_reference']) ? app_format_month_ref($a['month_reference']) : '—'); ?></td>
-                    <td><?= !empty($a['created_at']) ? htmlspecialchars(app_format_date($a['created_at'])) : ''; ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </table>
+        <div class="ui-card collapsible-card" style="flex:1;min-width:300px;max-width:700px;">
+            <div class="collapsible-header">
+                <h3 class="collapsible-title">Accrual History (Last 50)</h3>
+                <button type="button" class="collapsible-toggle" aria-expanded="true">▾</button>
+            </div>
+            <div class="collapsible-body expanded scrollable-section">
+                <table class="accrual-history-table" style="font-size:13px; width:100%; border-spacing:0;">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Amount</th>
+                            <th>Month Ref</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($accruals as $a): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?></td>
+                        <td><?= number_format((float)$a['amount'], 3); ?> days</td>
+                        <td><?= htmlspecialchars(!empty($a['month_reference']) ? app_format_month_ref($a['month_reference']) : '—'); ?></td>
+                        <td><?= !empty($a['created_at']) ? htmlspecialchars(app_format_date($a['created_at'])) : ''; ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>

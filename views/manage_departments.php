@@ -72,7 +72,7 @@ if (empty($_SESSION['csrf_token'])) {
                     <form method="POST" action="../controllers/DepartmentController.php" style="display:inline;">
                         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                         <input type="hidden" name="id" value="<?= $d['id']; ?>">
-                        <button type="submit" name="delete_department" onclick="return confirm('Delete this department?')">Delete</button>
+                        <button type="submit" name="delete_department" class="btn btn-danger" onclick="return confirm('Delete this department?')">Delete</button>
                     </form>
                 </td>
             </tr>
