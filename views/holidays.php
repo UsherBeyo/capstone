@@ -1,9 +1,17 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
+Auth::requireLogin('login.php');
+require_once '../helpers/Flash.php';
 
-if (!in_array($_SESSION['role'], ['admin','manager','hr'])) {
-    die("Access denied");
+if (empty($_SESSION['user_id'])) {
+    flash_redirect('login.php', 'warning', 'Please log in first.');
+}
+
+if (!in_array($_SESSION['role'] ?? '', ['admin','manager','hr','personnel'], true)) {
+    $redirect = !empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'dashboard.php';
+    flash_redirect($redirect, 'error', 'Access Denied!');
 }
 
 $db = (new Database())->connect();

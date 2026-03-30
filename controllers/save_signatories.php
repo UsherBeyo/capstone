@@ -1,17 +1,19 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
 require_once '../helpers/Flash.php';
+Auth::requireLogin('../views/login.php');
 
 if (!in_array($_SESSION['role'] ?? '', ['personnel','hr','admin'], true)) {
-    die("Access denied");
+    flash_redirect('../views/leave_requests.php?tab=approved', 'error', 'Access Denied');
 }
 
 if (
     !isset($_POST['csrf_token'], $_SESSION['csrf_token']) ||
     !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
 ) {
-    die("Invalid CSRF token");
+    flash_redirect('../views/leave_requests.php?tab=approved', 'error', 'Invalid CSRF token');
 }
 
 $db = (new Database())->connect();
@@ -24,11 +26,11 @@ $nameC = trim($_POST['name_c'] ?? '');
 $posC  = trim($_POST['position_c'] ?? '');
 
 if ($leaveId <= 0) {
-    die("Invalid leave request");
+    flash_redirect('../views/leave_requests.php?tab=approved', 'error', 'Invalid leave request');
 }
 
 if ($nameA === '' || $posA === '' || $nameC === '' || $posC === '') {
-    die("All signatory fields are required.");
+    flash_redirect('../views/leave_requests.php?tab=approved', 'error', 'All signatory fields are required.');
 }
 
 $stmt = $db->prepare("

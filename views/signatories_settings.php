@@ -1,6 +1,8 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
+Auth::requireLogin('login.php');
 
 if (!in_array($_SESSION['role'] ?? '', ['personnel','admin','hr'], true)) {
     die("Access denied");

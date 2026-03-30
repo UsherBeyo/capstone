@@ -6,26 +6,97 @@ class Leave {
         $this->conn = $db;
     }
 
-    public function calculateDays($start, $end) {
-        $startDT = new DateTime($start);
-        $endDT = new DateTime($end);
-        $days = 0;
+    private function normalizeDateInput($value): ?DateTime {
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
 
+        $dt = DateTime::createFromFormat('Y-m-d', trim($value));
+        if (!$dt) {
+            return null;
+        }
+
+        $errors = DateTime::getLastErrors();
+        if (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) {
+            return null;
+        }
+
+        $dt->setTime(0, 0, 0);
+        return $dt;
+    }
+
+    public function calculateDaysBreakdown($start, $end): array {
+        $startDT = $this->normalizeDateInput($start);
+        $endDT = $this->normalizeDateInput($end);
+
+        if (!$startDT || !$endDT) {
+            return [
+                'valid' => false,
+                'days' => 0,
+                'calendar_days' => 0,
+                'weekend_days' => 0,
+                'holiday_days' => 0,
+                'message' => 'Please provide valid start and end dates.',
+            ];
+        }
+
+        if ($endDT < $startDT) {
+            return [
+                'valid' => false,
+                'days' => 0,
+                'calendar_days' => 0,
+                'weekend_days' => 0,
+                'holiday_days' => 0,
+                'message' => 'End date cannot be earlier than start date.',
+            ];
+        }
+
+        $queryStart = $startDT->format('Y-m-d');
+        $queryEnd = $endDT->format('Y-m-d');
         $stmt = $this->conn->prepare("SELECT holiday_date FROM holidays WHERE holiday_date BETWEEN ? AND ?");
-        $stmt->execute([$startDT->format('Y-m-d'), $endDT->format('Y-m-d')]);
+        $stmt->execute([$queryStart, $queryEnd]);
         $holidays = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
         $holidaySet = array_flip($holidays);
 
-        while ($startDT <= $endDT) {
-            $weekday = (int)$startDT->format('N');
-            $today = $startDT->format('Y-m-d');
-            if ($weekday < 6 && !isset($holidaySet[$today])) {
+        $cursor = clone $startDT;
+        $days = 0;
+        $calendarDays = 0;
+        $weekendDays = 0;
+        $holidayDays = 0;
+
+        while ($cursor <= $endDT) {
+            $calendarDays++;
+            $weekday = (int)$cursor->format('N');
+            $today = $cursor->format('Y-m-d');
+            $isWeekend = $weekday >= 6;
+            $isHoliday = isset($holidaySet[$today]);
+
+            if ($isWeekend) {
+                $weekendDays++;
+            }
+            if ($isHoliday) {
+                $holidayDays++;
+            }
+            if (!$isWeekend && !$isHoliday) {
                 $days++;
             }
-            $startDT->modify('+1 day');
+
+            $cursor->modify('+1 day');
         }
 
-        return max(1, $days);
+        return [
+            'valid' => true,
+            'days' => $days,
+            'calendar_days' => $calendarDays,
+            'weekend_days' => $weekendDays,
+            'holiday_days' => $holidayDays,
+            'message' => $days > 0 ? '' : 'The selected range contains no deductible working days.',
+        ];
+    }
+
+    public function calculateDays($start, $end) {
+        $breakdown = $this->calculateDaysBreakdown($start, $end);
+        return (int)($breakdown['days'] ?? 0);
     }
 
     public function checkOverlap($employee_id, $start, $end) {

@@ -6,6 +6,7 @@ if (!isset($_SESSION)) session_start();
 $displayName = $_SESSION['email'] ?? 'User';
 $userEmail = $_SESSION['email'] ?? '';
 $profilePic = null;
+$userRole = $_SESSION['role'] ?? '';
 if (!empty($_SESSION['emp_id'])) {
     if (!isset($db)) {
         require_once __DIR__ . '/../../config/database.php';
@@ -44,7 +45,9 @@ if (!empty($_SESSION['emp_id'])) {
                         <?php endif; ?>
                     </button>
                     <div id="profileMenu" class="profile-menu" style="display: none;">
-                        <a href="employee_profile.php?id=<?= $_SESSION['emp_id'] ?? ''; ?>" class="profile-menu-item">Profile</a>
+                        <?php if ($userRole !== 'admin'): ?>
+                            <a href="employee_profile.php?id=<?= $_SESSION['emp_id'] ?? ''; ?>" class="profile-menu-item">Profile</a>
+                        <?php endif; ?>
                         <a href="change_password.php" class="profile-menu-item">Settings</a>
                         <hr style="margin: 4px 0; border: none; border-top: 1px solid var(--border);">
                         <a href="../controllers/logout.php" class="profile-menu-item">Logout</a>
@@ -60,6 +63,15 @@ function toggleProfileMenu() {
     var menu = document.getElementById('profileMenu');
     menu.style.display = menu.style.display === 'none' || menu.style.display === '' ? 'block' : 'none';
 }
+
+// Force a reload when the page is restored from the browser back-forward cache
+window.addEventListener('pageshow', function (event) {
+    var navEntries = (window.performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation') : [];
+    var navType = navEntries.length ? navEntries[0].type : '';
+    if (event.persisted || navType === 'back_forward') {
+        window.location.reload();
+    }
+});
 
 // Close menu when clicking outside
 window.addEventListener('click', function(e){

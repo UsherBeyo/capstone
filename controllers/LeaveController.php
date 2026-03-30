@@ -22,6 +22,11 @@ $action = $_POST['action'] ?? null;
 $role = $_SESSION['role'] ?? '';
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
+
+function workflowError(string $message, string $type = 'error'): void {
+    flash_redirect('../views/leave_requests.php', $type, $message);
+}
+
 function fetchLeaveForWorkflow(PDO $db, int $leaveId): ?array {
     $stmt = $db->prepare("
         SELECT lr.*, e.user_id AS employee_user_id, e.first_name, e.last_name, u.email,
@@ -38,12 +43,38 @@ function fetchLeaveForWorkflow(PDO $db, int $leaveId): ?array {
     return $row ?: null;
 }
 
-if ($action === 'approve') {
-    if (!in_array($role, ['manager','department_head','personnel','hr','admin'], true)) {
-        die("Unauthorized access");
+
+if ($action === 'mark_printed') {
+    if (!in_array($role, ['personnel','hr','admin'], true)) {
+        workflowError('Unauthorized access');
     }
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("CSRF validation failed.");
+        workflowError('CSRF validation failed.');
+    }
+
+    $leave_id = (int)($_POST['leave_id'] ?? 0);
+    $row = fetchLeaveForWorkflow($db, $leave_id);
+    if (!$row) {
+        workflowError('Leave request not found');
+    }
+
+    $workflow = trim((string)($row['workflow_status'] ?? ''));
+    $status = strtolower(trim((string)($row['status'] ?? '')));
+    if ($workflow !== 'finalized' && $status !== 'approved') {
+        workflowError('Only finalized or approved requests can be marked as printed.');
+    }
+
+    $stmt = $db->prepare("UPDATE leave_requests SET print_status = 'printed' WHERE id = ?");
+    $stmt->execute([$leave_id]);
+    flash_redirect('../views/leave_requests.php?tab=approved', 'success', 'Leave request marked as printed');
+}
+
+if ($action === 'approve') {
+    if (!in_array($role, ['manager','department_head','personnel','hr','admin'], true)) {
+        workflowError("Unauthorized access");
+    }
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        workflowError("CSRF validation failed.");
     }
 
     $leave_id = (int)($_POST['leave_id'] ?? 0);
@@ -58,7 +89,7 @@ if ($action === 'approve') {
     // Stage 1: Department Head approval -> forward to personnel
     if ($workflow === '' || $workflow === 'pending_department_head') {
         if (!in_array($role, ['manager','department_head','admin'], true)) {
-            die("Unauthorized access");
+            workflowError("Unauthorized access");
         }
 
         if ($role === 'department_head') {
@@ -67,15 +98,15 @@ if ($action === 'approve') {
             $stmt->execute([$row['employee_id']]);
             $deptId = $stmt->fetchColumn();
             if (!$deptId) {
-                die("Employee has no department assigned");
+                workflowError("Employee has no department assigned");
             }
             $stmt2 = $db->prepare("SELECT 1 FROM department_head_assignments WHERE department_id = ? AND employee_id = (SELECT id FROM employees WHERE user_id = ?) AND is_active = 1");
             $stmt2->execute([$deptId, $userId]);
             if (!$stmt2->fetch()) {
-                die("Unauthorized: You are not the department head for this employee's department");
+                workflowError("Unauthorized: You are not the department head for this employee's department");
             }
         } elseif ($role !== 'admin' && !empty($row['department_head_user_id']) && (int)$row['department_head_user_id'] !== $userId) {
-            die("Unauthorized: Not assigned as this request's Department Head");
+            workflowError("Unauthorized: Not assigned as this request's Department Head");
         }
 
         $stmt = $db->prepare("
@@ -102,7 +133,7 @@ if ($action === 'approve') {
     // Stage 2: Personnel final approval
     if ($workflow === 'pending_personnel') {
         if (!in_array($role, ['personnel','hr','admin'], true)) {
-            die("Unauthorized access");
+            workflowError("Unauthorized access");
         }
 
         $ok = $leaveModel->respondToLeave($leave_id, $userId, 'approve', $comments);
@@ -138,10 +169,10 @@ flash_redirect('../views/leave_requests.php', 'warning', 'This request is not in
 
 if ($action === 'reject') {
     if (!in_array($role, ['manager','department_head','personnel','hr','admin'], true)) {
-        die("Unauthorized access");
+        workflowError("Unauthorized access");
     }
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("CSRF validation failed.");
+        workflowError("CSRF validation failed.");
     }
 
     $leave_id = (int)($_POST['leave_id'] ?? 0);
@@ -155,7 +186,7 @@ if ($action === 'reject') {
 
     if ($workflow === '' || $workflow === 'pending_department_head') {
         if (!in_array($role, ['manager','department_head','admin'], true)) {
-            die("Unauthorized access");
+            workflowError("Unauthorized access");
         }
 
         if ($role === 'department_head') {
@@ -164,15 +195,15 @@ if ($action === 'reject') {
             $stmt->execute([$row['employee_id']]);
             $deptId = $stmt->fetchColumn();
             if (!$deptId) {
-                die("Employee has no department assigned");
+                workflowError("Employee has no department assigned");
             }
             $stmt2 = $db->prepare("SELECT 1 FROM department_head_assignments WHERE department_id = ? AND employee_id = (SELECT id FROM employees WHERE user_id = ?) AND is_active = 1");
             $stmt2->execute([$deptId, $userId]);
             if (!$stmt2->fetch()) {
-                die("Unauthorized: You are not the department head for this employee's department");
+                workflowError("Unauthorized: You are not the department head for this employee's department");
             }
         } elseif ($role !== 'admin' && !empty($row['department_head_user_id']) && (int)$row['department_head_user_id'] !== $userId) {
-            die("Unauthorized: Not assigned as this request's Department Head");
+            workflowError("Unauthorized: Not assigned as this request's Department Head");
         }
 
         $stmt = $db->prepare("
@@ -201,7 +232,7 @@ flash_redirect('../views/leave_requests.php', 'warning', 'Leave rejected by Depa
 
     if ($workflow === 'pending_personnel') {
         if (!in_array($role, ['personnel','hr','admin'], true)) {
-            die("Unauthorized access");
+            workflowError("Unauthorized access");
         }
 
         $stmt = $db->prepare("
@@ -233,11 +264,11 @@ flash_redirect('../views/leave_requests.php', 'warning', 'This request is not in
 
 if ($action === 'cancel') {
     if (!in_array($role, ['employee','manager','department_head','admin'], true)) {
-        die("Unauthorized access");
+        workflowError("Unauthorized access");
     }
 
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("CSRF validation failed.");
+        workflowError("CSRF validation failed.");
     }
 
     $leave_id = (int)($_POST['leave_id'] ?? 0);
@@ -271,11 +302,11 @@ flash_redirect('../views/dashboard.php', 'success', 'Leave request cancelled');
 
 if ($action === 'apply') {
     if (!in_array($role, ['employee','manager','department_head','admin'], true)) {
-        die("Unauthorized access");
+        workflowError("Unauthorized access");
     }
 
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("CSRF validation failed.");
+        workflowError("CSRF validation failed.");
     }
 
     $employee_id = $_SESSION['emp_id'] ?? null;
@@ -327,6 +358,11 @@ flash_redirect('../views/apply_leave.php', 'error', $err);
 
     if ($end < $start) {
 flash_redirect('../views/apply_leave.php', 'error', 'End date cannot be earlier than start date.');
+    }
+
+    $workingDays = $leaveModel->calculateDays($start, $end);
+    if ($workingDays <= 0) {
+flash_redirect('../views/apply_leave.php', 'error', 'The selected date range contains no deductible working days. Please choose a valid working-day range.');
     }
 
     $extraData = [

@@ -4,16 +4,19 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
+require_once '../helpers/Flash.php';
+Auth::requireLogin('login.php');
 
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['personnel', 'hr', 'admin'], true)) {
-    die("Access denied");
+    flash_redirect('leave_requests.php?tab=approved', 'error', 'Access Denied');
 }
 
 $db = (new Database())->connect();
 $id = intval($_GET['id'] ?? 0);
 
 if ($id <= 0) {
-    die("Invalid request ID");
+    flash_redirect('leave_requests.php?tab=approved', 'error', 'Invalid request ID');
 }
 
 function e($value): string
@@ -174,7 +177,7 @@ try {
 }
 
 if (!$request) {
-    die("Request not found or not finalized");
+    flash_redirect('leave_requests.php?tab=approved', 'error', 'Request not found or not finalized');
 }
 
 $selectedLeaveType = normalizeLeaveTypeKey((string)arr($request, 'leave_type_name', ''));

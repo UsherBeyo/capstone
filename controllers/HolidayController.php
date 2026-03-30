@@ -4,16 +4,21 @@ require_once '../config/database.php';
 require_once '../models/Holiday.php';
 require_once '../helpers/Flash.php';
 
-if (!in_array($_SESSION['role'], ['admin','manager','hr'])) {
-    die("Access denied");
+if (empty($_SESSION['user_id'])) {
+    flash_redirect('../views/login.php', 'warning', 'Please log in first.');
+}
+
+if (!in_array($_SESSION['role'] ?? '', ['admin','manager','hr','personnel'], true)) {
+    $redirect = !empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '../views/dashboard.php';
+    flash_redirect($redirect, 'error', 'Access Denied!');
 }
 
 $db = (new Database())->connect();
 $holidayModel = new Holiday($db);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("CSRF validation failed.");
+    if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        flash_redirect('../views/holidays.php', 'error', 'CSRF validation failed. Please try again.');
     }
     if (isset($_POST['add'])) {
         $date = $_POST['date'];

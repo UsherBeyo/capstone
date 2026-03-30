@@ -3,6 +3,8 @@ if (session_status() === PHP_SESSION_NONE) {
     if (session_status() === PHP_SESSION_NONE) session_start();
 }
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
+Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
 
 $db = (new Database())->connect();

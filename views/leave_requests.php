@@ -1,10 +1,13 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
+require_once '../helpers/Flash.php';
+Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
 
 if (!in_array($_SESSION['role'], ['admin','manager','department_head','hr','personnel'], true)) {
-    die("Access denied");
+    flash_redirect('dashboard.php', 'error', 'Access Denied');
 }
 
 $db = (new Database())->connect();
@@ -12,11 +15,21 @@ $db = (new Database())->connect();
 $role = $_SESSION['role'];
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
+$isPersonnelOnlyView = ($role === 'personnel');
+$showPendingDepartmentHead = in_array($role, ['admin','manager','department_head'], true);
+$showPendingPersonnel = in_array($role, ['admin','hr','personnel'], true) && $role !== 'department_head';
+$showApprovedSection = true;
+$showRejectedSection = true;
+$showArchivedSection = !$isPersonnelOnlyView;
+
+$allowedTabs = $isPersonnelOnlyView
+    ? ['pending', 'approved', 'rejected']
+    : ['all', 'pending', 'approved', 'rejected', 'archived'];
+
 // tab filter controls (all / pending / approved / rejected / archived)
-$tab = $_GET['tab'] ?? 'all';
-$validTabs = ['all','pending','approved','rejected','archived'];
-if (!in_array($tab, $validTabs, true)) {
-    $tab = 'all';
+$tab = $_GET['tab'] ?? ($isPersonnelOnlyView ? 'pending' : 'all');
+if (!in_array($tab, $allowedTabs, true)) {
+    $tab = $isPersonnelOnlyView ? 'pending' : 'all';
 }
 
 function safe_h($v): string {
@@ -341,6 +354,13 @@ $pendingPersonnel = $db->query("
     ORDER BY lr.start_date DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
+$finalizedWhere = "(lr.workflow_status = 'finalized' OR lr.status = 'approved')";
+$returnedWhere = "(lr.workflow_status IN ('rejected_department_head','returned_by_personnel') OR lr.status = 'rejected')";
+
+if ($isPersonnelOnlyView) {
+    $finalizedWhere .= " AND COALESCE(lr.print_status, '') IN ('', 'pending_print', 'printed')";
+}
+
 $finalized = $db->query("
     SELECT lr.*, e.first_name, e.middle_name, e.last_name, u.email,
            COALESCE(lt.name, lr.leave_type) AS leave_type_name
@@ -348,7 +368,7 @@ $finalized = $db->query("
     JOIN employees e ON lr.employee_id = e.id
     LEFT JOIN users u ON e.user_id = u.id
     LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
-    WHERE lr.workflow_status = 'finalized' OR lr.status = 'approved'
+    WHERE {$finalizedWhere}
     ORDER BY lr.start_date DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -359,7 +379,7 @@ $returnedOrRejected = $db->query("
     JOIN employees e ON lr.employee_id = e.id
     LEFT JOIN users u ON e.user_id = u.id
     LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
-    WHERE lr.workflow_status IN ('rejected_department_head','returned_by_personnel') OR lr.status = 'rejected'
+    WHERE {$returnedWhere}
     ORDER BY lr.start_date DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -423,13 +443,19 @@ if (empty($_SESSION['csrf_token'])) {
     <div class="filter-row" style="margin-bottom:16px;">
         <div class="filter-tabs" id="leaveRequestTabs">
             <?php
-            $tabs = [
-                'all' => 'All',
-                'pending' => 'Pending',
-                'approved' => 'Approved',
-                'rejected' => 'Rejected',
-                'archived' => 'Archived',
-            ];
+            $tabs = $isPersonnelOnlyView
+                ? [
+                    'pending' => 'Pending',
+                    'approved' => 'Approved',
+                    'rejected' => 'Rejected',
+                ]
+                : [
+                    'all' => 'All',
+                    'pending' => 'Pending',
+                    'approved' => 'Approved',
+                    'rejected' => 'Rejected',
+                    'archived' => 'Archived',
+                ];
             foreach ($tabs as $key => $label) {
                 $active = ($tab === $key) ? ' is-active' : '';
                 echo '<a href="?tab=' . $key . '" class="filter-tab' . $active . '" data-tab="' . $key . '">' . htmlspecialchars($label) . '</a>';
@@ -438,7 +464,8 @@ if (empty($_SESSION['csrf_token'])) {
         </div>
     </div>
 
-    <div id="section-pending" style="<?= ($tab === 'all' || $tab === 'pending') ? '' : 'display:none;'; ?>">
+    <div id="section-pending" style="<?= (($isPersonnelOnlyView && $tab === 'pending') || (!$isPersonnelOnlyView && ($tab === 'all' || $tab === 'pending'))) ? '' : 'display:none;'; ?>">
+        <?php if ($showPendingDepartmentHead): ?>
         <div class="ui-card mb-6">
             <h3>Pending Department Head Approval</h3>
         <?php if (empty($pendingDeptHead)): ?>
@@ -543,7 +570,9 @@ if (empty($_SESSION['csrf_token'])) {
             <?= $deptActionModalsHtml; ?>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 
+    <?php if ($showPendingPersonnel): ?>
     <div class="ui-card mb-6">
         <h3>Pending Personnel Review</h3>
         <?php if (empty($pendingPersonnel)): ?>
@@ -804,6 +833,7 @@ if (empty($_SESSION['csrf_token'])) {
             <?= $personnelModalHtml; ?>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 </div>
 
 <div id="section-approved" style="<?= ($tab === 'all' || $tab === 'approved') ? '' : 'display:none;'; ?>">
@@ -840,12 +870,25 @@ if (empty($_SESSION['csrf_token'])) {
 
                             <?php if (in_array($role, ['personnel','hr','admin'], true)): ?>
                                 <td>
-                                    <button class="icon-action-btn labelled"
-                                            onclick="openModal('printModal_<?= (int)$r['id']; ?>')"
-                                            title="Customize signatories and print">
-                                        <span class="action-icon">🖨</span>
-                                        <span class="action-label">Print</span>
-                                    </button>
+                                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                                        <button class="icon-action-btn labelled"
+                                                onclick="openModal('printModal_<?= (int)$r['id']; ?>')"
+                                                title="Customize signatories and print">
+                                            <span class="action-icon">🖨</span>
+                                            <span class="action-label">Print</span>
+                                        </button>
+
+                                        <?php if (($r['print_status'] ?? '') !== 'printed'): ?>
+                                            <form method="POST" action="../controllers/LeaveController.php" style="margin:0;">
+                                                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                                                <input type="hidden" name="leave_id" value="<?= (int)$r['id']; ?>">
+                                                <input type="hidden" name="action" value="mark_printed">
+                                                <button type="submit" class="btn-success" title="Mark this request as printed">Mark Printed</button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="status-badge approved">Printed</span>
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
                             <?php endif; ?>
                         </tr>
@@ -957,6 +1000,7 @@ if (empty($_SESSION['csrf_token'])) {
     </div>
 </div>
 
+<?php if ($showArchivedSection): ?>
 <div id="section-archived" style="<?= ($tab === 'all' || $tab === 'archived') ? '' : 'display:none;'; ?>">
     <div id="archiveCard" class="ui-card">
         <h3>Archived Requests (<?= count($archived); ?>)</h3>
@@ -993,6 +1037,7 @@ if (empty($_SESSION['csrf_token'])) {
         <?php endif; ?>
     </div>
 </div>
+<?php endif; ?>
 
 <script>
 function openModal(id) {

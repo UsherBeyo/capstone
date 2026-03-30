@@ -1,6 +1,8 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
+Auth::requireLogin('login.php');
 
 if (!in_array($_SESSION['role'], ['employee','manager','department_head','admin'], true)) {
     die("Access denied");
@@ -632,6 +634,7 @@ if (empty($_SESSION['csrf_token'])) {
                     <div>
                         <label for="total_days">Total Days</label>
                         <input type="text" id="total_days" readonly>
+                        <div id="date-range-feedback" class="muted-note" style="margin-top:8px;"></div>
                     </div>
 
                     <div>
@@ -738,9 +741,10 @@ const leaveTypeRules = <?= json_encode($leaveTypeRulesById, JSON_UNESCAPED_UNICO
 
 function calculateDaysAndRefresh() {
     if (typeof calculateDays === 'function') {
-        calculateDays();
+        calculateDays(updateLeaveTypeUI);
+        return;
     }
-    setTimeout(updateLeaveTypeUI, 150);
+    updateLeaveTypeUI();
 }
 
 function renderSubtypeOptions(rule) {

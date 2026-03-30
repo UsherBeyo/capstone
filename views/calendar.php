@@ -1,6 +1,8 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
+require_once '../helpers/Auth.php';
+Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -287,6 +289,170 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
             font-size: 12px;
             color: var(--muted);
         }
+        .calendar-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .calendar-jump-form {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 10px 12px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+            box-shadow: 0 4px 12px rgba(15,23,42,0.04);
+        }
+        .calendar-jump-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 132px;
+        }
+        .calendar-jump-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--muted);
+        }
+        .calendar-jump-select {
+            min-height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 9px 12px;
+            background: #fff;
+            color: var(--text);
+            font-weight: 600;
+        }
+        .calendar-jump-actions {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            margin-left: 4px;
+            padding-top: 16px;
+        }
+        .calendar-insight-card {
+            border-radius: 20px;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(37,99,235,0.06), rgba(16,185,129,0.04));
+        }
+        .calendar-action-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .calendar-modal-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            padding: 15px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(37,99,235,0.12);
+            background: #fff;
+            text-align: left;
+            cursor: pointer;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+            box-shadow: 0 2px 10px rgba(15,23,42,0.04);
+        }
+        .calendar-modal-trigger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 26px rgba(15,23,42,0.08);
+            border-color: rgba(37,99,235,0.22);
+        }
+        .calendar-trigger-copy {
+            min-width: 0;
+        }
+        .calendar-trigger-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .calendar-trigger-sub {
+            font-size: 12px;
+            color: var(--secondary-text);
+        }
+        .calendar-trigger-count {
+            flex-shrink: 0;
+            min-width: 58px;
+            height: 58px;
+            border-radius: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #dbeafe, #eef2ff);
+            color: var(--primary);
+            font-size: 22px;
+            font-weight: 800;
+        }
+        .calendar-overview-note {
+            margin-top: 12px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .calendar-detail-modal .modal-content {
+            width: min(760px, 94vw);
+            padding: 0;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 20px 45px rgba(15,23,42,0.18);
+        }
+        .calendar-detail-shell {
+            background: linear-gradient(180deg, #f8fbff 0%, #ffffff 22%);
+        }
+        .calendar-detail-header {
+            position: relative;
+            padding: 24px 24px 18px;
+            border-bottom: 1px solid var(--border);
+        }
+        .calendar-detail-kicker {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .09em;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+        .calendar-detail-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--text);
+            margin: 0 0 8px;
+            padding-right: 52px;
+        }
+        .calendar-detail-subtitle {
+            font-size: 14px;
+            color: var(--secondary-text);
+            margin: 0;
+        }
+        .calendar-detail-body {
+            padding: 22px 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .calendar-detail-modal .modal-close {
+            top: 18px;
+            right: 18px;
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            background: #fff;
+            border: 1px solid var(--border);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 18px rgba(15,23,42,0.08);
+        }
         .calendar-sidebar-stack {
             display: flex;
             flex-direction: column;
@@ -546,6 +712,15 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
             .calendar-grid {
                 border-spacing: 6px;
             }
+            .calendar-toolbar {
+                align-items: stretch;
+            }
+            .calendar-jump-form {
+                width: 100%;
+            }
+            .calendar-jump-field {
+                flex: 1 1 160px;
+            }
             .calendar-grid td {
                 min-width: 0;
                 height: 100px;
@@ -561,6 +736,22 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
         @media (max-width: 640px) {
             .calendar-grid th {
                 font-size: 11px;
+            }
+            .calendar-jump-actions {
+                width: 100%;
+                margin-left: 0;
+                padding-top: 0;
+            }
+            .calendar-jump-actions .btn {
+                flex: 1 1 0;
+            }
+            .calendar-trigger-count {
+                min-width: 50px;
+                height: 50px;
+                font-size: 18px;
+            }
+            .calendar-detail-title {
+                font-size: 22px;
             }
             .calendar-grid td {
                 height: 90px;
@@ -598,11 +789,38 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
 
             <div class="ui-card calendar-card">
                 <div class="calendar-headline">
-                    <div class="calendar-month-chip">
-                        <span><?= htmlspecialchars($monthLabel); ?></span>
-                        <small><?= intval($daysWithEvents); ?> active day<?= $daysWithEvents === 1 ? '' : 's'; ?></small>
+                    <div class="calendar-toolbar">
+                        <div>
+                            <div class="calendar-month-chip">
+                                <span><?= htmlspecialchars($monthLabel); ?></span>
+                                <small><?= intval($daysWithEvents); ?> active day<?= $daysWithEvents === 1 ? '' : 's'; ?></small>
+                            </div>
+                            <div class="calendar-note">Click a date with events to view full details.</div>
+                        </div>
+                        <form method="get" class="calendar-jump-form">
+                            <div class="calendar-jump-field">
+                                <label class="calendar-jump-label" for="calendar-month-select">Month</label>
+                                <select id="calendar-month-select" name="m" class="calendar-jump-select">
+                                    <?php for ($monthOption = 1; $monthOption <= 12; $monthOption++): ?>
+                                        <option value="<?= $monthOption; ?>" <?= $monthOption === $month ? 'selected' : ''; ?>>
+                                            <?= htmlspecialchars(date('F', mktime(0, 0, 0, $monthOption, 1, $year))); ?>
+                                        </option>
+                                    <?php endfor; ?>
+                                </select>
+                            </div>
+                            <div class="calendar-jump-field">
+                                <label class="calendar-jump-label" for="calendar-year-select">Year</label>
+                                <select id="calendar-year-select" name="y" class="calendar-jump-select">
+                                    <?php for ($yearOption = max(2000, $year - 5); $yearOption <= min(2100, $year + 5); $yearOption++): ?>
+                                        <option value="<?= $yearOption; ?>" <?= $yearOption === $year ? 'selected' : ''; ?>><?= $yearOption; ?></option>
+                                    <?php endfor; ?>
+                                </select>
+                            </div>
+                            <div class="calendar-jump-actions">
+                                <button type="submit" class="btn btn-primary">Jump</button>
+                            </div>
+                        </form>
                     </div>
-                    <div class="calendar-note">Click a date with events to view full details.</div>
                 </div>
 
                 <div class="table-wrap">
@@ -706,84 +924,126 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
                 </div>
             </div>
 
-            <div class="ui-card calendar-summary-card collapsible-card">
-                <div class="collapsible-header">
-                    <h3 class="collapsible-title">Upcoming Leaves</h3>
-                    <button type="button" class="collapsible-toggle" aria-expanded="true">▾</button>
+            <div class="ui-card calendar-summary-card calendar-insight-card">
+                <div class="summary-kicker">Quick View</div>
+                <h4>Open Calendar Details</h4>
+                <div class="calendar-action-grid">
+                    <button type="button" class="calendar-modal-trigger" data-modal-target="upcomingLeavesModal">
+                        <div class="calendar-trigger-copy">
+                            <div class="calendar-trigger-title">Upcoming Leaves</div>
+                            <div class="calendar-trigger-sub">Review the next approved and pending leave requests.</div>
+                        </div>
+                        <span class="calendar-trigger-count"><?= count($upcomingLeaves); ?></span>
+                    </button>
+                    <button type="button" class="calendar-modal-trigger" data-modal-target="upcomingEventsModal">
+                        <div class="calendar-trigger-copy">
+                            <div class="calendar-trigger-title">Upcoming Events</div>
+                            <div class="calendar-trigger-sub">See the next holidays and non-working dates.</div>
+                        </div>
+                        <span class="calendar-trigger-count"><?= count($upcomingEvents); ?></span>
+                    </button>
+                    <button type="button" class="calendar-modal-trigger" data-modal-target="snapshotModal">
+                        <div class="calendar-trigger-copy">
+                            <div class="calendar-trigger-title">Snapshot</div>
+                            <div class="calendar-trigger-sub">Get a quick monthly summary before planning ahead.</div>
+                        </div>
+                        <span class="calendar-trigger-count"><?= intval($totalMonthRequests); ?></span>
+                    </button>
                 </div>
-                <div class="collapsible-body expanded">
-                    <div class="summary-list scrollable-section">
-                        <?php if (empty($upcomingLeaves)): ?>
-                            <div class="empty-state">No upcoming leave requests found.</div>
-                        <?php else: ?>
-                            <?php foreach ($upcomingLeaves as $leave): ?>
-                                <?php $status = strtolower(trim((string)$leave['status'])); ?>
-                                <div class="summary-item">
-                                    <div class="summary-item-header">
-                                        <div>
-                                            <div class="summary-item-title"><?= htmlspecialchars(trim(($leave['first_name'] ?? '') . ' ' . ($leave['last_name'] ?? ''))); ?></div>
-                                            <div class="summary-item-sub"><?= htmlspecialchars((string)$leave['leave_type']); ?></div>
-                                        </div>
-                                        <span class="summary-badge <?= $status === 'approved' ? 'approved' : 'pending'; ?>"><?= htmlspecialchars(ucfirst($status)); ?></span>
-                                    </div>
-                                    <div class="summary-item-meta"><?= htmlspecialchars(app_format_date_range((string)$leave['start_date'], (string)$leave['end_date'])); ?><?= !empty($leave['total_days']) ? ' • ' . number_format((float)$leave['total_days'], 3) . ' day(s)' : ''; ?></div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
-                </div>
+                <div class="calendar-overview-note">These open in focused modals so you can review details without stretching the page downward.</div>
             </div>
 
-            <div class="ui-card calendar-summary-card collapsible-card">
-                <div class="collapsible-header">
-                    <h3 class="collapsible-title">Upcoming Events</h3>
-                    <button type="button" class="collapsible-toggle" aria-expanded="true">▾</button>
-                </div>
-                <div class="collapsible-body expanded">
-                    <div class="summary-list scrollable-section">
-                        <?php if (empty($upcomingEvents)): ?>
-                            <div class="empty-state">No upcoming holidays found.</div>
-                        <?php else: ?>
-                            <?php foreach ($upcomingEvents as $event): ?>
-                                <div class="summary-item">
-                                    <div class="summary-item-header">
-                                        <div>
-                                            <div class="summary-item-title"><?= htmlspecialchars((string)($event['description'] ?: 'Holiday')); ?></div>
-                                            <div class="summary-item-sub"><?= htmlspecialchars((string)($event['type'] ?: 'Holiday')); ?></div>
-                                        </div>
-                                        <span class="summary-badge holiday">Holiday</span>
-                                    </div>
-                                    <div class="summary-item-meta"><?= htmlspecialchars(app_format_date((string)$event['holiday_date'])); ?></div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
+        </div>
+    </div>
 
-            <div class="ui-card calendar-summary-card">
-                <div class="summary-kicker">Snapshot</div>
-                <h4>This Month</h4>
+    <div id="upcomingLeavesModal" class="modal calendar-detail-modal" style="display:none;">
+        <div class="modal-content calendar-detail-shell">
+            <button type="button" class="modal-close" data-close-modal="upcomingLeavesModal" aria-label="Close">&times;</button>
+            <div class="calendar-detail-header">
+                <div class="calendar-detail-kicker">Calendar Detail</div>
+                <h3 class="calendar-detail-title">Upcoming Leaves</h3>
+                <p class="calendar-detail-subtitle">A focused list of the next approved and pending leave requests.</p>
+            </div>
+            <div class="calendar-detail-body">
+                <?php if (empty($upcomingLeaves)): ?>
+                    <div class="empty-state">No upcoming leave requests found.</div>
+                <?php else: ?>
+                    <?php foreach ($upcomingLeaves as $leave): ?>
+                        <?php $status = strtolower(trim((string)$leave['status'])); ?>
+                        <div class="summary-item">
+                            <div class="summary-item-header">
+                                <div>
+                                    <div class="summary-item-title"><?= htmlspecialchars(trim(($leave['first_name'] ?? '') . ' ' . ($leave['last_name'] ?? ''))); ?></div>
+                                    <div class="summary-item-sub"><?= htmlspecialchars((string)$leave['leave_type']); ?></div>
+                                </div>
+                                <span class="summary-badge <?= $status === 'approved' ? 'approved' : 'pending'; ?>"><?= htmlspecialchars(ucfirst($status)); ?></span>
+                            </div>
+                            <div class="summary-item-meta"><?= htmlspecialchars(app_format_date_range((string)$leave['start_date'], (string)$leave['end_date'])); ?><?= !empty($leave['total_days']) ? ' • ' . number_format((float)$leave['total_days'], 3) . ' day(s)' : ''; ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div id="upcomingEventsModal" class="modal calendar-detail-modal" style="display:none;">
+        <div class="modal-content calendar-detail-shell">
+            <button type="button" class="modal-close" data-close-modal="upcomingEventsModal" aria-label="Close">&times;</button>
+            <div class="calendar-detail-header">
+                <div class="calendar-detail-kicker">Calendar Detail</div>
+                <h3 class="calendar-detail-title">Upcoming Events</h3>
+                <p class="calendar-detail-subtitle">All upcoming holidays in an easier-to-scan modal list.</p>
+            </div>
+            <div class="calendar-detail-body">
+                <?php if (empty($upcomingEvents)): ?>
+                    <div class="empty-state">No upcoming holidays found.</div>
+                <?php else: ?>
+                    <?php foreach ($upcomingEvents as $event): ?>
+                        <div class="summary-item">
+                            <div class="summary-item-header">
+                                <div>
+                                    <div class="summary-item-title"><?= htmlspecialchars((string)($event['description'] ?: 'Holiday')); ?></div>
+                                    <div class="summary-item-sub"><?= htmlspecialchars((string)($event['type'] ?: 'Holiday')); ?></div>
+                                </div>
+                                <span class="summary-badge holiday">Holiday</span>
+                            </div>
+                            <div class="summary-item-meta"><?= htmlspecialchars(app_format_date((string)$event['holiday_date'])); ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div id="snapshotModal" class="modal calendar-detail-modal" style="display:none;">
+        <div class="modal-content calendar-detail-shell">
+            <button type="button" class="modal-close" data-close-modal="snapshotModal" aria-label="Close">&times;</button>
+            <div class="calendar-detail-header">
+                <div class="calendar-detail-kicker">Calendar Detail</div>
+                <h3 class="calendar-detail-title">This Month Snapshot</h3>
+                <p class="calendar-detail-subtitle">A clean summary of requests, approvals, pending items, and holiday dates for <?= htmlspecialchars($monthLabel); ?>.</p>
+            </div>
+            <div class="calendar-detail-body">
                 <div class="month-stats">
                     <div class="stat-card">
                         <div class="stat-label">Leave Requests</div>
                         <div class="stat-value"><?= intval($totalMonthRequests); ?></div>
-                        
+                        <div class="stat-help">Requests touching the current month view.</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Approved</div>
                         <div class="stat-value" style="color:#15803d;"><?= intval($monthApprovedCount); ?></div>
-                        
+                        <div class="stat-help">Approved leave requests in this month.</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Pending</div>
                         <div class="stat-value" style="color:#a16207;"><?= intval($monthPendingCount); ?></div>
-                        
+                        <div class="stat-help">Pending leave requests still awaiting action.</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Holiday Dates</div>
                         <div class="stat-value" style="color:#b91c1c;"><?= intval($totalMonthHolidays); ?></div>
-                        
+                        <div class="stat-help">Holiday dates stored for the selected month.</div>
                     </div>
                 </div>
             </div>
@@ -857,6 +1117,50 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
             var panel = document.getElementById('sidePanel');
             if (!panel.contains(event.target) && !event.target.closest('td[data-date]')) {
                 panel.classList.remove('open');
+            }
+        });
+
+        function openCalendarModal(id) {
+            var modal = document.getElementById(id);
+            if (!modal) return;
+            modal.style.display = 'flex';
+            modal.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeCalendarModal(id) {
+            var modal = document.getElementById(id);
+            if (!modal) return;
+            modal.classList.remove('open');
+            modal.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        document.querySelectorAll('[data-modal-target]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                openCalendarModal(this.getAttribute('data-modal-target'));
+            });
+        });
+
+        document.querySelectorAll('[data-close-modal]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                closeCalendarModal(this.getAttribute('data-close-modal'));
+            });
+        });
+
+        document.querySelectorAll('.calendar-detail-modal').forEach(function(modal) {
+            modal.addEventListener('click', function(event) {
+                if (event.target === modal) {
+                    closeCalendarModal(modal.id);
+                }
+            });
+        });
+
+        window.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                document.querySelectorAll('.calendar-detail-modal.open').forEach(function(modal) {
+                    closeCalendarModal(modal.id);
+                });
             }
         });
     </script>
