@@ -417,7 +417,8 @@ if (empty($_SESSION['csrf_token'])) {
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="app-main">
-    <h2>Leave Requests</h2>
+    <h1>Leave Requests</h1>
+    <p class="page-subtitle" style="margin-bottom:14px;">Review, track, and manage employee leave submissions</p>
 
     <div class="filter-row" style="margin-bottom:16px;">
         <div class="filter-tabs" id="leaveRequestTabs">

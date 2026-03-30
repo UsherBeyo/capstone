@@ -642,7 +642,8 @@ if ($reportType === 'balance') {
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="app-main">
-    <h2><?= safe_h($reportTitle); ?></h2>
+    <h1><?= safe_h($reportTitle); ?></h1>
+    <p class="page-subtitle" style="margin-bottom:14px;">Generate summaries, exports, and leave records</p>
 
     <div class="ui-card" style="margin-bottom:24px;">
         <h3>Report Filter</h3>

@@ -32,6 +32,7 @@ $total = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
 
 <div class="app-main">
     <h2>System Statistics</h2>
+    <p class="page-subtitle" style="margin-bottom:14px;">System and department-wide analytics</p>
 
     <div class="ui-card">
         <h3>Total employees</h3>

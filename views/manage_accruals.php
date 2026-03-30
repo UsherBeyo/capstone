@@ -136,47 +136,55 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
 
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
-<div class="app-main">
-    <h2>Manage Accruals</h2>
-
-    <div class="ui-card" style="margin-bottom:20px;">
-        <h3>Bulk Accrual for All Employees</h3>
-        <p style="font-size:13px;opacity:0.9;margin-bottom:16px;">
-            This will add the selected accrual amount to both <strong>Vacational</strong> and <strong>Sick</strong> balances
-            for <strong>all employees</strong>. This can still be used even if it is not yet the end of the month.
-            <br><br>
-            <strong>Note:</strong> Force Leave is not affected here.
-        </p>
-
-        <div class="form-centered">
-            <form method="POST" id="bulkAccrualForm">
-                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-                <input type="hidden" name="record_bulk_accrual" value="1">
-
-                <label>Employees Affected</label>
-                <input type="text" value="<?= $totalEmployees; ?> employee(s)" readonly>
-
-                <label>Amount to Add (days)</label>
-                <input type="number" step="0.001" name="bulk_amount" id="bulk_amount" value="1.250" required>
-
-                <label>For Month</label>
-                <input type="month" name="bulk_month" id="bulk_month" value="<?= date('Y-m'); ?>" required>
-
-                <button type="submit">Add Accrual to All Employees</button>
-            </form>
-        </div>
+<div class="app-main accruals-page">
+    <div class="accruals-header">
+        <h2>Manage Accruals</h2>
+        <p class="accruals-subtitle">Add leave accruals for employees.</p>
     </div>
 
-    <div class="card-container" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
-        <div class="ui-card" style="flex:1;min-width:300px;max-width:500px;">
+    <div class="accrual-card">
+        <h3>Bulk Accrual for All Employees</h3>
+        <p class="accrual-description">This will add the selected accrual amount to both <strong>Vacational</strong> and <strong>Sick</strong> balances for <strong>all employees</strong>. This can still be used even if it is not yet the end of the month.</p>
+        <div class="accrual-note">
+            <span class="accrual-note-icon">⚠</span>
+            <span><strong>Note:</strong> Force Leave is not affected here.</span>
+        </div>
+
+        <form method="POST" id="bulkAccrualForm" class="accrual-form-grid">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+            <input type="hidden" name="record_bulk_accrual" value="1">
+
+            <div class="accrual-form-item">
+                <label>Employees Affected</label>
+                <input type="text" value="<?= $totalEmployees; ?> employee(s)" readonly>
+            </div>
+
+            <div class="accrual-form-item">
+                <label>Amount to Add (days)</label>
+                <input type="number" step="0.001" name="bulk_amount" id="bulk_amount" value="1.250" required>
+            </div>
+
+            <div class="accrual-form-item">
+                <label>For Month</label>
+                <input type="month" name="bulk_month" id="bulk_month" value="<?= date('Y-m'); ?>" required>
+            </div>
+
+            <div class="accrual-form-actions">
+                <button type="submit" class="btn btn-primary">Add Accrual to All Employees</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="accrual-lower-grid">
+        <div class="manual-accrual-card">
             <h3>Record Manual Accrual</h3>
-            <p style="font-size:13px;opacity:0.9;">Use this to record manual accruals for past periods or special cases.</p>
+            <p class="accrual-description">Use this to record manual accruals for past periods or special cases.</p>
 
-            <div class="form-centered">
-                <form method="POST">
-                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-                    <input type="hidden" name="record_accrual" value="1">
+            <form method="POST" class="accrual-manual-form">
+                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                <input type="hidden" name="record_accrual" value="1">
 
+                <div class="accrual-form-item">
                     <label>Employee</label>
                     <select name="employee_id" required>
                         <option value="">-- Select Employee --</option>
@@ -187,25 +195,29 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
                             </option>
                         <?php endforeach; ?>
                     </select>
+                </div>
 
+                <div class="accrual-form-item">
                     <label>Amount (days)</label>
                     <input type="number" step="0.001" name="amount" value="1.250" required>
+                </div>
 
+                <div class="accrual-form-item">
                     <label>For Month</label>
                     <input type="month" name="month" value="<?= date('Y-m'); ?>" required>
+                </div>
 
-                    <button type="submit">Record Accrual</button>
-                </form>
-            </div>
+                <div class="accrual-form-actions">
+                    <button type="submit" class="btn btn-primary">Record Accrual</button>
+                </div>
+            </form>
         </div>
 
-        <div class="ui-card collapsible-card" style="flex:1;min-width:300px;max-width:700px;">
-            <div class="collapsible-header">
-                <h3 class="collapsible-title">Accrual History (Last 50)</h3>
-                <button type="button" class="collapsible-toggle" aria-expanded="true">▾</button>
-            </div>
-            <div class="collapsible-body expanded scrollable-section">
-                <table class="accrual-history-table" style="font-size:13px; width:100%; border-spacing:0;">
+        <div class="history-card">
+            <h3>Accrual History (Last 50)</h3>
+            <p class="accrual-description">Recent accrual transactions.</p>
+            <div class="history-table-shell">
+                <table class="accrual-history-table">
                     <thead>
                         <tr>
                             <th>Employee</th>
@@ -215,14 +227,14 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
                         </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($accruals as $a): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?></td>
-                        <td><?= number_format((float)$a['amount'], 3); ?> days</td>
-                        <td><?= htmlspecialchars(!empty($a['month_reference']) ? app_format_month_ref($a['month_reference']) : '—'); ?></td>
-                        <td><?= !empty($a['created_at']) ? htmlspecialchars(app_format_date($a['created_at'])) : ''; ?></td>
-                    </tr>
-                    <?php endforeach; ?>
+                        <?php foreach ($accruals as $a): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($a['first_name'] . ' ' . $a['last_name']); ?></td>
+                            <td><span class="amount-pill"><?= number_format((float)$a['amount'], 3); ?> days</span></td>
+                            <td><?= htmlspecialchars(!empty($a['month_reference']) ? app_format_month_ref($a['month_reference']) : '—'); ?></td>
+                            <td><?= !empty($a['created_at']) ? htmlspecialchars(app_format_date($a['created_at'])) : ''; ?></td>
+                        </tr>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>

@@ -372,6 +372,7 @@ if (isset($_GET['view_history'])) {
 <div class="app-main employee-page-shell">
     <?php
     $title = 'Manage Employees';
+    $subtitle = 'Create, update, and organize employee records';
     $actions = ['<button id="openCreateModal" class="btn btn-primary">+ New Employee</button>'];
     include __DIR__ . '/partials/ui/page-header.php';
     ?>

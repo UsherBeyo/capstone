@@ -29,6 +29,7 @@ if (empty($_SESSION['csrf_token'])) {
 <div class="app-main">
     <?php
     $title = 'Manage Departments';
+    $subtitle = 'Manage department structure and employee assignments';
     $actions = ['<button id="openCreateModal" class="btn btn-primary">+ New Department</button>'];
     include __DIR__ . '/partials/ui/page-header.php';
     ?>

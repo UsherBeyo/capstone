@@ -23,6 +23,7 @@ if (empty($_SESSION['csrf_token'])) {
 <div class="app-main">
     <div class="ui-card">
         <h2>Change Password</h2>
+        <p class="page-subtitle" style="margin-bottom:14px;">Update your login credentials</p>
         <form method="POST" action="../controllers/UserController.php">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
             <input type="hidden" name="action" value="change_password">

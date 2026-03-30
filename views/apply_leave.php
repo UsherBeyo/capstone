@@ -554,6 +554,7 @@ if (empty($_SESSION['csrf_token'])) {
 <div class="app-main">
     <?php
     $title = 'Apply Leave';
+    $subtitle = 'Request leave and view your available balance';
     include __DIR__ . '/partials/ui/page-header.php';
     ?>
     <div class="ui-card leave-application-card">

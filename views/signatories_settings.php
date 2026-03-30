@@ -33,6 +33,7 @@ $labels = [
 <div class="app-main">
     <?php
     $title = 'Signatories Settings';
+    $subtitle = 'Set the names and positions used in official forms';
     include __DIR__ . '/partials/ui/page-header.php';
     ?>
 

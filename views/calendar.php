@@ -587,7 +587,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
         <div class="calendar-board">
             <?php
             $title = 'Leave Calendar';
-            $subtitle = 'Track approved and pending leaves, holidays, and month activity in one view.';
+            $subtitle = 'View all scheduled leaves and holidays';
             $actions = [
                 '<a href="?m=' . ($month == 1 ? 12 : $month - 1) . '&y=' . ($month == 1 ? $year - 1 : $year) . '" class="btn btn-ghost">&lt; Prev</a>',
                 '<a href="?m=' . intval(date('n')) . '&y=' . intval(date('Y')) . '" class="btn btn-secondary">Today</a>',
@@ -768,22 +768,22 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
                     <div class="stat-card">
                         <div class="stat-label">Leave Requests</div>
                         <div class="stat-value"><?= intval($totalMonthRequests); ?></div>
-                        <div class="stat-help">Requests overlapping this month</div>
+                        
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Approved</div>
                         <div class="stat-value" style="color:#15803d;"><?= intval($monthApprovedCount); ?></div>
-                        <div class="stat-help">Ready and active</div>
+                        
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Pending</div>
                         <div class="stat-value" style="color:#a16207;"><?= intval($monthPendingCount); ?></div>
-                        <div class="stat-help">Waiting for action</div>
+                        
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Holiday Dates</div>
                         <div class="stat-value" style="color:#b91c1c;"><?= intval($totalMonthHolidays); ?></div>
-                        <div class="stat-help">Official holidays in view</div>
+                        
                     </div>
                 </div>
             </div>

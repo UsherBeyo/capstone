@@ -30,8 +30,8 @@ html {
     /* typography */
     --font-family: "Inter", "Poppins", system-ui, -apple-system, sans-serif;
     --font-system-title: 36px;     /* app header size */
-    --font-page-title: 28px;       /* page title */
-    --font-section-title: 20px;    /* section heading */
+    --font-page-title: 30px;       /* page title */
+    --font-section-title: 22px;    /* section heading */
     --font-body: 14px;             /* body text */
     --font-small: 12px;            /* small text */
 }
@@ -172,7 +172,7 @@ body {
         flex-direction: row;
         flex-wrap: wrap;
         gap: 8px;
-        padding: 12px;
+        padding: 32px 12px 12px 12px;
     }
 
     .sidebar-section {
@@ -238,11 +238,11 @@ h1 {
 }
 
 h2 {
-    font-size: var(--font-page-title);
+    font-size: 32px;
     font-weight: 700;
     line-height: 1.2;
     color: var(--text);
-    margin-bottom: 8px;
+    margin: 0 0 8px 0;
 }
 
 h3 {
@@ -305,7 +305,7 @@ small, .text-small {
     font-size: 32px;
     font-weight: 700;
     color: var(--text);
-    margin: 0;
+    margin: 0 0 8px 0;
 }
 .page-subtitle {
     font-size: 16px;
@@ -428,7 +428,7 @@ small, .text-small {
     margin-bottom: 24px;
 }
 .ui-card-header { margin-bottom: 16px; }
-.ui-card-title { font-size: 22px; font-weight: 700; color: var(--text); margin:0; }
+.ui-card-title { font-size: 22px; font-weight: 600; color: var(--text); margin:0; }
 .ui-card-actions { margin-top: 16px; display:flex; gap:8px; }
 
 .collapsible-card {
@@ -445,7 +445,7 @@ small, .text-small {
     padding-bottom: 10px;
     margin-bottom: 14px;
 }
-.collapsible-title { font-size: 18px; font-weight: 700; margin: 0; color: var(--text); }
+.collapsible-title { font-size: 22px; font-weight: 600; margin: 0; color: var(--text); }
 .collapsible-toggle {
     font-size: 14px;
     font-weight: 700;
@@ -621,7 +621,7 @@ small, .text-small {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 0 8px;
+    padding: 20px 8px 0 8px;
 }
 
 .sidebar-section {
@@ -1245,8 +1245,166 @@ table th {
 .form-centered .checkbox-row label { display: inline-block; margin: 0; vertical-align: middle; line-height: 1.2; }
 .form-centered input[type="text"], .form-centered input[type="number"] { width: 100%; box-sizing: border-box; }
 
+/* Manage accruals card layout fix - prevent manual accrual card from stretching vertically */
+.card-container {
+    align-items: flex-start !important;
+}
+.card-container .ui-card:first-child {
+    height: auto;
+    align-self: flex-start;
+}
 
-table {
+/* Accruals page - modern dashboard styling */
+.accruals-page {
+    background: #f5f7fc;
+    padding: 28px 24px 32px;
+}
+.accruals-header {
+    margin-bottom: 20px;
+}
+.accruals-header h2 {
+    margin: 0 0 6px 0;
+    font-size: 32px;
+}
+.accruals-subtitle {
+    color: #6b7280;
+    font-size: 14px;
+    margin: 0;
+}
+.accrual-card,
+.manual-accrual-card,
+.history-card {
+    background: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 18px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    padding: 24px;
+    margin-bottom: 20px;
+}
+.accrual-card h3,
+.manual-accrual-card h3,
+.history-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 22px;
+}
+.accrual-description {
+    color: #6b7280;
+    font-size: 14px;
+    margin: 0 0 14px 0;
+    line-height: 1.45;
+}
+.accrual-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #fde8ba;
+    background: #fff8e5;
+    color: #92400e;
+    padding: 10px 12px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+.accrual-note-icon {
+    font-size: 15px;
+}
+.accrual-form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    align-items: flex-start;
+}
+.accrual-form-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.accrual-form-item label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+}
+.accrual-form-item input,
+.accrual-form-item select {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid #dbe2ec;
+    border-radius: 10px;
+    padding: 9px 10px;
+    background: #f8fafc;
+    color: #111827;
+    font-size: 14px;
+}
+.accrual-form-actions {
+    grid-column: 1 / -1;
+    padding-top: 6px;
+}
+.accrual-form-actions .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 10px;
+}
+.accrual-manual-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.accrual-lower-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: flex-start;
+}
+.history-table-shell {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.accrual-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+}
+.accrual-history-table th {
+    background: #f9fafb;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.accrual-history-table td {
+    padding: 10px 12px;
+    color: #1f2937;
+    font-size: 13px;
+    border-bottom: 1px solid #f3f4f6;
+}
+.accrual-history-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.accrual-history-table tbody tr:hover {
+    background: #f8fafc;
+}
+.amount-pill {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.14);
+    color: #047857;
+    font-size: 13px;
+    font-weight: 600;
+}
+@media (max-width: 960px) {
+    .accruals-page { padding: 20px; }
+    .accrual-form-grid { grid-template-columns: 1fr; }
+    .accrual-lower-grid { grid-template-columns: 1fr; }
+}
+
+
     width: 100%;
     margin-top: 20px;
     border-collapse: collapse;

@@ -20,7 +20,8 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 <div class="app-main">
-    <h2>Leave Types</h2>
+    <h1>Leave Types</h1>
+    <p class="page-subtitle" style="margin-bottom:14px;">Configure available leave categories and allocation rules</p>
     <div class="ui-card">
         <table border="1" width="100%">
             <tr><th>ID</th><th>Name</th><th>Deduct?</th><th>Requires Approval</th><th>Max/yr</th><th>Auto approve</th><th>Actions</th></tr>

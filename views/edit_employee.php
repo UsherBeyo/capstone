@@ -59,6 +59,7 @@ $is_own_profile = ($role === 'employee');
 <div class="app-main">
     <div class="ui-card">
         <h2>Edit Employee</h2>
+        <p class="page-subtitle" style="margin-bottom:14px;">Update employee information and assignments</p>
         <form method="POST" action="../controllers/AdminController.php" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
             <input type="hidden" name="update_employee" value="1">
