@@ -4,6 +4,7 @@ require_once '../config/database.php';
 require_once '../helpers/Auth.php';
 Auth::requireLogin('login.php');
 require_once '../helpers/Flash.php';
+require_once '../helpers/Pagination.php';
 
 if (empty($_SESSION['user_id'])) {
     flash_redirect('login.php', 'warning', 'Please log in first.');
@@ -15,7 +16,11 @@ if (!in_array($_SESSION['role'] ?? '', ['admin','manager','hr','personnel'], tru
 }
 
 $db = (new Database())->connect();
-$hols = $db->query("SELECT * FROM holidays ORDER BY holiday_date")->fetchAll(PDO::FETCH_ASSOC);
+$hols = $db->query("SELECT * FROM holidays ORDER BY holiday_date DESC")->fetchAll(PDO::FETCH_ASSOC);
+$holidaySearch = trim((string)($_GET['q'] ?? ''));
+$hols = pagination_filter_array($hols, $holidaySearch, ['holiday_date', 'description', 'type']);
+$holidaysPagination = paginate_array($hols, (int)($_GET['page'] ?? 1), 10);
+$hols = $holidaysPagination['items'];
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -24,6 +29,7 @@ if (empty($_SESSION['csrf_token'])) {
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Holidays</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <style>
@@ -118,6 +124,7 @@ if (empty($_SESSION['csrf_token'])) {
             .holiday-update-form select { width: 100% !important; }
         }
     </style>
+    <script src="../assets/js/script.js"></script>
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
@@ -128,8 +135,14 @@ if (empty($_SESSION['csrf_token'])) {
     $subtitle = 'Configure holiday dates used by the leave calendar';
     include __DIR__ . '/partials/ui/page-header.php';
     ?>
-    <div class="ui-card">
+    <div class="ui-card ajax-fragment" data-fragment-id="holidays-list" data-page-param="page" data-search-param="q">
         <h2>Manage Holidays</h2>
+        <div class="fragment-toolbar">
+            <div class="search-input">
+                <input class="form-control live-search-input" type="text" name="q" value="<?= htmlspecialchars($holidaySearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search date, description, or type...">
+            </div>
+            <div class="fragment-summary">Showing <?= $holidaysPagination['from']; ?>–<?= $holidaysPagination['to']; ?> of <?= $holidaysPagination['total']; ?> holiday entries.</div>
+        </div>
         <form method="POST" action="../controllers/HolidayController.php" class="holidays-create-form">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
             <div class="holidays-form-group">
@@ -192,6 +205,7 @@ if (empty($_SESSION['csrf_token'])) {
                 </tbody>
             </table>
         </div>
+        <?= pagination_render($holidaysPagination, 'page'); ?>
     </div>
 </div>
 </body>

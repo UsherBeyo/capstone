@@ -16,6 +16,7 @@ if (empty($_SESSION['csrf_token'])) {
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Change Password</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>

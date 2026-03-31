@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once '../config/database.php';
 require_once '../helpers/Auth.php';
+require_once '../helpers/Flash.php';
 Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
 
@@ -74,18 +75,23 @@ function trunc3($v): string {
 }
 
 $id = isset($_GET['id']) ? intval($_GET['id']) : ($_SESSION['emp_id'] ?? 0);
-if (!$id) { die("Employee not specified"); }
+if (!$id) { flash_redirect('dashboard.php', 'error', 'Employee not specified.'); }
 
 $stmt = $db->prepare("SELECT e.*, u.email FROM employees e JOIN users u ON e.user_id = u.id WHERE e.id = ?");
 $stmt->execute([$id]);
 $e = $stmt->fetch(PDO::FETCH_ASSOC);
-if (!$e) { die("Employee not found"); }
+if (!$e) { flash_redirect('dashboard.php', 'error', 'Employee not found.'); }
 
 // permission: admin/hr/manager or the employee themselves
 $role = $_SESSION['role'] ?? '';
-if (!in_array($role, ['admin','manager','hr']) && ($_SESSION['emp_id'] ?? 0) != $id) {
-    die("Access denied");
+$isSelfProfile = ((int)($_SESSION['emp_id'] ?? 0) === $id);
+if (!in_array($role, ['admin','manager','hr'], true) && !$isSelfProfile) {
+    flash_redirect('dashboard.php', 'error', 'Access Denied');
 }
+
+$profilePreviewSrc = !empty($e['profile_pic'])
+    ? (string)$e['profile_pic']
+    : 'data:image/svg+xml;utf8,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480"><rect width="480" height="480" rx="36" fill="#eff6ff"/><circle cx="240" cy="180" r="88" fill="#93c5fd"/><path d="M92 402c22-79 87-124 148-124s126 45 148 124" fill="#60a5fa"/></svg>');
 
 // detect trans_date column if budget_history exists (needed for budget rows export)
 $hasTransDate = false;
@@ -338,7 +344,12 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     // output as simple Excel (HTML) so clients can adjust column widths
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-    header('Content-Disposition: attachment; filename="leave_history_'.$id.'.xls"');
+    $employeeFullName = trim(($e['first_name'] ?? '') . ' ' . ($e['last_name'] ?? ''));
+    if ($employeeFullName === '') {
+        $employeeFullName = 'Employee ' . $id;
+    }
+    $leaveHistoryFilename = safeExportFilename('Leave History - ' . $employeeFullName, 'Leave History - Employee');
+    header('Content-Disposition: attachment; filename="' . $leaveHistoryFilename . '.xls"');
     echo "<table border=1>\n";
     // Add employee information header
     echo "<tr><td colspan='10' style='font-weight:bold;background-color:#e0e0e0;'><strong>Employee Information</strong></td></tr>\n";
@@ -450,6 +461,7 @@ if ($stmtTypes) {
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title><?= htmlspecialchars(
         $pageTitle ?? 'Employee Profile'
     ); ?></title>
@@ -577,6 +589,36 @@ if ($stmtTypes) {
             font-size: 13px;
             color: var(--muted);
         }
+        .profile-picture-form {
+            display: grid;
+            gap: 12px;
+        }
+        .profile-picture-upload-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+        .profile-picture-help {
+            font-size: 13px;
+            color: var(--muted);
+        }
+        .employee-avatar-button-empty {
+            padding: 0;
+            border: none;
+            background: transparent;
+        }
+        .profile-image-modal-form {
+            margin-top: 18px;
+            display: grid;
+            gap: 12px;
+        }
+        .profile-image-modal-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
         @media (max-width: 720px) {
             .employee-header-meta {
                 grid-template-columns: 1fr;
@@ -595,17 +637,17 @@ if ($stmtTypes) {
     $title = 'Employee Profile';
     $subtitle = htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name']));
     $actions = [];
-    if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])) {
+    if(in_array($_SESSION['role'], ['admin'], true)) {
         $actions[] = '<a href="edit_employee.php?id='.$e['id'].'" class="btn btn-secondary">Edit profile</a>';
     }
-    if(($_SESSION['emp_id'] ?? 0) == $id) {
+    if($isSelfProfile) {
         $actions[] = '<a href="#" onclick="openPasswordModal(); return false;" class="btn btn-secondary">Change Password</a>';
     }
-    if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr'])) {
+    if($isSelfProfile || in_array($_SESSION['role'], ['admin','hr'], true)) {
         $actions[] = '<a href="employee_profile.php?id='.$e['id'].'&export=1" class="btn btn-ghost">Export history</a>';
         $actions[] = '<a href="employee_profile.php?id='.$e['id'].'&export=leave_card" class="btn btn-ghost">Export leave card</a>';
     }
-    if(($_SESSION['emp_id'] ?? 0) == $id || in_array($_SESSION['role'], ['admin','hr','manager'])) {
+    if($isSelfProfile || in_array($_SESSION['role'], ['admin','hr','manager'], true)) {
         $actions[] = '<a href="reports.php?type=leave_card&employee_id='.$e['id'].'" class="btn btn-ghost">View Leave Card</a>';
     }
     include __DIR__ . '/partials/ui/page-header.php';
@@ -615,13 +657,18 @@ if ($stmtTypes) {
     <div class="ui-card employee-header-card">
         <div class="two-column" style="align-items:flex-start;gap:20px;">
             <div>
-                <?php if(!empty($e['profile_pic'])): ?>
-                    <button type="button" class="employee-avatar-button" onclick="openImageModal('<?= htmlspecialchars($e['profile_pic']); ?>', '<?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name'])); ?>')" aria-label="Open profile image">
+                <button
+                    type="button"
+                    class="employee-avatar-button <?= !empty($e['profile_pic']) ? '' : 'employee-avatar-button-empty'; ?>"
+                    onclick="openImageModal('<?= htmlspecialchars($profilePreviewSrc, ENT_QUOTES); ?>', '<?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name']), ENT_QUOTES); ?>', <?= $isSelfProfile ? 'true' : 'false'; ?>)"
+                    aria-label="Open profile image"
+                >
+                    <?php if(!empty($e['profile_pic'])): ?>
                         <img src="<?= htmlspecialchars($e['profile_pic']); ?>" alt="Profile">
-                    </button>
-                <?php else: ?>
-                    <div class="employee-avatar-fallback">👤</div>
-                <?php endif; ?>
+                    <?php else: ?>
+                        <div class="employee-avatar-fallback">👤</div>
+                    <?php endif; ?>
+                </button>
             </div>
             <div style="flex:1;min-width:0;">
                 <h2 style="margin:0 0 8px 0;"><?= htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name'])); ?></h2>
@@ -647,6 +694,7 @@ if ($stmtTypes) {
             </div>
         </div>
     </div>
+
 
 
     <!-- leave balances cards -->
@@ -791,7 +839,21 @@ if ($stmtTypes) {
     <figure class="profile-image-modal-figure">
       <img id="modalImage" src="" alt="Profile image preview">
     </figure>
-    <div class="profile-image-modal-caption">Click outside the image or press the close button to dismiss.</div>
+    <div id="modalImageCaption" class="profile-image-modal-caption">Click outside the image or press the close button to dismiss.</div>
+    <?php if($isSelfProfile): ?>
+    <form id="profileImageForm" action="../controllers/UserController.php" method="POST" enctype="multipart/form-data" class="profile-image-modal-form">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']); ?>">
+      <input type="hidden" name="action" value="update_profile_picture">
+      <input type="hidden" name="employee_id" value="<?= (int)$e['id']; ?>">
+      <input id="modalProfilePicInput" type="file" name="profile_pic" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+      <div class="profile-image-modal-actions">
+        <button type="button" id="modalChoosePhotoBtn" class="btn btn-secondary" onclick="triggerModalPhotoPicker()">Change Photo</button>
+        <button type="submit" id="modalSavePhotoBtn" class="btn btn-primary" style="display:none;">Save Photo</button>
+        <button type="button" id="modalDiscardPhotoBtn" class="btn btn-ghost" style="display:none;" onclick="discardModalPhotoSelection()">Discard Changes</button>
+      </div>
+      <div class="profile-picture-help">Choose a JPG, PNG, GIF, or WEBP image up to 2MB. Your header avatar updates after saving.</div>
+    </form>
+    <?php endif; ?>
   </div>
 </div>
 <!-- admin modals -->
@@ -922,23 +984,94 @@ if ($stmtTypes) {
 </div>
 
 <script>
-function openImageModal(src, name) {
-    var modal = document.getElementById('imageModal');
+var originalModalImageSrc = '';
+var originalModalImageTitle = '';
+
+function openImageModal(src, name, allowEdit) {
     var img = document.getElementById('modalImage');
     var title = document.getElementById('modalImageName');
+    var caption = document.getElementById('modalImageCaption');
+    var chooseBtn = document.getElementById('modalChoosePhotoBtn');
+    var saveBtn = document.getElementById('modalSavePhotoBtn');
+    var discardBtn = document.getElementById('modalDiscardPhotoBtn');
+    var input = document.getElementById('modalProfilePicInput');
 
-    if (!modal || !img || !title) return;
+    if (!img || !title) return;
 
-    img.src = src;
-    title.textContent = name || 'Profile photo';
+    originalModalImageSrc = src || '';
+    originalModalImageTitle = name || 'Profile photo';
+
+    img.src = originalModalImageSrc;
+    title.textContent = originalModalImageTitle;
+    if (caption) caption.textContent = allowEdit ? 'Click Change Photo to preview a new image before saving.' : 'Click outside the image or press the close button to dismiss.';
+
+    if (input) input.value = '';
+    if (chooseBtn) chooseBtn.style.display = allowEdit ? '' : 'none';
+    if (saveBtn) saveBtn.style.display = 'none';
+    if (discardBtn) discardBtn.style.display = 'none';
+
     openModal('imageModal');
 }
 
 function closeImageModal() {
-    var img = document.getElementById('modalImage');
-    if (img) img.src = '';
+    discardModalPhotoSelection(false);
     closeModal('imageModal');
 }
+
+function triggerModalPhotoPicker() {
+    var input = document.getElementById('modalProfilePicInput');
+    if (input) input.click();
+}
+
+function discardModalPhotoSelection(keepCaption) {
+    if (keepCaption === undefined) keepCaption = true;
+    var img = document.getElementById('modalImage');
+    var title = document.getElementById('modalImageName');
+    var caption = document.getElementById('modalImageCaption');
+    var saveBtn = document.getElementById('modalSavePhotoBtn');
+    var discardBtn = document.getElementById('modalDiscardPhotoBtn');
+    var chooseBtn = document.getElementById('modalChoosePhotoBtn');
+    var input = document.getElementById('modalProfilePicInput');
+
+    if (img) img.src = originalModalImageSrc;
+    if (title) title.textContent = originalModalImageTitle || 'Profile photo';
+    if (caption && keepCaption && chooseBtn) caption.textContent = 'Click Change Photo to preview a new image before saving.';
+    if (input) input.value = '';
+    if (saveBtn) saveBtn.style.display = 'none';
+    if (discardBtn) discardBtn.style.display = 'none';
+    if (chooseBtn) chooseBtn.style.display = '';
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+    var input = document.getElementById('modalProfilePicInput');
+    if (!input) return;
+
+    input.addEventListener('change', function(){
+        var file = this.files && this.files[0] ? this.files[0] : null;
+        var img = document.getElementById('modalImage');
+        var title = document.getElementById('modalImageName');
+        var caption = document.getElementById('modalImageCaption');
+        var saveBtn = document.getElementById('modalSavePhotoBtn');
+        var discardBtn = document.getElementById('modalDiscardPhotoBtn');
+        var chooseBtn = document.getElementById('modalChoosePhotoBtn');
+
+        if (!file) {
+            discardModalPhotoSelection();
+            return;
+        }
+
+        var reader = new FileReader();
+        reader.onload = function(e){
+            if (img) img.src = e.target.result;
+            if (title) title.textContent = file.name;
+            if (caption) caption.textContent = 'Previewing new photo. Save Photo to apply it or Discard Changes to keep your current image.';
+            if (saveBtn) saveBtn.style.display = '';
+            if (discardBtn) discardBtn.style.display = '';
+            if (chooseBtn) chooseBtn.style.display = '';
+        };
+        reader.readAsDataURL(file);
+    });
+});
 
 function openPasswordModal() {
     openModal('passwordModal');

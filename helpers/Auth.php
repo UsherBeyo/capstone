@@ -1,6 +1,49 @@
 <?php
 
 class Auth {
+    public static function appBasePath(): string {
+        $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+        $dir = rtrim(dirname($scriptName), '/');
+        if (preg_match('#/(views|controllers|helpers|models|api|scripts)$#', $dir)) {
+            $dir = rtrim(dirname($dir), '/');
+        }
+        if ($dir === '' || $dir === '.') {
+            return '';
+        }
+        return $dir;
+    }
+
+    public static function appUrl(string $path = ''): string {
+        $base = self::appBasePath();
+        $path = ltrim($path, '/');
+        if ($path == '') {
+            return $base !== '' ? $base . '/' : '/';
+        }
+        return ($base !== '' ? $base : '') . '/' . $path;
+    }
+
+    public static function normalizeLocation(string $location): string {
+        $location = trim($location);
+        if ($location === '') {
+            return $location;
+        }
+        if (preg_match('#^(?:https?:)?//#i', $location) || str_starts_with($location, '/')) {
+            return $location;
+        }
+
+        $normalized = str_replace('\\', '/', $location);
+
+        if (preg_match('#(?:^|/)(?:views/)?([A-Za-z0-9_-]+)\.php(?:(\?.*)?)$#', $normalized, $matches)) {
+            return self::appUrl($matches[1]) . ($matches[2] ?? '');
+        }
+
+        if ($normalized === 'login' || $normalized === 'dashboard') {
+            return self::appUrl($normalized);
+        }
+
+        return $location;
+    }
+
     public static function startSession(): void {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
@@ -21,7 +64,7 @@ class Auth {
         self::sendNoCacheHeaders();
 
         if (empty($_SESSION['user_id'])) {
-            header('Location: ' . $redirect);
+            header('Location: ' . self::normalizeLocation($redirect));
             exit();
         }
     }

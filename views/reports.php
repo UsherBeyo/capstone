@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
 require_once '../helpers/Auth.php';
+require_once '../helpers/Flash.php';
 Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
 
@@ -463,18 +464,20 @@ $reportType = $_GET['type'] ?? 'summary';
 $departmentFilter = $_GET['dept'] ?? '';
 $employeeFilter = intval($_GET['employee_id'] ?? 0);
 
-// ✅ If employee: force leave_card for themselves (prevents access-denied on fresh open)
-if ($role === 'employee') {
+// ✅ If employee or department head: force leave_card for themselves
+if (in_array($role, ['employee', 'department_head'], true)) {
     $reportType = 'leave_card';
+    $employeeFilter = $sessionEmpId;
+} elseif ($role === 'personnel' && $reportType === 'leave_card' && $employeeFilter <= 0 && $sessionEmpId > 0) {
     $employeeFilter = $sessionEmpId;
 }
 
-// Access: admin/manager/hr can access all; employee only own leave_card
-if (!in_array($role, ['admin', 'manager', 'hr', 'personnel', 'employee'], true)) {
-    die("Access denied");
+// Access: admin/manager/hr/personnel can access reports; employee and department head only own leave card
+if (!in_array($role, ['admin', 'manager', 'hr', 'personnel', 'employee', 'department_head'], true)) {
+    flash_redirect('dashboard.php', 'error', 'Access Denied');
 }
-if ($role === 'employee' && ($employeeFilter !== $sessionEmpId || $reportType !== 'leave_card')) {
-    die("Access denied");
+if (in_array($role, ['employee', 'department_head'], true) && ($employeeFilter !== $sessionEmpId || $reportType !== 'leave_card')) {
+    flash_redirect('reports.php?type=leave_card&employee_id=' . $sessionEmpId, 'error', 'You can only view your own leave card.');
 }
 
 /**
@@ -636,6 +639,7 @@ if ($reportType === 'balance') {
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Reports - Leave System</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>
@@ -650,7 +654,7 @@ if ($reportType === 'balance') {
     <div class="ui-card" style="margin-bottom:24px;">
         <h3>Report Filter</h3>
         <form method="GET" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-            <?php if($role !== 'employee'): ?>
+            <?php if(!in_array($role, ['employee', 'department_head'], true)): ?>
             <div>
                 <label>Report Type:</label>
                 <select name="type">
@@ -680,7 +684,7 @@ if ($reportType === 'balance') {
             <?php else: ?>
             <div>
                 <label>Employee:</label>
-                <?php if($role === 'employee'): ?>
+                <?php if(in_array($role, ['employee', 'department_head'], true)): ?>
                     <input type="hidden" name="employee_id" value="<?= safe_h($sessionEmpId); ?>">
                     <span><?= safe_h($currentEmp ? (($currentEmp['first_name'] ?? '').' '.($currentEmp['last_name'] ?? '')) : ''); ?></span>
                 <?php else: ?>

@@ -1,9 +1,10 @@
 <?php
 if (!isset($_SESSION)) session_start();
 require_once __DIR__ . '/../../helpers/Flash.php';
+require_once __DIR__ . '/../../helpers/Auth.php';
 
 if (empty($_SESSION['user_id'])) {
-    header('Location: ../views/login.php');
+    header('Location: ' . Auth::appUrl('login'));
     exit();
 }
 $role = $_SESSION['role'] ?? '';
@@ -57,8 +58,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </a>
         <?php endif; ?>
 
-        <?php if(in_array($role,['admin','hr','personnel'], true)): ?>
-            <a href="reports.php" class="sidebar-link <?= ($current_page === 'reports.php') ? 'active' : '' ?>">
+        <?php if(in_array($role,['admin','hr','personnel','department_head'], true)): ?>
+            <a href="<?= htmlspecialchars($reportsHref); ?>" class="sidebar-link <?= ($current_page === 'reports.php') ? 'active' : '' ?>">
                 <svg class="sidebar-link-icon" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
                 </svg>

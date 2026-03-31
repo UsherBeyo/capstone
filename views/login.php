@@ -1,13 +1,14 @@
 <?php
 session_start();
 require_once '../helpers/Flash.php';
+require_once '../helpers/Auth.php';
 $flashMessages = flash_get_all();
 // prevent caching of login page
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
 if (!empty($_SESSION['user_id'])) {
-    header("Location: dashboard.php");
+    header('Location: ' . Auth::appUrl('dashboard'));
     exit();
 }
 
@@ -18,10 +19,11 @@ if (empty($_SESSION['csrf_token'])) {
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Leave System</title>
-    <link rel="stylesheet" href="../assets/css/styles.css">
-    <link rel="icon" type="image/jpeg" href="../pictures/DEPED.jpg">
-
+    <link rel="stylesheet" href="<?= htmlspecialchars(Auth::appUrl('assets/css/styles.css'), ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="icon" type="image/jpeg" href="<?= htmlspecialchars(Auth::appUrl('pictures/DEPED.jpg'), ENT_QUOTES, 'UTF-8'); ?>">
 <script>
     const sessionFlashMessages = <?= json_encode($flashMessages, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
 
@@ -80,21 +82,51 @@ if (empty($_SESSION['csrf_token'])) {
         }
     }
 </script>
-
 </head>
 <body class="login-page">
+<div class="login-scene" aria-hidden="true">
+    <span class="login-orb login-orb-1"></span>
+    <span class="login-orb login-orb-2"></span>
+    <span class="login-orb login-orb-3"></span>
+    <span class="login-grid"></span>
+</div>
 
-<div class="login-shell">
-    <div class="login-brand-panel">
-        <div class="login-brand-badge">Leave Management System</div>
-        <h1 class="login-brand-title">Welcome back</h1>
-        <p class="login-brand-text">Sign in to manage leave requests, balances, approvals, and employee records with clear transaction feedback.</p>
-    </div>
+<div class="login-shell login-shell--enhanced">
+    <section class="login-brand-panel login-brand-panel--enhanced">
+        <div class="login-logo-stack" aria-label="Official logos">
+            <div class="login-logo-chip">
+                <img src="<?= htmlspecialchars(Auth::appUrl('pictures/DEPED-removebg-preview.png'), ENT_QUOTES, 'UTF-8'); ?>" alt="DepEd Logo" class="login-logo login-logo--deped">
+            </div>
+            <div class="login-logo-divider"></div>
+            <div class="login-logo-chip">
+                <img src="<?= htmlspecialchars(Auth::appUrl('pictures/region4-removebg-preview.png'), ENT_QUOTES, 'UTF-8'); ?>" alt="Region 4 Logo" class="login-logo login-logo--region">
+            </div>
+        </div>
 
-    <div class="ui-card login-card">
-        <div class="login-card-head">
-            <h2>Login</h2>
-            <p>Use your work account to continue.</p>
+        <div class="login-brand-copy-minimal">
+            <div class="login-brand-badge">DepEd Region IV-A</div>
+            <h1 class="login-brand-title">Leave Management System</h1>
+        </div>
+
+        <div class="login-showcase-card login-showcase-card--minimal">
+            <div class="login-mascot-wrap">
+                <div class="login-mascot" id="loginMascot" aria-hidden="true">
+                    <div class="login-mascot-antenna"></div>
+                    <div class="login-mascot-head">
+                        <span class="login-mascot-eye"><span class="login-mascot-pupil" data-eye="left"></span></span>
+                        <span class="login-mascot-eye"><span class="login-mascot-pupil" data-eye="right"></span></span>
+                    </div>
+                    <div class="login-mascot-mouth"></div>
+                </div>
+                <div class="login-mascot-rings"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="ui-card login-card login-card--enhanced">
+        <div class="login-card-head login-card-head--enhanced">
+            <div class="login-card-kicker">Secure access</div>
+            <h2>Sign in</h2>
         </div>
 
         <?php if(isset($_GET['error'])): ?>
@@ -107,32 +139,42 @@ if (empty($_SESSION['csrf_token'])) {
             </div>
         <?php endif; ?>
 
-        <form action="../controllers/AuthController.php" method="POST" onsubmit="return validateLogin();" class="login-form">
-        <input type="hidden" name="action" value="login">
-        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+        <form action="<?= htmlspecialchars(Auth::appUrl('controllers/AuthController.php'), ENT_QUOTES, 'UTF-8'); ?>" method="POST" onsubmit="return validateLogin();" class="login-form login-form--enhanced">
+            <input type="hidden" name="action" value="login">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
 
-        <label>Email</label>
-        <input type="email" name="email" required class="login-input" placeholder="Enter your email">
+            <div class="login-field">
+                <label for="loginEmail">Email</label>
+                <div class="login-input-wrap">
+                    <span class="login-input-icon" aria-hidden="true">@</span>
+                    <input id="loginEmail" type="email" name="email" required class="login-input" placeholder="Enter your email">
+                </div>
+            </div>
 
-        <label>Password</label>
-        <input type="password" name="password" required class="login-input" placeholder="Enter your password">
+            <div class="login-field">
+                <label for="loginPassword">Password</label>
+                <div class="login-input-wrap">
+                    <span class="login-input-icon" aria-hidden="true">*</span>
+                    <input id="loginPassword" type="password" name="password" required class="login-input login-input--with-toggle" placeholder="Enter your password">
+                    <button type="button" class="login-password-toggle" id="togglePassword" aria-label="Show password">Show</button>
+                </div>
+            </div>
 
-        <div class="login-privacy-row">
-            <input type="checkbox" id="agreePrivacy" name="agree_privacy" required>
-            <label for="agreePrivacy">I agree to the <a href="#" onclick="openPrivacyModal(event)">Data Privacy and Terms</a></label>
-        </div>
+            <div class="login-privacy-row">
+                <input type="checkbox" id="agreePrivacy" name="agree_privacy" required>
+                <label for="agreePrivacy">I agree to the <a href="#" onclick="openPrivacyModal(event)">Data Privacy and Terms</a></label>
+            </div>
 
-        <button type="submit" class="login-submit-btn">Login</button>
-    </form>
-    </div>
+            <button type="submit" class="login-submit-btn">Login</button>
+        </form>
+    </section>
 </div>
 
-<!-- Privacy/Terms Modal -->
-<div id="privacyModal" class="modal" style="display:none;">
-    <div class="modal-content">
+<div id="privacyModal" class="modal login-privacy-modal" style="display:none;">
+    <div class="modal-content login-privacy-content">
         <span class="modal-close" id="closePrivacyModal">&times;</span>
         <h3>Data Privacy & Terms of Service</h3>
-        <div style="max-height:400px;overflow-y:auto;font-size:13px;line-height:1.6;">
+        <div class="login-privacy-scroll">
             <h4>1. Data Privacy Notice</h4>
             <p>We collect and process personal information including your name, email, and employment details. This information is used solely for leave management and HR administration purposes.</p>
             
@@ -157,8 +199,8 @@ if (empty($_SESSION['csrf_token'])) {
             <h4>8. Changes to Policy</h4>
             <p>We reserve the right to update this policy. Continued use of the system constitutes acceptance of any changes.</p>
         </div>
-        <div style="text-align:right;margin-top:16px;">
-            <button type="button" id="closePrivacyBtn" style="padding:8px 16px;">Close</button>
+        <div class="login-privacy-actions">
+            <button type="button" id="closePrivacyBtn" class="btn btn-primary">Close</button>
         </div>
     </div>
 </div>
@@ -168,18 +210,83 @@ if (empty($_SESSION['csrf_token'])) {
         e.preventDefault();
         document.getElementById('privacyModal').style.display = 'flex';
     }
-    document.getElementById('closePrivacyModal').addEventListener('click', function(){
+
+    function closePrivacyModal() {
         document.getElementById('privacyModal').style.display = 'none';
-    });
-    document.getElementById('closePrivacyBtn').addEventListener('click', function(){
-        document.getElementById('privacyModal').style.display = 'none';
-    });
+    }
+
+    document.getElementById('closePrivacyModal').addEventListener('click', closePrivacyModal);
+    document.getElementById('closePrivacyBtn').addEventListener('click', closePrivacyModal);
     window.addEventListener('click', function(e){
         var modal = document.getElementById('privacyModal');
-        if(e.target === modal) modal.style.display = 'none';
+        if(e.target === modal) closePrivacyModal();
     });
 
-    document.addEventListener('DOMContentLoaded', renderFlashMessages);
+    document.addEventListener('DOMContentLoaded', function() {
+        renderFlashMessages();
+
+        var toggleBtn = document.getElementById('togglePassword');
+        var passwordInput = document.getElementById('loginPassword');
+        if (toggleBtn && passwordInput) {
+            toggleBtn.addEventListener('click', function() {
+                var isPassword = passwordInput.getAttribute('type') === 'password';
+                passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+                toggleBtn.textContent = isPassword ? 'Hide' : 'Show';
+            });
+        }
+
+        var shell = document.querySelector('.login-shell--enhanced');
+        var pupils = document.querySelectorAll('.login-mascot-pupil');
+        var active = false;
+        var targetX = 0;
+        var targetY = 0;
+        var raf = null;
+
+        function updateMascot() {
+            if (!active) {
+                raf = null;
+                return;
+            }
+            pupils.forEach(function(pupil) {
+                pupil.style.transform = 'translate(' + targetX + 'px, ' + targetY + 'px)';
+            });
+            raf = requestAnimationFrame(updateMascot);
+        }
+
+        document.addEventListener('mousemove', function(event) {
+            var mascot = document.getElementById('loginMascot');
+            if (!mascot) return;
+            var rect = mascot.getBoundingClientRect();
+            var centerX = rect.left + rect.width / 2;
+            var centerY = rect.top + rect.height / 2;
+            var dx = event.clientX - centerX;
+            var dy = event.clientY - centerY;
+            var length = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+            targetX = Math.max(-7, Math.min(7, (dx / length) * 7));
+            targetY = Math.max(-5, Math.min(5, (dy / length) * 5));
+            active = true;
+            if (!raf) {
+                raf = requestAnimationFrame(updateMascot);
+            }
+
+            if (shell) {
+                var shellRect = shell.getBoundingClientRect();
+                var px = ((event.clientX - shellRect.left) / shellRect.width) * 100;
+                var py = ((event.clientY - shellRect.top) / shellRect.height) * 100;
+                shell.style.setProperty('--cursor-x', px.toFixed(2) + '%');
+                shell.style.setProperty('--cursor-y', py.toFixed(2) + '%');
+            }
+        });
+
+        document.addEventListener('mouseleave', function() {
+            active = false;
+            targetX = 0;
+            targetY = 0;
+            pupils.forEach(function(pupil) {
+                pupil.style.transform = 'translate(0, 0)';
+            });
+        });
+    });
 
     function validateLogin() {
         if (!document.getElementById('agreePrivacy').checked) {
@@ -189,6 +296,5 @@ if (empty($_SESSION['csrf_token'])) {
         return true;
     }
 </script>
-
 </body>
 </html>

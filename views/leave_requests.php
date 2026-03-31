@@ -5,6 +5,7 @@ require_once '../helpers/Auth.php';
 require_once '../helpers/Flash.php';
 Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
+require_once '../helpers/Pagination.php';
 
 if (!in_array($_SESSION['role'], ['admin','manager','department_head','hr','personnel'], true)) {
     flash_redirect('dashboard.php', 'error', 'Access Denied');
@@ -41,6 +42,13 @@ function trunc3($v): string {
     $n = (float)$v;
     $t = floor($n * 1000) / 1000;
     return number_format($t, 3, '.', '');
+}
+
+function filter_leave_request_rows(array $rows, string $term): array {
+    return pagination_filter_array($rows, $term, [
+        function ($r) { return trim(($r['first_name'] ?? '') . ' ' . ($r['middle_name'] ?? '') . ' ' . ($r['last_name'] ?? '')); },
+        'email', 'department', 'position', 'leave_type_name', 'leave_type', 'status', 'workflow_status', 'reason', 'manager_comments', 'department_head_comments', 'personnel_comments', 'print_status', 'start_date', 'end_date'
+    ]);
 }
 
 $signatories = [];
@@ -423,6 +431,34 @@ if ($role === 'manager') {
 }
 $archived = $archivedQuery->fetchAll(PDO::FETCH_ASSOC);
 
+
+$pdhSearch = trim((string)($_GET['pdh_q'] ?? ''));
+$ppSearch = trim((string)($_GET['pp_q'] ?? ''));
+$finSearch = trim((string)($_GET['fin_q'] ?? ''));
+$rejSearch = trim((string)($_GET['rej_q'] ?? ''));
+$archSearch = trim((string)($_GET['arch_q'] ?? ''));
+
+$pendingDeptHead = filter_leave_request_rows($pendingDeptHead, $pdhSearch);
+$pendingPersonnel = filter_leave_request_rows($pendingPersonnel, $ppSearch);
+$finalized = filter_leave_request_rows($finalized, $finSearch);
+$returnedOrRejected = filter_leave_request_rows($returnedOrRejected, $rejSearch);
+$archived = filter_leave_request_rows($archived, $archSearch);
+
+$pendingDeptHeadPagination = paginate_array($pendingDeptHead, (int)($_GET['pdh_page'] ?? 1), 8);
+$pendingDeptHead = $pendingDeptHeadPagination['items'];
+
+$pendingPersonnelPagination = paginate_array($pendingPersonnel, (int)($_GET['pp_page'] ?? 1), 8);
+$pendingPersonnel = $pendingPersonnelPagination['items'];
+
+$finalizedPagination = paginate_array($finalized, (int)($_GET['fin_page'] ?? 1), 10);
+$finalized = $finalizedPagination['items'];
+
+$returnedPagination = paginate_array($returnedOrRejected, (int)($_GET['rej_page'] ?? 1), 10);
+$returnedOrRejected = $returnedPagination['items'];
+
+$archivedPagination = paginate_array($archived, (int)($_GET['arch_page'] ?? 1), 10);
+$archived = $archivedPagination['items'];
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -430,8 +466,10 @@ if (empty($_SESSION['csrf_token'])) {
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Leave Requests</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+    <script src="../assets/js/script.js"></script>
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
@@ -466,8 +504,14 @@ if (empty($_SESSION['csrf_token'])) {
 
     <div id="section-pending" style="<?= (($isPersonnelOnlyView && $tab === 'pending') || (!$isPersonnelOnlyView && ($tab === 'all' || $tab === 'pending'))) ? '' : 'display:none;'; ?>">
         <?php if ($showPendingDepartmentHead): ?>
-        <div class="ui-card mb-6">
+        <div class="ui-card mb-6 ajax-fragment" data-fragment-id="leave-pdh" data-page-param="pdh_page" data-search-param="pdh_q">
             <h3>Pending Department Head Approval</h3>
+            <div class="fragment-toolbar">
+                <div class="search-input">
+                    <input class="form-control live-search-input" type="text" name="pdh_q" value="<?= htmlspecialchars($pdhSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search pending department head requests...">
+                </div>
+                <div class="fragment-summary">Showing <?= $pendingDeptHeadPagination['from']; ?>–<?= $pendingDeptHeadPagination['to']; ?> of <?= $pendingDeptHeadPagination['total']; ?> requests</div>
+            </div>
         <?php if (empty($pendingDeptHead)): ?>
             <p>No requests pending for Department Head approval.</p>
         <?php else: ?>
@@ -567,14 +611,21 @@ if (empty($_SESSION['csrf_token'])) {
                     </tbody>
                 </table>
             </div>
+            <?= pagination_render($pendingDeptHeadPagination, 'pdh_page', ['tab' => $tab]); ?>
             <?= $deptActionModalsHtml; ?>
         <?php endif; ?>
     </div>
     <?php endif; ?>
 
     <?php if ($showPendingPersonnel): ?>
-    <div class="ui-card mb-6">
+    <div class="ui-card mb-6 ajax-fragment" data-fragment-id="leave-pp" data-page-param="pp_page" data-search-param="pp_q">
         <h3>Pending Personnel Review</h3>
+        <div class="fragment-toolbar">
+            <div class="search-input">
+                <input class="form-control live-search-input" type="text" name="pp_q" value="<?= htmlspecialchars($ppSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search pending personnel requests...">
+            </div>
+            <div class="fragment-summary">Showing <?= $pendingPersonnelPagination['from']; ?>–<?= $pendingPersonnelPagination['to']; ?> of <?= $pendingPersonnelPagination['total']; ?> requests</div>
+        </div>
         <?php if (empty($pendingPersonnel)): ?>
             <p>No requests pending for personnel review.</p>
         <?php else: ?>
@@ -829,6 +880,7 @@ if (empty($_SESSION['csrf_token'])) {
                     </tbody>
                 </table>
             </div>
+            <?= pagination_render($pendingPersonnelPagination, 'pp_page', ['tab' => $tab]); ?>
 
             <?= $personnelModalHtml; ?>
         <?php endif; ?>
@@ -837,8 +889,14 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <div id="section-approved" style="<?= ($tab === 'all' || $tab === 'approved') ? '' : 'display:none;'; ?>">
-    <div class="ui-card mb-6">
+    <div class="ui-card mb-6 ajax-fragment" data-fragment-id="leave-finalized" data-page-param="fin_page" data-search-param="fin_q">
         <h3>Finalized / Approved</h3>
+        <div class="fragment-toolbar">
+            <div class="search-input">
+                <input class="form-control live-search-input" type="text" name="fin_q" value="<?= htmlspecialchars($finSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search approved requests...">
+            </div>
+            <div class="fragment-summary">Showing <?= $finalizedPagination['from']; ?>–<?= $finalizedPagination['to']; ?> of <?= $finalizedPagination['total']; ?> requests</div>
+        </div>
 
         <?php if (empty($finalized)): ?>
             <p>No finalized requests.</p>
@@ -895,6 +953,7 @@ if (empty($_SESSION['csrf_token'])) {
                     <?php endforeach; ?>
                 </table>
             </div>
+            <?= pagination_render($finalizedPagination, 'fin_page', ['tab' => $tab]); ?>
 
             <?php foreach ($finalized as $r): ?>
                 <div id="printModal_<?= (int)$r['id']; ?>" class="modal">
@@ -967,8 +1026,14 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <div id="section-rejected" style="<?= ($tab === 'all' || $tab === 'rejected') ? '' : 'display:none;'; ?>">
-    <div class="ui-card">
+    <div class="ui-card ajax-fragment" data-fragment-id="leave-rejected" data-page-param="rej_page" data-search-param="rej_q">
         <h3>Rejected / Returned</h3>
+        <div class="fragment-toolbar">
+            <div class="search-input">
+                <input class="form-control live-search-input" type="text" name="rej_q" value="<?= htmlspecialchars($rejSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search rejected or returned requests...">
+            </div>
+            <div class="fragment-summary">Showing <?= $returnedPagination['from']; ?>–<?= $returnedPagination['to']; ?> of <?= $returnedPagination['total']; ?> requests</div>
+        </div>
         <?php if (empty($returnedOrRejected)): ?>
             <p>No rejected or returned requests.</p>
         <?php else: ?>
@@ -996,14 +1061,21 @@ if (empty($_SESSION['csrf_token'])) {
                     <?php endforeach; ?>
                 </table>
             </div>
+            <?= pagination_render($returnedPagination, 'rej_page', ['tab' => $tab]); ?>
         <?php endif; ?>
     </div>
 </div>
 
 <?php if ($showArchivedSection): ?>
 <div id="section-archived" style="<?= ($tab === 'all' || $tab === 'archived') ? '' : 'display:none;'; ?>">
-    <div id="archiveCard" class="ui-card">
-        <h3>Archived Requests (<?= count($archived); ?>)</h3>
+    <div id="archiveCard" class="ui-card ajax-fragment" data-fragment-id="leave-archived" data-page-param="arch_page" data-search-param="arch_q">
+        <h3>Archived Requests (<?= (int)$archivedPagination['total']; ?>)</h3>
+        <div class="fragment-toolbar">
+            <div class="search-input">
+                <input class="form-control live-search-input" type="text" name="arch_q" value="<?= htmlspecialchars($archSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search archived requests...">
+            </div>
+            <div class="fragment-summary">Showing <?= $archivedPagination['from']; ?>–<?= $archivedPagination['to']; ?> of <?= $archivedPagination['total']; ?> requests</div>
+        </div>
 
         <?php if (empty($archived)): ?>
             <p>No archived requests found.</p>
@@ -1034,6 +1106,7 @@ if (empty($_SESSION['csrf_token'])) {
                     </tbody>
                 </table>
             </div>
+            <?= pagination_render($archivedPagination, 'arch_page', ['tab' => $tab]); ?>
         <?php endif; ?>
     </div>
 </div>
@@ -1083,6 +1156,12 @@ function setActiveTab(tab) {
     });
 
     activeTab = tab;
+
+    if (window.history && window.history.replaceState) {
+        var url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.history.replaceState({}, '', url.toString());
+    }
 }
 
 document.querySelectorAll('.filter-tab').forEach(function(tab) {

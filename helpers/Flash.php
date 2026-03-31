@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/Auth.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -37,7 +38,7 @@ if (!function_exists('flash_redirect')) {
         if ($type !== null && $message !== null && trim($message) !== '') {
             flash_set($type, $message);
         }
-        header('Location: ' . $location);
+        header('Location: ' . Auth::normalizeLocation($location));
         exit();
     }
 }

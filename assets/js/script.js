@@ -130,3 +130,112 @@ function initCollapsibleSections() {
 }
 
 document.addEventListener('DOMContentLoaded', initCollapsibleSections);
+
+function initAjaxFragments(root) {
+    var scope = root || document;
+    var fragments = scope.querySelectorAll('.ajax-fragment[data-fragment-id]');
+    fragments.forEach(function(fragment) {
+        if (fragment.dataset.ajaxBound === '1') return;
+        fragment.dataset.ajaxBound = '1';
+
+        var fragmentId = fragment.dataset.fragmentId;
+        var pageParam = fragment.dataset.pageParam || 'page';
+        var searchParam = fragment.dataset.searchParam || 'q';
+        var searchInput = fragment.querySelector('.live-search-input');
+        var debounceTimer = null;
+        var requestToken = 0;
+
+        var setLoading = function(isLoading) {
+            fragment.classList.toggle('is-loading', !!isLoading);
+        };
+
+        var replaceFragmentFromUrl = function(urlString) {
+            requestToken += 1;
+            var currentToken = requestToken;
+            var activeElement = document.activeElement;
+            var shouldRestoreFocus = !!(activeElement && fragment.contains(activeElement) && activeElement.classList && activeElement.classList.contains('live-search-input'));
+            var activeSelectionStart = shouldRestoreFocus && typeof activeElement.selectionStart === 'number' ? activeElement.selectionStart : null;
+            var activeSelectionEnd = shouldRestoreFocus && typeof activeElement.selectionEnd === 'number' ? activeElement.selectionEnd : null;
+            setLoading(true);
+
+            fetch(urlString, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin'
+            })
+                .then(function(response) {
+                    return response.text();
+                })
+                .then(function(html) {
+                    if (currentToken !== requestToken) return;
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+                    var selector = '.ajax-fragment[data-fragment-id="' + fragmentId + '"]';
+                    var nextFragment = doc.querySelector(selector);
+                    if (!nextFragment) return;
+
+                    fragment.replaceWith(nextFragment);
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState({}, '', urlString);
+                    }
+                    initAjaxFragments(document);
+
+                    if (shouldRestoreFocus) {
+                        var currentFragment = document.querySelector(selector);
+                        var nextSearchInput = currentFragment ? currentFragment.querySelector('.live-search-input') : null;
+                        if (nextSearchInput) {
+                            nextSearchInput.focus({ preventScroll: true });
+                            if (typeof nextSearchInput.setSelectionRange === 'function' && activeSelectionStart !== null && activeSelectionEnd !== null) {
+                                var maxLength = nextSearchInput.value.length;
+                                nextSearchInput.setSelectionRange(Math.min(activeSelectionStart, maxLength), Math.min(activeSelectionEnd, maxLength));
+                            }
+                        }
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Live fragment update failed:', error);
+                })
+                .finally(function() {
+                    var currentFragment = document.querySelector('.ajax-fragment[data-fragment-id="' + fragmentId + '"]');
+                    if (currentFragment) {
+                        currentFragment.classList.remove('is-loading');
+                    }
+                });
+        };
+
+        fragment.addEventListener('click', function(event) {
+            var link = event.target.closest('.pagination-link[href]');
+            if (!link || !fragment.contains(link)) return;
+            event.preventDefault();
+            var nextUrl = new URL(link.href, window.location.href);
+            var activeTab = document.querySelector('.filter-tab.is-active[data-tab]');
+            if (activeTab && /\/leave_requests\.php$/i.test(window.location.pathname)) {
+                nextUrl.searchParams.set('tab', activeTab.getAttribute('data-tab'));
+            }
+            replaceFragmentFromUrl(nextUrl.toString());
+        });
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                var url = new URL(window.location.href);
+                var value = searchInput.value || '';
+                if (value.trim() === '') {
+                    url.searchParams.delete(searchParam);
+                } else {
+                    url.searchParams.set(searchParam, value);
+                }
+                url.searchParams.set(pageParam, '1');
+
+                clearTimeout(debounceTimer);
+                debounceTimer = window.setTimeout(function() {
+                    replaceFragmentFromUrl(url.toString());
+                }, 180);
+            });
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initAjaxFragments(document);
+});

@@ -6,9 +6,10 @@ Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
 require_once '../models/Leave.php';
 require_once '../helpers/Flash.php';
+require_once '../helpers/Pagination.php';
 
 if ($_SESSION['role'] !== 'admin') {
-    die("Access denied");
+    flash_redirect('dashboard.php', 'error', 'Access denied');
 }
 
 $db = (new Database())->connect();
@@ -21,7 +22,7 @@ if (empty($_SESSION['csrf_token'])) {
 // Handle manual single-employee accrual
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("CSRF validation failed.");
+        flash_redirect('manage_accruals.php', 'error', 'CSRF validation failed.');
     }
 
     $employee_id = intval($_POST['employee_id'] ?? 0);
@@ -54,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_accrual'])) {
 // Handle bulk accrual for all employees
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_bulk_accrual'])) {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die("CSRF validation failed.");
+        flash_redirect('manage_accruals.php', 'error', 'CSRF validation failed.');
     }
 
     $amount = floatval($_POST['bulk_amount'] ?? 0);
@@ -101,7 +102,6 @@ try {
         FROM accrual_history a
         JOIN employees e ON a.employee_id = e.id
         ORDER BY a.date_accrued DESC, a.id DESC
-        LIMIT 50
     ")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $ex) {
     try {
@@ -117,7 +117,6 @@ try {
             FROM accruals a
             JOIN employees e ON a.employee_id = e.id
             ORDER BY a.created_at DESC, a.id DESC
-            LIMIT 50
         ")->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $ex2) {
         $accruals = [];
@@ -125,11 +124,19 @@ try {
 }
 
 $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
+$accrualSearch = trim((string)($_GET['history_q'] ?? ''));
+$accruals = pagination_filter_array($accruals, $accrualSearch, [
+    function ($a) { return trim(($a['first_name'] ?? '') . ' ' . ($a['last_name'] ?? '')); },
+    'amount', 'month_reference', 'created_at'
+]);
+$accrualPagination = paginate_array($accruals, (int)($_GET['history_page'] ?? 1), 12);
+$accruals = $accrualPagination['items'];
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Manage Accruals</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <script src="../assets/js/script.js"></script>
@@ -144,37 +151,32 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
         <p class="accruals-subtitle">Add leave accruals for employees.</p>
     </div>
 
-    <div class="accrual-card">
-        <h3>Bulk Accrual for All Employees</h3>
-        <p class="accrual-description">This will add the selected accrual amount to both <strong>Vacational</strong> and <strong>Sick</strong> balances for <strong>all employees</strong>. This can still be used even if it is not yet the end of the month.</p>
-        <div class="accrual-note">
-            <span class="accrual-note-icon">⚠</span>
-            <span><strong>Note:</strong> Force Leave is not affected here.</span>
+    <div class="accrual-card accrual-bulk-launcher">
+        <div class="accrual-bulk-copy">
+            <h3>Bulk Accrual for All Employees</h3>
+            <p class="accrual-description">Open a focused modal to add the same accrual amount to both <strong>Vacational</strong> and <strong>Sick</strong> balances of <strong>all employees</strong> without cluttering the page.</p>
+            <div class="accrual-note">
+                <span class="accrual-note-icon">⚠</span>
+                <span><strong>Note:</strong> Force Leave is not affected here.</span>
+            </div>
         </div>
-
-        <form method="POST" id="bulkAccrualForm" class="accrual-form-grid">
-            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-            <input type="hidden" name="record_bulk_accrual" value="1">
-
-            <div class="accrual-form-item">
-                <label>Employees Affected</label>
-                <input type="text" value="<?= $totalEmployees; ?> employee(s)" readonly>
+        <div class="accrual-bulk-highlights">
+            <div class="accrual-highlight">
+                <span class="accrual-highlight-label">Employees Affected</span>
+                <strong><?= $totalEmployees; ?></strong>
             </div>
-
-            <div class="accrual-form-item">
-                <label>Amount to Add (days)</label>
-                <input type="number" step="0.001" name="bulk_amount" id="bulk_amount" value="1.250" required>
+            <div class="accrual-highlight">
+                <span class="accrual-highlight-label">Default Amount</span>
+                <strong>1.250 days</strong>
             </div>
-
-            <div class="accrual-form-item">
-                <label>For Month</label>
-                <input type="month" name="bulk_month" id="bulk_month" value="<?= date('Y-m'); ?>" required>
+            <div class="accrual-highlight">
+                <span class="accrual-highlight-label">Balance Impact</span>
+                <strong>Vacational + Sick</strong>
             </div>
-
-            <div class="accrual-form-actions">
-                <button type="submit" class="btn btn-primary">Add Accrual to All Employees</button>
-            </div>
-        </form>
+        </div>
+        <div class="accrual-bulk-launcher-actions">
+            <button type="button" class="btn btn-primary accrual-bulk-trigger" id="openBulkAccrualModal">Open Bulk Accrual</button>
+        </div>
     </div>
 
     <div class="accrual-lower-grid">
@@ -215,9 +217,15 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
             </form>
         </div>
 
-        <div class="history-card">
-            <h3>Accrual History (Last 50)</h3>
+        <div class="history-card ajax-fragment" data-fragment-id="accrual-history" data-page-param="history_page" data-search-param="history_q">
+            <h3>Accrual History</h3>
             <p class="accrual-description">Recent accrual transactions.</p>
+            <div class="fragment-toolbar">
+                <div class="search-input">
+                    <input class="form-control live-search-input" type="text" name="history_q" value="<?= htmlspecialchars($accrualSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search employee or month...">
+                </div>
+                <div class="fragment-summary">Showing <?= $accrualPagination['from']; ?>–<?= $accrualPagination['to']; ?> of <?= $accrualPagination['total']; ?> history rows</div>
+            </div>
             <div class="history-table-shell">
                 <table class="accrual-history-table">
                     <thead>
@@ -240,38 +248,140 @@ $totalEmployees = (int)$db->query("SELECT COUNT(*) FROM employees")->fetchColumn
                     </tbody>
                 </table>
             </div>
+            <?= pagination_render($accrualPagination, 'history_page'); ?>
         </div>
     </div>
 </div>
 
+<div id="bulkAccrualModal" class="modal accrual-bulk-modal">
+    <div class="modal-content accrual-bulk-modal-content">
+        <button type="button" class="modal-close" id="closeBulkAccrualModal" aria-label="Close bulk accrual">&times;</button>
+        <div class="accrual-bulk-modal-header">
+            <span class="accrual-bulk-kicker">Bulk action</span>
+            <h3>Bulk Accrual for All Employees</h3>
+            <p class="accrual-description">Set the accrual once, review the impact, then confirm from this modal. This keeps the main page cleaner while still using the same accrual logic.</p>
+        </div>
+
+        <div class="accrual-bulk-summary-grid">
+            <div class="accrual-highlight">
+                <span class="accrual-highlight-label">Employees Affected</span>
+                <strong><?= $totalEmployees; ?> employee(s)</strong>
+            </div>
+            <div class="accrual-highlight">
+                <span class="accrual-highlight-label">Changes Applied To</span>
+                <strong>Vacational + Sick</strong>
+            </div>
+            <div class="accrual-highlight">
+                <span class="accrual-highlight-label">Not Included</span>
+                <strong>Force Leave</strong>
+            </div>
+        </div>
+
+        <form method="POST" id="bulkAccrualForm" class="accrual-form-grid accrual-bulk-modal-form">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+            <input type="hidden" name="record_bulk_accrual" value="1">
+
+            <div class="accrual-form-item">
+                <label>Employees Affected</label>
+                <input type="text" value="<?= $totalEmployees; ?> employee(s)" readonly>
+            </div>
+
+            <div class="accrual-form-item">
+                <label>Amount to Add (days)</label>
+                <input type="number" step="0.001" name="bulk_amount" id="bulk_amount" value="1.250" required>
+            </div>
+
+            <div class="accrual-form-item">
+                <label>For Month</label>
+                <input type="month" name="bulk_month" id="bulk_month" value="<?= date('Y-m'); ?>" required>
+            </div>
+
+            <div class="accrual-note accrual-bulk-inline-note">
+                <span class="accrual-note-icon">⚠</span>
+                <span>Bulk accrual updates every employee and writes matching accrual history logs for the selected month.</span>
+            </div>
+
+            <div class="accrual-form-actions accrual-bulk-actions">
+                <button type="button" class="btn btn-secondary" id="cancelBulkAccrualModal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Accrual to All Employees</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-document.getElementById('bulkAccrualForm').addEventListener('submit', function(e) {
-    var amount = document.getElementById('bulk_amount').value || '1.250';
-    var month = document.getElementById('bulk_month').value || '';
+(function() {
+    var bulkModal = document.getElementById('bulkAccrualModal');
+    var openBulkModalBtn = document.getElementById('openBulkAccrualModal');
+    var closeBulkModalBtn = document.getElementById('closeBulkAccrualModal');
+    var cancelBulkModalBtn = document.getElementById('cancelBulkAccrualModal');
+    var bulkAccrualForm = document.getElementById('bulkAccrualForm');
 
-    var step1 = confirm(
-        'Are you sure you want to add ' + amount + ' day(s) to BOTH Vacational and Sick balances of ALL employees?'
-    );
-    if (!step1) {
-        e.preventDefault();
-        return;
+    function openBulkAccrualModal() {
+        if (!bulkModal) return;
+        bulkModal.classList.add('open');
+        var firstInput = bulkModal.querySelector('#bulk_amount');
+        if (firstInput) {
+            setTimeout(function() { firstInput.focus(); }, 60);
+        }
     }
 
-    var step2 = confirm(
-        'This will affect all employees and write accrual history logs for month ' + month + '. Continue?'
-    );
-    if (!step2) {
-        e.preventDefault();
-        return;
+    function closeBulkAccrualModal() {
+        if (!bulkModal) return;
+        bulkModal.classList.remove('open');
     }
 
-    var step3 = confirm(
-        'Final confirmation: this can be done even if it is NOT yet the end of the month. Force Leave will NOT be changed. Do you want to proceed?'
-    );
-    if (!step3) {
-        e.preventDefault();
+    if (openBulkModalBtn) {
+        openBulkModalBtn.addEventListener('click', openBulkAccrualModal);
     }
-});
+
+    [closeBulkModalBtn, cancelBulkModalBtn].forEach(function(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', closeBulkAccrualModal);
+    });
+
+    if (bulkModal) {
+        bulkModal.addEventListener('click', function(e) {
+            if (e.target === bulkModal) closeBulkAccrualModal();
+        });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && bulkModal && bulkModal.classList.contains('open')) {
+            closeBulkAccrualModal();
+        }
+    });
+
+    if (bulkAccrualForm) {
+        bulkAccrualForm.addEventListener('submit', function(e) {
+            var amount = document.getElementById('bulk_amount').value || '1.250';
+            var month = document.getElementById('bulk_month').value || '';
+
+            var step1 = confirm(
+                'Are you sure you want to add ' + amount + ' day(s) to BOTH Vacational and Sick balances of ALL employees?'
+            );
+            if (!step1) {
+                e.preventDefault();
+                return;
+            }
+
+            var step2 = confirm(
+                'This will affect all employees and write accrual history logs for month ' + month + '. Continue?'
+            );
+            if (!step2) {
+                e.preventDefault();
+                return;
+            }
+
+            var step3 = confirm(
+                'Final confirmation: this can be done even if it is NOT yet the end of the month. Force Leave will NOT be changed. Do you want to proceed?'
+            );
+            if (!step3) {
+                e.preventDefault();
+            }
+        });
+    }
+})();
 </script>
 
 </body>

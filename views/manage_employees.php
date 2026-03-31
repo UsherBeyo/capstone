@@ -4,6 +4,7 @@ require_once '../config/database.php';
 require_once '../helpers/Auth.php';
 Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
+require_once '../helpers/Pagination.php';
 
 if ($_SESSION['role'] !== 'admin') {
     die("Access denied");
@@ -16,6 +17,9 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 $employees = $db->query("SELECT e.*, u.email, u.role FROM employees e JOIN users u ON e.user_id = u.id")->fetchAll(PDO::FETCH_ASSOC);
+
+$employeeSearch = trim((string)($_GET['q'] ?? ''));
+$historySearch = trim((string)($_GET['history_q'] ?? ''));
 
 $departments = $db->query("SELECT * FROM departments ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -33,10 +37,28 @@ if (isset($_GET['view_history'])) {
     $stmt->execute([$eid]);
     $historyEmployee = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+$employees = pagination_filter_array($employees, $employeeSearch, [
+    function ($e) { return trim(($e['first_name'] ?? '') . ' ' . ($e['middle_name'] ?? '') . ' ' . ($e['last_name'] ?? '')); },
+    'email', 'role', 'department', 'position', 'status'
+]);
+
+$employeesPagination = paginate_array($employees, (int)($_GET['page'] ?? 1), 12);
+$employees = $employeesPagination['items'];
+
+$historyPagination = null;
+if (is_array($historyEmployee)) {
+    $historyEmployee = pagination_filter_array($historyEmployee, $historySearch, [
+        'leave_type_name', 'leave_type', 'status', 'workflow_status', 'manager_comments', 'start_date', 'end_date'
+    ]);
+    $historyPagination = paginate_array($historyEmployee, (int)($_GET['history_page'] ?? 1), 10);
+    $historyEmployee = $historyPagination['items'];
+}
 ?>
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Manage Employees</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
 
@@ -366,6 +388,7 @@ if (isset($_GET['view_history'])) {
         }
     </style>
 
+    <script src="../assets/js/script.js"></script>
 </head>
 <body>
 
@@ -527,17 +550,17 @@ if (isset($_GET['view_history'])) {
         });
     </script>
 
-    <div class="ui-card employee-list-card">
+    <div class="ui-card employee-list-card ajax-fragment" data-fragment-id="employee-list" data-page-param="page" data-search-param="q">
         <div class="employee-list-header">
             <div>
                 <h2>Employee List</h2>
                 <div class="employee-list-meta">Manage employee profiles, balances, and quick actions in one place.</div>
             </div>
-            <div class="employee-list-meta">Total employees: <strong><?= count($employees); ?></strong></div>
+            <div class="employee-list-meta">Showing <strong><?= $employeesPagination['from']; ?>–<?= $employeesPagination['to']; ?></strong> of <strong><?= $employeesPagination['total']; ?></strong> employees</div>
         </div>
         <div class="employee-search-row">
             <div class="search-input">
-                <input class="form-control" type="text" id="empSearch" placeholder="Search by name, email, role, department, or status...">
+                <input class="form-control live-search-input" type="text" id="empSearch" name="q" value="<?= htmlspecialchars($employeeSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search by name, email, role, department, or status...">
             </div>
         </div>
         <div class="table-wrap">
@@ -594,11 +617,18 @@ if (isset($_GET['view_history'])) {
             </tbody>
         </table>
         </div>
+        <?= pagination_render($employeesPagination, 'page'); ?>
     </div>
 
-    <?php if(!empty($historyEmployee)): ?>
-    <div class="ui-card history-card">
+    <?php if(!empty($historyEmployee) || (isset($_GET['view_history']) && $historyPagination !== null)): ?>
+    <div class="ui-card history-card ajax-fragment" data-fragment-id="employee-history" data-page-param="history_page" data-search-param="history_q">
         <h3>Leave History for Employee</h3>
+        <div class="fragment-toolbar">
+            <div class="search-input">
+                <input class="form-control live-search-input" type="text" name="history_q" value="<?= htmlspecialchars($historySearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search leave history...">
+            </div>
+            <div class="fragment-summary">Showing <?= $historyPagination['from'] ?? 0; ?>–<?= $historyPagination['to'] ?? 0; ?> of <?= $historyPagination['total'] ?? 0; ?> history rows</div>
+        </div>
         <div class="table-wrap">
         <table class="ui-table">
             <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Workflow</th><th>Comments</th></tr>
@@ -614,21 +644,13 @@ if (isset($_GET['view_history'])) {
             <?php endforeach; ?>
         </table>
         </div>
+        <?= $historyPagination ? pagination_render($historyPagination, 'history_page', ['view_history' => (int)($_GET['view_history'] ?? 0), 'page' => (int)($_GET['page'] ?? 1)]) : ''; ?>
     </div>
     <?php endif; ?>
 
 </div>
 
 <script>
-document.getElementById('empSearch').addEventListener('keyup', function(){
-    var filter = this.value.toLowerCase();
-    var rows = document.querySelectorAll('.employee-table tbody tr');
-    rows.forEach(function(row){
-        var text = row.textContent.toLowerCase();
-        row.style.display = text.indexOf(filter) > -1 ? '' : 'none';
-    });
-});
-
 function openImageModal(src, name) {
     document.getElementById('modalImage').src = src;
     document.getElementById('modalImageName').textContent = name;

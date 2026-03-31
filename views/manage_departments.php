@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once '../config/database.php';
 require_once '../helpers/Auth.php';
+require_once '../helpers/Pagination.php';
 Auth::requireLogin('login.php');
 
 if ($_SESSION['role'] !== 'admin') {
@@ -13,6 +14,10 @@ require_once '../models/Department.php';
 $departmentModel = new Department($db);
 
 $departments = $departmentModel->getAll();
+$departmentSearch = trim((string)($_GET['q'] ?? ''));
+$departments = pagination_filter_array($departments, $departmentSearch, ['id', 'name']);
+$departmentsPagination = paginate_array($departments, (int)($_GET['page'] ?? 1), 10);
+$departments = $departmentsPagination['items'];
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -21,8 +26,10 @@ if (empty($_SESSION['csrf_token'])) {
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Manage Departments</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+    <script src="../assets/js/script.js"></script>
 </head>
 <body>
 
@@ -54,8 +61,14 @@ if (empty($_SESSION['csrf_token'])) {
         </div>
     </div>
 
-    <div class="ui-card" style="margin-top:30px;">
+    <div class="ui-card ajax-fragment" data-fragment-id="departments-list" data-page-param="page" data-search-param="q" style="margin-top:30px;">
         <h2>Departments</h2>
+        <div class="fragment-toolbar">
+            <div class="search-input">
+                <input class="form-control live-search-input" type="text" name="q" value="<?= htmlspecialchars($departmentSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search departments...">
+            </div>
+            <div class="fragment-summary">Showing <?= $departmentsPagination['from']; ?>–<?= $departmentsPagination['to']; ?> of <?= $departmentsPagination['total']; ?> departments.</div>
+        </div>
         <div class="table-wrap">
             <table class="ui-table">
                 <thead>
@@ -83,6 +96,7 @@ if (empty($_SESSION['csrf_token'])) {
                 </tbody>
             </table>
         </div>
+        <?= pagination_render($departmentsPagination, 'page'); ?>
     </div>
 
     <div id="editModal" class="modal" style="display:none;">
@@ -117,14 +131,14 @@ window.addEventListener('click', function(e){
     if(e.target == document.getElementById('createModal')) document.getElementById('createModal').style.display = 'none';
 });
 
-document.querySelectorAll('.edit-btn').forEach(btn => {
-    btn.addEventListener('click', function(){
-        const id = this.getAttribute('data-id');
-        const name = this.getAttribute('data-name');
-        document.getElementById('editId').value = id;
-        document.getElementById('editName').value = name;
-        document.getElementById('editModal').style.display = 'flex';
-    });
+document.addEventListener('click', function(e){
+    const btn = e.target.closest('.edit-btn');
+    if (!btn) return;
+    const id = btn.getAttribute('data-id');
+    const name = btn.getAttribute('data-name');
+    document.getElementById('editId').value = id;
+    document.getElementById('editName').value = name;
+    document.getElementById('editModal').style.display = 'flex';
 });
 document.getElementById('closeEditModal').addEventListener('click', function(){
     document.getElementById('editModal').style.display = 'none';

@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once '../helpers/Auth.php';
 
 $_SESSION = [];
 
@@ -15,5 +16,5 @@ header('Cache-Control: post-check=0, pre-check=0', false);
 header('Pragma: no-cache');
 header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
 
-header('Location: ../views/login.php');
+header('Location: ' . Auth::appUrl('login'));
 exit();

@@ -41,6 +41,10 @@ function placeholder_sql(int $count): string {
     return implode(',', array_fill(0, $count, '?'));
 }
 
+function render_balance_metric(string $label, $value, string $sub = 'Your current leave balance'): string {
+    return '<div class="dashboard-metric"><div class="metric-label">' . safe_h($label) . '</div><div class="metric-value">' . fmt_days($value) . '</div><div class="metric-sub">' . safe_h($sub) . '</div></div>';
+}
+
 $employeeRow = null;
 if ($sessionEmpId > 0) {
     $stmt = $db->prepare('SELECT * FROM employees WHERE id = ? LIMIT 1');
@@ -324,6 +328,7 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Dashboard</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -577,6 +582,13 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
         </script>
 
     <?php elseif ($role === 'department_head'): ?>
+        <?php if ($employeeRow): ?>
+        <div class="dashboard-metrics">
+            <?= render_balance_metric('Your Vacational Balance', (float)($employeeRow['annual_balance'] ?? 0)); ?>
+            <?= render_balance_metric('Your Sick Balance', (float)($employeeRow['sick_balance'] ?? 0)); ?>
+            <?= render_balance_metric('Your Force Balance', (float)($employeeRow['force_balance'] ?? 0)); ?>
+        </div>
+        <?php endif; ?>
         <div class="dashboard-metrics">
             <div class="dashboard-metric"><div class="metric-label">Awaiting Your Review</div><div class="metric-value"><?= (int)($departmentHeadDashboard['pending_count'] ?? 0); ?></div><div class="metric-sub">Pending department-head approvals</div></div>
             <div class="dashboard-metric"><div class="metric-label">Approved This Month</div><div class="metric-value"><?= (int)($departmentHeadDashboard['approved_this_month'] ?? 0); ?></div><div class="metric-sub">Requests forwarded to personnel</div></div>
@@ -651,6 +663,13 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
         </div>
 
     <?php elseif ($role === 'personnel'): ?>
+        <?php if ($employeeRow): ?>
+        <div class="dashboard-metrics">
+            <?= render_balance_metric('Your Vacational Balance', (float)($employeeRow['annual_balance'] ?? 0)); ?>
+            <?= render_balance_metric('Your Sick Balance', (float)($employeeRow['sick_balance'] ?? 0)); ?>
+            <?= render_balance_metric('Your Force Balance', (float)($employeeRow['force_balance'] ?? 0)); ?>
+        </div>
+        <?php endif; ?>
         <div class="dashboard-metrics">
             <div class="dashboard-metric"><div class="metric-label">Pending Personnel Review</div><div class="metric-value"><?= (int)($personnelDashboard['pending_count'] ?? 0); ?></div><div class="metric-sub">Requests waiting for final review</div></div>
             <div class="dashboard-metric"><div class="metric-label">Pending Print Queue</div><div class="metric-value"><?= (int)($personnelDashboard['print_queue_count'] ?? 0); ?></div><div class="metric-sub">Finalized requests waiting for form printing</div></div>

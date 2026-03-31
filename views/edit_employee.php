@@ -52,6 +52,7 @@ $is_own_profile = ($role === 'employee');
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Edit Employee</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>

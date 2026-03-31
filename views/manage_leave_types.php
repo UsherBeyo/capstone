@@ -5,6 +5,7 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once '../config/database.php';
 require_once '../helpers/Auth.php';
 Auth::requireLogin('login.php');
+require_once '../helpers/Pagination.php';
 if (!in_array($_SESSION['role'], ['admin','hr'])) {
     die("Access denied");
 }
@@ -12,20 +13,33 @@ if (!in_array($_SESSION['role'], ['admin','hr'])) {
 // ensure we always have types available even if view called directly
 $db = (new Database())->connect();
 $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$typeSearch = trim((string)($_GET['q'] ?? ''));
+$types = pagination_filter_array($types, $typeSearch, ['name', 'max_days_per_year']);
+$typesPagination = paginate_array($types, (int)($_GET['page'] ?? 1), 12);
+$types = $typesPagination['items'];
 ?>
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Manage Leave Types</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
+    <script src="../assets/js/script.js"></script>
 </head>
 <body>
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 <div class="app-main">
     <h1>Leave Types</h1>
     <p class="page-subtitle" style="margin-bottom:14px;">Configure available leave categories and allocation rules</p>
-    <div class="ui-card">
-        <table border="1" width="100%">
+    <div class="ui-card ajax-fragment" data-fragment-id="leave-types-list" data-page-param="page" data-search-param="q">
+        <div class="fragment-toolbar">
+        <div class="search-input">
+            <input class="form-control live-search-input" type="text" name="q" value="<?= htmlspecialchars($typeSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search leave types...">
+        </div>
+        <div class="fragment-summary">Showing <?= $typesPagination['from']; ?>–<?= $typesPagination['to']; ?> of <?= $typesPagination['total']; ?> leave types.</div>
+    </div>
+        <div class="table-wrap">
+        <table class="ui-table">
             <tr><th>ID</th><th>Name</th><th>Deduct?</th><th>Requires Approval</th><th>Max/yr</th><th>Auto approve</th><th>Actions</th></tr>
             <?php foreach ($types as $t): ?>
             <tr>
@@ -46,6 +60,8 @@ $types = $db->query("SELECT * FROM leave_types ORDER BY name")->fetchAll(PDO::FE
             </tr>
             <?php endforeach; ?>
         </table>
+        </div>
+        <?= pagination_render($typesPagination, 'page'); ?>
     </div>
     <div class="ui-card" style="margin-top:20px;">
         <h3>Add New Type</h3>

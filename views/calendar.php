@@ -110,6 +110,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Leave Calendar</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
     <script src="../assets/js/script.js"></script>

@@ -507,6 +507,7 @@ if ($certificationAsOf === '') {
 <!DOCTYPE html>
 <html>
 <head>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <meta charset="UTF-8">
     <title>Application for Leave - <?= e(trim($firstName . ' ' . $lastName)); ?></title>
     <link rel="stylesheet" href="../assets/css/print_leave_form.css">
