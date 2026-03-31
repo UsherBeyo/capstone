@@ -7,6 +7,7 @@ require_once '../helpers/Auth.php';
 require_once '../helpers/Flash.php';
 Auth::requireLogin('login.php');
 require_once '../helpers/DateHelper.php';
+require_once '../helpers/StyledXlsxExport.php';
 
 $db = (new Database())->connect();
 
@@ -298,43 +299,62 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
         if ($da !== $dbb) return $da <=> $dbb;
         return strcmp((string)($a['particulars'] ?? ''), (string)($b['particulars'] ?? ''));
     });
-    // Output as Excel (HTML)
-    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-        $employeeFullName = trim(($e['first_name'] ?? '') . ' ' . ($e['last_name'] ?? ''));
+    $employeeFullName = trim(($e['first_name'] ?? '') . ' ' . ($e['last_name'] ?? ''));
     if ($employeeFullName === '') {
         $employeeFullName = 'Employee ' . $id;
     }
 
     $leaveCardFilename = safeExportFilename('Leave Card - ' . $employeeFullName);
-    header('Content-Disposition: attachment; filename="' . $leaveCardFilename . '.xls"');
 
-    echo "<table border=1>\n";
-    echo "<tr><td colspan='9' style='font-weight:bold;background-color:#d3d3d3;'><strong>Employee Information</strong></td></tr>\n";
-    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars(trim(($e['first_name'].' '.$e['last_name']) ?: $e['name']))."</td><td><strong>Position</strong></td><td>".htmlspecialchars($e['position'] ?? '')."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
-    echo "<tr><td><strong>Status</strong></td><td>".htmlspecialchars($e['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($e['civil_status'] ?? '')."</td><td><strong>Entrance to Duty</strong></td><td>".htmlspecialchars($e['entrance_to_duty'] ?? '0000-00-00')."</td><td><strong>Unit</strong></td><td>".htmlspecialchars($e['unit'] ?? '')."</td></tr>\n";
-    echo "<tr><td colspan='9'>&nbsp;</td></tr>\n";
+    $employeeInfoRows = [
+        [
+            ['ref' => 'A', 'value' => 'Employee ID', 'role' => 'label'],
+            ['ref' => 'B', 'value' => (string)$e['id']],
+            ['ref' => 'C', 'value' => 'Name', 'role' => 'label'],
+            ['ref' => 'D', 'value' => trim(($e['first_name'].' '.$e['last_name']) ?: ($e['name'] ?? ''))],
+            ['ref' => 'E', 'value' => 'Position', 'role' => 'label'],
+            ['ref' => 'F', 'value' => (string)($e['position'] ?? '')],
+            ['ref' => 'G', 'value' => 'Department', 'role' => 'label'],
+            ['ref' => 'H', 'value' => (string)($e['department'] ?? '')],
+            ['ref' => 'I', 'value' => ''],
+        ],
+        [
+            ['ref' => 'A', 'value' => 'Status', 'role' => 'label'],
+            ['ref' => 'B', 'value' => (string)($e['status'] ?? '')],
+            ['ref' => 'C', 'value' => 'Civil Status', 'role' => 'label'],
+            ['ref' => 'D', 'value' => (string)($e['civil_status'] ?? '')],
+            ['ref' => 'E', 'value' => 'Entrance to Duty', 'role' => 'label'],
+            ['ref' => 'F', 'value' => (string)($e['entrance_to_duty'] ?? '0000-00-00')],
+            ['ref' => 'G', 'value' => 'Unit', 'role' => 'label'],
+            ['ref' => 'H', 'value' => (string)($e['unit'] ?? '')],
+            ['ref' => 'I', 'value' => ''],
+        ],
+    ];
 
-    echo "<tr><td colspan='9' style='font-weight:bold;background-color:#d3d3d3;'><strong>LEAVE CARD TRANSACTIONS</strong></td></tr>\n";
-    echo "<tr style='background-color:#e0e0e0;'>";
-    echo "<th>Date</th><th>Particulars</th><th>Vac Earned</th><th>Vac Deducted</th><th>Vac Balance</th><th>Sick Earned</th><th>Sick Deducted</th><th>Sick Balance</th><th>Status</th>";
-    echo "</tr>\n";
-
+    $tableRows = [];
     foreach ($rows as $row) {
-        echo "<tr>";
-        echo "<td>".htmlspecialchars(app_format_date($row['date'] ?? ''))."</td>";
-        echo "<td>".htmlspecialchars($row['particulars'])."</td>";
-        echo "<td>".($row['vac_earned'] != 0 ? trunc3($row['vac_earned']) : '')."</td>";
-        echo "<td>".($row['vac_deducted'] != 0 ? trunc3($row['vac_deducted']) : '')."</td>";
-        echo "<td>" . ($row['vac_balance'] === '' ? '' : trunc3($row['vac_balance'])) . "</td>";
-        echo "<td>" . ($row['sick_earned'] != 0 ? trunc3($row['sick_earned']) : '') . "</td>";
-        echo "<td>".($row['sick_deducted'] != 0 ? trunc3($row['sick_deducted']) : '')."</td>";
-        echo "<td>" . ($row['sick_balance'] === '' ? '' : trunc3($row['sick_balance'])) . "</td>";
-        echo "<td>".htmlspecialchars($row['status'])."</td>";
-        echo "</tr>\n";
+        $tableRows[] = [
+            app_format_date($row['date'] ?? ''),
+            (string)($row['particulars'] ?? ''),
+            $row['vac_earned'] != 0 ? trunc3($row['vac_earned']) : '',
+            $row['vac_deducted'] != 0 ? trunc3($row['vac_deducted']) : '',
+            $row['vac_balance'] === '' ? '' : trunc3($row['vac_balance']),
+            $row['sick_earned'] != 0 ? trunc3($row['sick_earned']) : '',
+            $row['sick_deducted'] != 0 ? trunc3($row['sick_deducted']) : '',
+            $row['sick_balance'] === '' ? '' : trunc3($row['sick_balance']),
+            (string)($row['status'] ?? ''),
+        ];
     }
 
-    echo "</table>";
-    exit();
+    StyledXlsxExport::outputWorkbook([
+        'filename' => $leaveCardFilename,
+        'sheet_title' => $leaveCardFilename,
+        'employee_info_rows' => $employeeInfoRows,
+        'table_title' => 'LEAVE CARD TRANSACTIONS',
+        'table_headers' => ['Date', 'Particulars', 'Vac Earned', 'Vac Deducted', 'Vac Balance', 'Sick Earned', 'Sick Deducted', 'Sick Balance', 'Status'],
+        'table_rows' => $tableRows,
+        'column_widths' => [18, 32, 11, 13, 16, 12, 14, 12, 15],
+    ]);
 }
 
 // export leave history CSV
@@ -342,42 +362,69 @@ if (isset($_GET['export']) && ($_SESSION['role'] === 'admin' || $_SESSION['role'
     $stmt = $db->prepare("SELECT COALESCE(lt.name, lr.leave_type) AS leave_type_name, lr.start_date, lr.end_date, lr.total_days, lr.status, lr.created_at as 'submitted_date', lr.reason, lr.snapshot_annual_balance, lr.snapshot_sick_balance, lr.snapshot_force_balance FROM leave_requests lr LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.employee_id = ? ORDER BY lr.start_date");
     $stmt->execute([$id]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    // output as simple Excel (HTML) so clients can adjust column widths
-    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     $employeeFullName = trim(($e['first_name'] ?? '') . ' ' . ($e['last_name'] ?? ''));
     if ($employeeFullName === '') {
         $employeeFullName = 'Employee ' . $id;
     }
     $leaveHistoryFilename = safeExportFilename('Leave History - ' . $employeeFullName, 'Leave History - Employee');
-    header('Content-Disposition: attachment; filename="' . $leaveHistoryFilename . '.xls"');
-    echo "<table border=1>\n";
-    // Add employee information header
-    echo "<tr><td colspan='10' style='font-weight:bold;background-color:#e0e0e0;'><strong>Employee Information</strong></td></tr>\n";
-    echo "<tr><td><strong>Employee ID</strong></td><td>".htmlspecialchars($e['id'])."</td><td><strong>Name</strong></td><td>".htmlspecialchars($e['first_name'].' '.$e['last_name'])."</td><td><strong>Email</strong></td><td>".htmlspecialchars($e['email'])."</td><td><strong>Department</strong></td><td>".htmlspecialchars($e['department'])."</td></tr>\n";
-    echo "<tr><td><strong>Position</strong></td><td>".htmlspecialchars($e['position'] ?? '')."</td><td><strong>Status</strong></td><td>".htmlspecialchars($e['status'] ?? '')."</td><td><strong>Civil Status</strong></td><td>".htmlspecialchars($e['civil_status'] ?? '')."</td><td><strong>Entrance</strong></td><td>".htmlspecialchars($e['entrance_to_duty'] ?? '')."</td></tr>\n";
-    echo "<tr><td colspan='10'>&nbsp;</td></tr>\n";
-    echo "<tr><td colspan='10' style='font-weight:bold;background-color:#e0e0e0;'><strong>Leave History</strong></td></tr>\n";
-    // header row with some width hints
-    echo "<tr>";
-    $headers = $rows[0] ? array_keys($rows[0]) : ['leave_type_name','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance'];
-    foreach($headers as $h) {
-        echo "<th style='min-width:120px;'>".htmlspecialchars($h)."</th>";
+
+    $employeeInfoRows = [
+        [
+            ['ref' => 'A', 'value' => 'Employee ID', 'role' => 'label'],
+            ['ref' => 'B', 'value' => (string)$e['id']],
+            ['ref' => 'C', 'value' => 'Name', 'role' => 'label'],
+            ['ref' => 'D', 'value' => trim(($e['first_name'].' '.$e['last_name']) ?: ($e['name'] ?? ''))],
+            ['ref' => 'E', 'value' => 'Email', 'role' => 'label'],
+            ['ref' => 'F', 'value' => (string)($e['email'] ?? '')],
+            ['ref' => 'G', 'value' => 'Department', 'role' => 'label'],
+            ['ref' => 'H', 'value' => (string)($e['department'] ?? '')],
+            ['ref' => 'I', 'value' => ''],
+            ['ref' => 'J', 'value' => ''],
+        ],
+        [
+            ['ref' => 'A', 'value' => 'Position', 'role' => 'label'],
+            ['ref' => 'B', 'value' => (string)($e['position'] ?? '')],
+            ['ref' => 'C', 'value' => 'Status', 'role' => 'label'],
+            ['ref' => 'D', 'value' => (string)($e['status'] ?? '')],
+            ['ref' => 'E', 'value' => 'Civil Status', 'role' => 'label'],
+            ['ref' => 'F', 'value' => (string)($e['civil_status'] ?? '')],
+            ['ref' => 'G', 'value' => 'Entrance', 'role' => 'label'],
+            ['ref' => 'H', 'value' => (string)($e['entrance_to_duty'] ?? '')],
+            ['ref' => 'I', 'value' => ''],
+            ['ref' => 'J', 'value' => ''],
+        ],
+    ];
+
+    $headers = !empty($rows) ? array_keys($rows[0]) : ['leave_type_name','start_date','end_date','total_days','status','submitted_date','reason','snapshot_annual_balance','snapshot_sick_balance','snapshot_force_balance'];
+    $tableHeaders = [];
+    foreach ($headers as $h) {
+        $tableHeaders[] = ucwords(str_replace('_', ' ', $h));
     }
-    echo "</tr>\n";
+
+    $tableRows = [];
     foreach($rows as $r) {
-        echo "<tr>";
-        foreach($r as $key => $cell) {
+        $line = [];
+        foreach($headers as $key) {
+            $cell = $r[$key] ?? '';
             if ($key === 'total_days') {
                 $cell = trunc3($cell);
             } elseif (in_array($key, ['start_date', 'end_date', 'submitted_date'], true)) {
                 $cell = app_format_date((string)$cell);
             }
-            echo "<td>".htmlspecialchars($cell)."</td>";
+            $line[] = (string)$cell;
         }
-        echo "</tr>\n";
+        $tableRows[] = $line;
     }
-    echo "</table>";
-    exit();
+
+    StyledXlsxExport::outputWorkbook([
+        'filename' => $leaveHistoryFilename,
+        'sheet_title' => $leaveHistoryFilename,
+        'employee_info_rows' => $employeeInfoRows,
+        'table_title' => 'LEAVE HISTORY',
+        'table_headers' => $tableHeaders,
+        'table_rows' => $tableRows,
+        'column_widths' => [18, 18, 18, 14, 14, 18, 34, 18, 18, 18],
+    ]);
 }
 
 if (empty($_SESSION['csrf_token'])) {
@@ -461,10 +508,10 @@ if ($stmtTypes) {
 <!DOCTYPE html>
 <html>
 <head>
-    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title><?= htmlspecialchars(
         $pageTitle ?? 'Employee Profile'
     ); ?></title>
+    <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="../assets/css/styles.css">
     <style>
         .profile-header { display:flex; gap:16px; align-items:center; }

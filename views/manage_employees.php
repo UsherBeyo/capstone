@@ -258,6 +258,143 @@ if (is_array($historyEmployee)) {
             gap: 10px;
             margin-top: 8px;
         }
+
+        .create-employee-modal {
+            width: min(980px, calc(100vw - 32px));
+            max-height: calc(100vh - 32px);
+            padding: 0;
+            overflow: hidden;
+            border-radius: 24px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, .18);
+            display: flex;
+            flex-direction: column;
+        }
+        .create-employee-modal .modal-close {
+            top: 18px;
+            right: 18px;
+            width: 36px;
+            height: 36px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #eef2ff;
+            color: #1e3a8a;
+            font-size: 22px;
+            z-index: 3;
+        }
+        .create-employee-shell {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            min-height: 100%;
+            max-height: calc(100vh - 32px);
+        }
+        .create-employee-aside {
+            background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+            color: #fff;
+            padding: 28px 24px;
+            position: relative;
+        }
+        .create-employee-aside::after {
+            content: '';
+            position: absolute;
+            inset: auto -80px -80px auto;
+            width: 200px;
+            height: 200px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.12);
+            filter: blur(2px);
+        }
+        .create-employee-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.16);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 18px;
+        }
+        .create-employee-aside h3 {
+            margin: 0 0 10px;
+            font-size: 28px;
+            line-height: 1.15;
+            color: #fff;
+        }
+        .create-employee-aside p {
+            margin: 0;
+            color: rgba(255,255,255,.88);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .create-employee-form {
+            padding: 22px 22px 18px;
+            background: #fff;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+        .create-employee-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px 16px;
+        }
+        .create-employee-grid .form-group {
+            margin-bottom: 0;
+        }
+        .create-employee-grid .form-group.full {
+            grid-column: 1 / -1;
+        }
+        .create-employee-grid label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #334155;
+        }
+        .create-employee-grid .form-control,
+        .create-employee-grid .form-select {
+            width: 100%;
+            min-height: 42px;
+            border-radius: 12px;
+            border: 1px solid #dbe3ef;
+            background: #fff;
+            box-shadow: inset 0 1px 2px rgba(15,23,42,.03);
+        }
+        .create-employee-grid .form-control:focus,
+        .create-employee-grid .form-select:focus {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 4px rgba(37,99,235,.12);
+            outline: none;
+        }
+        .salary-input-wrap {
+            position: relative;
+        }
+        .salary-input-wrap .currency-badge {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            font-weight: 800;
+            color: #1d4ed8;
+            pointer-events: none;
+        }
+        .salary-input-wrap input {
+            padding-left: 42px;
+        }
+        .employee-modal-actions {
+            position: sticky;
+            bottom: 0;
+            background: #fff;
+            border-top: 1px solid #e5e7eb;
+            margin-top: 18px;
+            padding-top: 14px;
+            padding-bottom: 2px;
+        }
+
         @media (max-width: 1600px) {
             .employee-table th,
             .employee-table td {
@@ -371,6 +508,32 @@ if (is_array($historyEmployee)) {
                 display: inline !important;
             }
         }
+
+        @media (max-width: 1100px) {
+            .create-employee-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 900px) {
+            .create-employee-modal {
+                max-height: calc(100vh - 20px);
+            }
+            .create-employee-shell {
+                grid-template-columns: 1fr;
+                max-height: calc(100vh - 20px);
+            }
+            .create-employee-aside {
+                padding: 18px 20px 14px;
+            }
+            .create-employee-form {
+                padding: 18px 20px 16px;
+            }
+            .create-employee-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media (max-width: 560px) {
             .employee-search-row {
                 margin-bottom: 14px;
@@ -403,125 +566,128 @@ if (is_array($historyEmployee)) {
     ?>
 
     <div id="createModal" class="modal" style="display:none;">
-        <div class="modal-content small">
+        <div class="modal-content create-employee-modal">
             <span class="modal-close" id="closeCreateModal">&times;</span>
-            <h3>Create Employee</h3>
-            <form method="POST" action="../controllers/AdminController.php" enctype="multipart/form-data">
-                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" name="email" required class="form-control">
+            <div class="create-employee-shell">
+                <div class="create-employee-aside">
+                    <div class="create-employee-kicker">Admin setup</div>
+                    <h3>Create Employee</h3>
+                    <p>Fill out the employee’s account, role, and profile details in one clean form.</p>
                 </div>
+                <form method="POST" action="../controllers/AdminController.php" enctype="multipart/form-data" class="create-employee-form">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                    <div class="create-employee-grid">
+                        <div class="form-group full">
+                            <label>Email</label>
+                            <input type="email" name="email" required class="form-control" placeholder="employee@example.com">
+                        </div>
 
-                <div class="form-group">
-                    <label>Profile Picture</label>
-                    <input type="file" name="profile_pic" accept="image/*" class="form-control">
-                </div>
+                        <div class="form-group full">
+                            <label>Profile Picture</label>
+                            <input type="file" name="profile_pic" accept="image/*" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>First Name</label>
-                    <input type="text" name="first_name" required class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>First Name</label>
+                            <input type="text" name="first_name" required class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>Middle Name</label>
-                    <input type="text" name="middle_name" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Middle Name</label>
+                            <input type="text" name="middle_name" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>Last Name</label>
-                    <input type="text" name="last_name" required class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Last Name</label>
+                            <input type="text" name="last_name" required class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>Department</label>
-                    <select name="department_id" required class="form-select">
-                        <option value="">Select Department</option>
-                        <?php foreach($departments as $d): ?>
-                            <option value="<?= $d['id']; ?>"><?= htmlspecialchars($d['name']); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                        <div class="form-group">
+                            <label>Department</label>
+                            <select name="department_id" required class="form-select">
+                                <option value="">Select Department</option>
+                                <?php foreach($departments as $d): ?>
+                                    <option value="<?= $d['id']; ?>"><?= htmlspecialchars($d['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
 
-                <div class="form-group">
-                    <label>Position</label>
-                    <input type="text" name="position" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Position</label>
+                            <input type="text" name="position" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>Salary</label>
-                    <input type="number" step="0.01" name="salary" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Salary</label>
+                            <div class="salary-input-wrap">
+                                <span class="currency-badge">₱</span>
+                                <input type="number" step="0.01" name="salary" class="form-control" placeholder="0.00">
+                            </div>
+                        </div>
 
-                <div class="form-group">
-                    <label>Status</label>
-                    <input type="text" name="status" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select name="status" class="form-select">
+                                <option value="">Select status</option>
+                                <option value="Permanent">Permanent</option>
+                                <option value="JO">JO</option>
+                            </select>
+                        </div>
 
-                <div class="form-group">
-                    <label>Civil Status</label>
-                    <input type="text" name="civil_status" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Civil Status</label>
+                            <select name="civil_status" class="form-select">
+                                <option value="">Select civil status</option>
+                                <option value="Single">Single</option>
+                                <option value="Married">Married</option>
+                                <option value="Divorced">Divorced</option>
+                            </select>
+                        </div>
 
-                <div class="form-group">
-                    <label>Entrance to Duty</label>
-                    <input type="date" name="entrance_to_duty" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Entrance to Duty</label>
+                            <input type="date" name="entrance_to_duty" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>Unit</label>
-                    <input type="text" name="unit" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Unit</label>
+                            <input type="text" name="unit" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>GSIS Policy No.</label>
-                    <input type="text" name="gsis_policy_no" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>GSIS Policy No.</label>
+                            <input type="text" name="gsis_policy_no" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>National Reference Card No.</label>
-                    <input type="text" name="national_reference_card_no" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>National Reference Card No.</label>
+                            <input type="text" name="national_reference_card_no" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" name="password" required placeholder="Set temporary password" class="form-control">
-                </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <input type="password" name="password" required placeholder="Set temporary password" class="form-control">
+                        </div>
 
-                <div class="form-group">
-                    <label>Role</label>
-                    <select name="role" id="roleSelect" class="form-select">
-                        <option value="employee" selected>Employee</option>
-                        <option value="department_head">Department Head</option>
-                        <option value="personnel">Personnel</option>
-                        <option value="manager">Manager (Legacy)</option>
-                        <option value="hr">HR (Legacy)</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
+                        <div class="form-group">
+                            <label>Role</label>
+                            <select name="role" class="form-select">
+                                <option value="employee" selected>Employee</option>
+                                <option value="department_head">Department Head</option>
+                                <option value="personnel">Personnel</option>
+                                <option value="manager">Manager (Legacy)</option>
+                                <option value="hr">HR (Legacy)</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
 
-                <div id="deptHeadField" style="display:none;">
-                    <label>Department Head Of (auto-assigned based on department)</label>
-                    <p style="font-size:12px;color:#666;">This will be set automatically when department is selected.</p>
-                </div>
-
-                <div class="form-group">
-                    <label>Assign Department Head</label>
-                    <select name="manager_id" class="form-select">
-                        <option value="">None</option>
-                        <?php foreach($managers as $m): ?>
-                            <option value="<?= $m['id']; ?>">
-                                <?= htmlspecialchars(trim($m['first_name'].' '.($m['middle_name'] ?? '').' '.$m['last_name'])); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="employee-modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelCreateModal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create</button>
-                </div>
-            </form>
+                    <div class="employee-modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelCreateModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -540,14 +706,6 @@ if (is_array($historyEmployee)) {
             if(e.target == document.getElementById('createModal')) document.getElementById('createModal').style.display = 'none';
         });
 
-        document.getElementById('roleSelect').addEventListener('change', function(){
-            const deptHeadField = document.getElementById('deptHeadField');
-            if(this.value === 'department_head'){
-                deptHeadField.style.display = 'block';
-            } else {
-                deptHeadField.style.display = 'none';
-            }
-        });
     </script>
 
     <div class="ui-card employee-list-card ajax-fragment" data-fragment-id="employee-list" data-page-param="page" data-search-param="q">

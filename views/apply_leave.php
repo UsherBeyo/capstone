@@ -379,7 +379,23 @@ if (empty($_SESSION['csrf_token'])) {
     <base href="<?= htmlspecialchars(rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') . '/', ENT_QUOTES, 'UTF-8'); ?>">
     <title>Apply Leave</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
-    <script src="../assets/js/script.js"></script>
+    <script src="../assets/js/script.js">
+const attachmentInput = document.getElementById('attachments');
+const attachmentFileList = document.getElementById('attachment-file-list');
+if (attachmentInput && attachmentFileList) {
+    attachmentInput.addEventListener('change', function () {
+        attachmentFileList.innerHTML = '';
+        Array.from(this.files || []).slice(0, 5).forEach(function (file) {
+            const chip = document.createElement('span');
+            chip.className = 'request-chip request-chip-neutral';
+            const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+            chip.textContent = file.name + ' (' + sizeMb + ' MB)';
+            attachmentFileList.appendChild(chip);
+        });
+    });
+}
+
+</script>
     <style>
         .leave-application-card {
             max-width: 980px;
@@ -566,7 +582,7 @@ if (empty($_SESSION['csrf_token'])) {
             Fill out the request based on the official leave form. Extra instructions and requirements will appear only for the selected leave type.
         </p>
 
-        <form method="POST" action="../controllers/LeaveController.php" id="applyLeaveForm">
+        <form method="POST" action="../controllers/LeaveController.php" id="applyLeaveForm" enctype="multipart/form-data">
             <input type="hidden" name="action" value="apply">
             <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']); ?>">
 
@@ -579,7 +595,7 @@ if (empty($_SESSION['csrf_token'])) {
                     </div>
                     <div>
                         <label>Date of Filing</label>
-                        <input type="date" name="filing_date" value="<?= e(date('Y-m-d')); ?>" required>
+                        <input type="date" name="filing_date" value="<?= e(date('Y-m-d')); ?>" required lang="en-CA" autocomplete="off">
                     </div>
                     <div>
                         <label>Office / Department</label>
@@ -624,12 +640,12 @@ if (empty($_SESSION['csrf_token'])) {
 
                     <div>
                         <label for="start_date">Start Date</label>
-                        <input type="date" name="start_date" id="start_date" required>
+                        <input type="date" name="start_date" id="start_date" required lang="en-CA" autocomplete="off">
                     </div>
 
                     <div>
                         <label for="end_date">End Date</label>
-                        <input type="date" name="end_date" id="end_date" required>
+                        <input type="date" name="end_date" id="end_date" required lang="en-CA" autocomplete="off">
                     </div>
 
                     <div>
@@ -680,7 +696,7 @@ if (empty($_SESSION['csrf_token'])) {
 
                 <div id="expected-delivery-wrapper" style="display:none;">
                     <label for="detail_expected_delivery">Expected Date of Delivery</label>
-                    <input type="date" name="details[expected_delivery]" id="detail_expected_delivery">
+                    <input type="date" name="details[expected_delivery]" id="detail_expected_delivery" lang="en-CA" autocomplete="off">
                 </div>
 
                 <div id="calamity-location-wrapper" style="display:none;">
@@ -725,8 +741,13 @@ if (empty($_SESSION['csrf_token'])) {
                     </label>
                 </div>
 
-                <div class="muted-note" style="margin-top:12px;">
-                    These fields can later be upgraded into actual file uploads. For now, they act as structured indicators for the printed form and approval flow.
+                <div class="form-grid" style="margin-top:16px;">
+                    <div style="grid-column:1 / -1;">
+                        <label for="attachments">Upload Supporting Files</label>
+                        <input type="file" name="attachments[]" id="attachments" multiple accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        <div class="muted-note" style="margin-top:8px;">Attach up to 5 files. Allowed types: PDF, JPG, PNG, WEBP. Maximum 10MB each.</div>
+                        <div id="attachment-file-list" class="request-chip-list" style="margin-top:10px;"></div>
+                    </div>
                 </div>
             </div>
 
@@ -933,6 +954,22 @@ window.addEventListener('load', function () {
 
     updateLeaveTypeUI();
 });
+
+const attachmentInput = document.getElementById('attachments');
+const attachmentFileList = document.getElementById('attachment-file-list');
+if (attachmentInput && attachmentFileList) {
+    attachmentInput.addEventListener('change', function () {
+        attachmentFileList.innerHTML = '';
+        Array.from(this.files || []).slice(0, 5).forEach(function (file) {
+            const chip = document.createElement('span');
+            chip.className = 'request-chip request-chip-neutral';
+            const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+            chip.textContent = file.name + ' (' + sizeMb + ' MB)';
+            attachmentFileList.appendChild(chip);
+        });
+    });
+}
+
 </script>
 
 </body>

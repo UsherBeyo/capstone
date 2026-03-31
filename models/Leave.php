@@ -1,6 +1,7 @@
 <?php
 class Leave {
     private $conn;
+    private int $lastInsertedId = 0;
 
     public function __construct($db) {
         $this->conn = $db;
@@ -97,6 +98,11 @@ class Leave {
     public function calculateDays($start, $end) {
         $breakdown = $this->calculateDaysBreakdown($start, $end);
         return (int)($breakdown['days'] ?? 0);
+    }
+
+
+    public function getLastInsertedId(): int {
+        return $this->lastInsertedId > 0 ? $this->lastInsertedId : (int)$this->conn->lastInsertId();
     }
 
     public function checkOverlap($employee_id, $start, $end) {
@@ -395,6 +401,7 @@ class Leave {
                 ':affidavit_attached' => $affidavitAttached,
                 ':emergency_case' => $emergencyCase
             ]);
+            $this->lastInsertedId = (int)$this->conn->lastInsertId();
         } catch (\Throwable $e) {
             try {
                 $query = "INSERT INTO leave_requests
@@ -467,13 +474,14 @@ class Leave {
                     ':snap_force' => $snapshots['force_balance'],
                     ':commutation' => $commutation
                 ]);
+                $this->lastInsertedId = (int)$this->conn->lastInsertId();
             } catch (\Throwable $e2) {
                 return "Failed to save leave request.";
             }
         }
 
         if ($status === 'approved' && !empty($leaveType['deduct_balance'])) {
-            $newId = $this->conn->lastInsertId();
+            $newId = $this->lastInsertedId > 0 ? $this->lastInsertedId : (int)$this->conn->lastInsertId();
             $this->respondToLeave($newId, null, 'approve');
         }
 

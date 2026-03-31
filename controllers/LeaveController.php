@@ -9,6 +9,7 @@ if (empty($_SESSION['user_id'])) {
 }
 
 require_once '../models/Leave.php';
+require_once '../models/LeaveAttachment.php';
 require_once '../helpers/Flash.php';
 require_once '../models/LeaveType.php';
 require_once '../services/Mail.php';
@@ -17,6 +18,7 @@ require_once '../helpers/ErrorHandler.php';
 
 $db = (new Database())->connect();
 $leaveModel = new Leave($db);
+$leaveAttachmentModel = new LeaveAttachment($db);
 
 $action = $_POST['action'] ?? null;
 $role = $_SESSION['role'] ?? '';
@@ -26,6 +28,102 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 function workflowError(string $message, string $type = 'error'): void {
     flash_redirect('../views/leave_requests.php', $type, $message);
 }
+
+function sanitizeAttachmentOriginalName(string $name): string {
+    $name = trim($name);
+    $name = preg_replace('/[^A-Za-z0-9._ -]+/', '_', $name) ?? 'attachment';
+    $name = preg_replace('/\s+/', ' ', $name) ?? 'attachment';
+    return substr($name !== '' ? $name : 'attachment', 0, 180);
+}
+
+function uploadLeaveAttachments(array $files, int $leaveId, int $userId, LeaveAttachment $attachmentModel): array {
+    $result = ['saved' => 0, 'errors' => []];
+
+    if ($leaveId <= 0 || empty($files) || !isset($files['name']) || !is_array($files['name'])) {
+        return $result;
+    }
+
+    $allowed = [
+        'pdf' => ['application/pdf'],
+        'jpg' => ['image/jpeg'],
+        'jpeg' => ['image/jpeg'],
+        'png' => ['image/png'],
+        'webp' => ['image/webp'],
+    ];
+    $maxFiles = 5;
+    $maxBytes = 10 * 1024 * 1024;
+
+    $names = $files['name'] ?? [];
+    $tmpNames = $files['tmp_name'] ?? [];
+    $errors = $files['error'] ?? [];
+    $sizes = $files['size'] ?? [];
+
+    $total = min(count($names), $maxFiles);
+    if (count($names) > $maxFiles) {
+        $result['errors'][] = 'Only the first 5 attachments were processed.';
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $relativeDir = 'uploads/leave_attachments/' . date('Y') . '/' . date('m');
+    $absoluteDir = dirname(__DIR__) . '/' . $relativeDir;
+    if (!is_dir($absoluteDir) && !mkdir($absoluteDir, 0777, true) && !is_dir($absoluteDir)) {
+        $result['errors'][] = 'Attachment upload directory could not be created.';
+        return $result;
+    }
+
+    for ($i = 0; $i < $total; $i++) {
+        $originalName = (string)($names[$i] ?? '');
+        $tmp = (string)($tmpNames[$i] ?? '');
+        $err = (int)($errors[$i] ?? UPLOAD_ERR_NO_FILE);
+        $size = (int)($sizes[$i] ?? 0);
+
+        if ($err === UPLOAD_ERR_NO_FILE || $originalName === '') {
+            continue;
+        }
+        if ($err !== UPLOAD_ERR_OK) {
+            $result['errors'][] = sanitizeAttachmentOriginalName($originalName) . ' could not be uploaded.';
+            continue;
+        }
+        if ($size <= 0 || $size > $maxBytes) {
+            $result['errors'][] = sanitizeAttachmentOriginalName($originalName) . ' exceeds the 10MB limit.';
+            continue;
+        }
+
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if (!isset($allowed[$ext])) {
+            $result['errors'][] = sanitizeAttachmentOriginalName($originalName) . ' has an unsupported file type.';
+            continue;
+        }
+
+        $mime = $finfo->file($tmp) ?: '';
+        if (!in_array($mime, $allowed[$ext], true)) {
+            $result['errors'][] = sanitizeAttachmentOriginalName($originalName) . ' failed file validation.';
+            continue;
+        }
+
+        $storedName = uniqid('leave_', true) . '.' . $ext;
+        $dest = $absoluteDir . '/' . $storedName;
+        if (!move_uploaded_file($tmp, $dest)) {
+            $result['errors'][] = sanitizeAttachmentOriginalName($originalName) . ' could not be saved.';
+            continue;
+        }
+
+        $attachmentModel->create([
+            'leave_request_id' => $leaveId,
+            'original_name' => sanitizeAttachmentOriginalName($originalName),
+            'stored_name' => $storedName,
+            'file_path' => $relativeDir . '/' . $storedName,
+            'mime_type' => $mime,
+            'file_size' => $size,
+            'document_type' => 'supporting_document',
+            'uploaded_by_user_id' => $userId,
+        ]);
+        $result['saved']++;
+    }
+
+    return $result;
+}
+
 
 function fetchLeaveForWorkflow(PDO $db, int $leaveId): ?array {
     $stmt = $db->prepare("
@@ -275,7 +373,7 @@ if ($action === 'cancel') {
     $employee_id = (int)($_SESSION['emp_id'] ?? 0);
 
     if (!$employee_id) {
-        die("Employee record not found");
+        flash_redirect('../views/apply_leave.php', 'error', 'Employee record not found');
     }
 
     $stmt = $db->prepare("
@@ -311,7 +409,7 @@ if ($action === 'apply') {
 
     $employee_id = $_SESSION['emp_id'] ?? null;
     if (!$employee_id) {
-        die("Employee record not found");
+        flash_redirect('../views/apply_leave.php', 'error', 'Employee record not found');
     }
 
     $typeId = $_POST['leave_type_id'] ?? null;
@@ -355,16 +453,6 @@ if ($action === 'apply') {
         $err = implode(' ', array_map('implode', $v->getErrors()));
 flash_redirect('../views/apply_leave.php', 'error', $err);
     }
-
-    if ($end < $start) {
-flash_redirect('../views/apply_leave.php', 'error', 'End date cannot be earlier than start date.');
-    }
-
-    $workingDays = $leaveModel->calculateDays($start, $end);
-    if ($workingDays <= 0) {
-flash_redirect('../views/apply_leave.php', 'error', 'The selected date range contains no deductible working days. Please choose a valid working-day range.');
-    }
-
     $extraData = [
         'filing_date' => $filingDate,
         'leave_subtype' => $leaveSubtype !== '' ? $leaveSubtype : null,
@@ -387,7 +475,19 @@ flash_redirect('../views/apply_leave.php', 'error', 'The selected date range con
         $extraData
     );
 
+    $attachmentNotice = '';
     if (strpos($result, 'successfully') !== false) {
+        $newLeaveId = $leaveModel->getLastInsertedId();
+        if ($newLeaveId > 0 && !empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'] ?? null)) {
+            $uploadResult = uploadLeaveAttachments($_FILES['attachments'], $newLeaveId, $userId, $leaveAttachmentModel);
+            if (($uploadResult['saved'] ?? 0) > 0) {
+                $attachmentNotice .= ' ' . (int)$uploadResult['saved'] . ' attachment(s) uploaded.';
+            }
+            if (!empty($uploadResult['errors'])) {
+                $attachmentNotice .= ' Some attachments were skipped: ' . implode(' ', array_slice($uploadResult['errors'], 0, 3));
+            }
+        }
+
         $dbType = new LeaveType($db);
         $typeInfo = $dbType->get($typeId);
 
@@ -404,7 +504,7 @@ flash_redirect('../views/apply_leave.php', 'error', 'The selected date range con
     }
 
     if (strpos($result, 'successfully') !== false) {
-        flash_redirect('../views/dashboard.php', 'success', $result);
+        flash_redirect('../views/dashboard.php', 'success', $result . $attachmentNotice);
     } else {
         flash_redirect('../views/apply_leave.php', 'error', $result);
     }

@@ -12,6 +12,9 @@ if (!isset($_SESSION['user_id'])) {
 
 $db = (new Database())->connect();
 
+$role = (string)($_SESSION['role'] ?? '');
+$sessionEmpId = (int)($_SESSION['emp_id'] ?? 0);
+
 $month = isset($_GET['m']) ? max(1, min(12, intval($_GET['m']))) : intval(date('n'));
 $year  = isset($_GET['y']) ? max(2000, min(2100, intval($_GET['y']))) : intval(date('Y'));
 
@@ -20,35 +23,81 @@ $end = date('Y-m-t', strtotime($start));
 $today = date('Y-m-d');
 $monthLabel = date('F Y', strtotime($start));
 
+$showFullCalendarLeaves = in_array($role, ['admin', 'personnel', 'hr'], true);
+$showSnapshotDetails = in_array($role, ['admin', 'personnel', 'hr'], true);
+
+$accessibleDepartmentIds = [];
+if ($role === 'department_head' && $sessionEmpId > 0) {
+    $deptStmt = $db->prepare("SELECT dha.department_id
+        FROM department_head_assignments dha
+        WHERE dha.employee_id = ? AND dha.is_active = 1");
+    $deptStmt->execute([$sessionEmpId]);
+    $accessibleDepartmentIds = array_values(array_unique(array_map('intval', $deptStmt->fetchAll(PDO::FETCH_COLUMN) ?: [])));
+
+    if (empty($accessibleDepartmentIds)) {
+        $fallbackStmt = $db->prepare("SELECT department_id FROM employees WHERE id = ?");
+        $fallbackStmt->execute([$sessionEmpId]);
+        $fallbackDeptId = (int)$fallbackStmt->fetchColumn();
+        if ($fallbackDeptId > 0) {
+            $accessibleDepartmentIds = [$fallbackDeptId];
+        }
+    }
+}
+
+$calendarLeaveWhere = ["LOWER(lr.status) IN ('approved','pending')"];
+$calendarLeaveParams = [];
+
+if (!$showFullCalendarLeaves) {
+    if ($role === 'department_head') {
+        if (!empty($accessibleDepartmentIds)) {
+            $placeholders = implode(',', array_fill(0, count($accessibleDepartmentIds), '?'));
+            $calendarLeaveWhere[] = "lr.department_id IN ($placeholders)";
+            $calendarLeaveParams = array_merge($calendarLeaveParams, $accessibleDepartmentIds);
+        } else {
+            $calendarLeaveWhere[] = "1 = 0";
+        }
+    } else {
+        $calendarLeaveWhere[] = "lr.employee_id = ?";
+        $calendarLeaveParams[] = max(0, $sessionEmpId);
+    }
+}
+
+$calendarLeaveWhereSql = implode(' AND ', $calendarLeaveWhere);
+
 $holidaysStmt = $db->prepare("SELECT id, holiday_date, description, type FROM holidays WHERE holiday_date BETWEEN ? AND ? ORDER BY holiday_date ASC");
 $holidaysStmt->execute([$start, $end]);
 $holidays = $holidaysStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$leavesStmt = $db->prepare("\n    SELECT lr.id, lr.employee_id, lr.leave_type, lr.start_date, lr.end_date, lr.total_days, lr.status, lr.created_at,
+$leavesSql = "
+    SELECT lr.id, lr.employee_id, lr.department_id, lr.leave_type, lr.start_date, lr.end_date, lr.total_days, lr.status, lr.created_at,
            e.first_name, e.last_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
-    WHERE LOWER(lr.status) IN ('approved','pending')
+    WHERE {$calendarLeaveWhereSql}
       AND lr.start_date <= ?
       AND lr.end_date >= ?
     ORDER BY lr.start_date ASC, lr.created_at ASC, lr.id ASC
-");
-$leavesStmt->execute([$end, $start]);
+";
+$leavesStmt = $db->prepare($leavesSql);
+$leavesStmt->execute(array_merge($calendarLeaveParams, [$end, $start]));
 $leaves = $leavesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$upcomingLeavesStmt = $db->prepare("\n    SELECT lr.id, lr.leave_type, lr.start_date, lr.end_date, lr.total_days, lr.status,
+$upcomingLeavesSql = "
+    SELECT lr.id, lr.employee_id, lr.department_id, lr.leave_type, lr.start_date, lr.end_date, lr.total_days, lr.status,
            e.first_name, e.last_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
-    WHERE LOWER(lr.status) IN ('approved','pending')
+    WHERE {$calendarLeaveWhereSql}
       AND lr.end_date >= ?
     ORDER BY lr.start_date ASC, lr.created_at ASC, lr.id ASC
     LIMIT 6
-");
-$upcomingLeavesStmt->execute([$today]);
+";
+$upcomingLeavesStmt = $db->prepare($upcomingLeavesSql);
+$upcomingLeavesStmt->execute(array_merge($calendarLeaveParams, [$today]));
 $upcomingLeaves = $upcomingLeavesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$upcomingEventsStmt = $db->prepare("\n    SELECT id, holiday_date, description, type
+$upcomingEventsStmt = $db->prepare("
+    SELECT id, holiday_date, description, type
     FROM holidays
     WHERE holiday_date >= ?
     ORDER BY holiday_date ASC
@@ -106,6 +155,8 @@ $totalMonthHolidays = count($holidays);
 
 $firstDow = intval(date('N', strtotime($start)));
 $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
+$appBase = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\') . '/';
+$calendarBaseUrl = $appBase . 'calendar';
 ?>
 <!DOCTYPE html>
 <html>
@@ -781,9 +832,9 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
             $title = 'Leave Calendar';
             $subtitle = 'View all scheduled leaves and holidays';
             $actions = [
-                '<a href="?m=' . ($month == 1 ? 12 : $month - 1) . '&y=' . ($month == 1 ? $year - 1 : $year) . '" class="btn btn-ghost">&lt; Prev</a>',
-                '<a href="?m=' . intval(date('n')) . '&y=' . intval(date('Y')) . '" class="btn btn-secondary">Today</a>',
-                '<a href="?m=' . ($month == 12 ? 1 : $month + 1) . '&y=' . ($month == 12 ? $year + 1 : $year) . '" class="btn btn-ghost">Next &gt;</a>'
+                '<a href="' . htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . ($month == 1 ? 12 : $month - 1) . '&y=' . ($month == 1 ? $year - 1 : $year) . '" class="btn btn-ghost">&lt; Prev</a>',
+                '<a href="' . htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . intval(date('n')) . '&y=' . intval(date('Y')) . '" class="btn btn-secondary">Today</a>',
+                '<a href="' . htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . ($month == 12 ? 1 : $month + 1) . '&y=' . ($month == 12 ? $year + 1 : $year) . '" class="btn btn-ghost">Next &gt;</a>'
             ];
             include __DIR__ . '/partials/ui/page-header.php';
             ?>
@@ -798,7 +849,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
                             </div>
                             <div class="calendar-note">Click a date with events to view full details.</div>
                         </div>
-                        <form method="get" class="calendar-jump-form">
+                        <form method="get" action="<?= htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8'); ?>" class="calendar-jump-form">
                             <div class="calendar-jump-field">
                                 <label class="calendar-jump-label" for="calendar-month-select">Month</label>
                                 <select id="calendar-month-select" name="m" class="calendar-jump-select">
@@ -943,6 +994,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
                         </div>
                         <span class="calendar-trigger-count"><?= count($upcomingEvents); ?></span>
                     </button>
+                    <?php if ($showSnapshotDetails): ?>
                     <button type="button" class="calendar-modal-trigger" data-modal-target="snapshotModal">
                         <div class="calendar-trigger-copy">
                             <div class="calendar-trigger-title">Snapshot</div>
@@ -950,8 +1002,12 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
                         </div>
                         <span class="calendar-trigger-count"><?= intval($totalMonthRequests); ?></span>
                     </button>
+                    <?php endif; ?>
                 </div>
                 <div class="calendar-overview-note">These open in focused modals so you can review details without stretching the page downward.</div>
+                <?php if (!$showSnapshotDetails): ?>
+                    <div class="calendar-overview-note" style="margin-top:8px;">Monthly snapshots are visible only to personnel and admins.</div>
+                <?php endif; ?>
             </div>
 
         </div>
@@ -1016,6 +1072,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
         </div>
     </div>
 
+    <?php if ($showSnapshotDetails): ?>
     <div id="snapshotModal" class="modal calendar-detail-modal" style="display:none;">
         <div class="modal-content calendar-detail-shell">
             <button type="button" class="modal-close" data-close-modal="snapshotModal" aria-label="Close">&times;</button>
@@ -1029,7 +1086,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
                     <div class="stat-card">
                         <div class="stat-label">Leave Requests</div>
                         <div class="stat-value"><?= intval($totalMonthRequests); ?></div>
-                        <div class="stat-help">Requests touching the current month view.</div>
+                        <div class="stat-help">Requests visible in this month view.</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Approved</div>
@@ -1050,6 +1107,7 @@ $daysInMonth = intval(cal_days_in_month(CAL_GREGORIAN, $month, $year));
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <div id="sidePanel" class="side-panel calendar-side-panel" aria-hidden="true">
         <button id="closeSidePanel" class="calendar-panel-close" type="button" aria-label="Close">×</button>

@@ -318,6 +318,362 @@ function computeProjectedBalances(array $row): array {
     return $projected;
 }
 
+
+function decodeLeaveRequestMeta($raw): array {
+    if ($raw === null || $raw === '') {
+        return [];
+    }
+    $decoded = json_decode((string)$raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function leaveRequestLabelForKey(string $key): string {
+    $map = [
+        'location' => 'Location',
+        'illness' => 'Illness / Condition',
+        'other_purpose' => 'Other Purpose',
+        'expected_delivery' => 'Expected Delivery',
+        'calamity_location' => 'Calamity Location',
+        'surgery_details' => 'Surgery Details',
+        'monetization_reason' => 'Monetization Reason',
+        'terminal_reason' => 'Terminal Leave Reason',
+    ];
+
+    return $map[$key] ?? ucwords(str_replace('_', ' ', $key));
+}
+
+function leaveRequestDetailFields(array $row): array {
+    $details = decodeLeaveRequestMeta($row['details_json'] ?? '');
+    if (empty($details)) {
+        return [];
+    }
+
+    $ordered = [
+        'location',
+        'illness',
+        'other_purpose',
+        'expected_delivery',
+        'calamity_location',
+        'surgery_details',
+        'monetization_reason',
+        'terminal_reason',
+    ];
+
+    $out = [];
+    foreach ($ordered as $key) {
+        if (!array_key_exists($key, $details)) {
+            continue;
+        }
+        $value = trim((string)$details[$key]);
+        if ($value === '') {
+            continue;
+        }
+        $out[] = ['label' => leaveRequestLabelForKey($key), 'value' => $value];
+        unset($details[$key]);
+    }
+
+    foreach ($details as $key => $value) {
+        if (is_array($value)) {
+            $value = implode(', ', array_filter(array_map('strval', $value), fn($v) => trim($v) !== ''));
+        }
+        $value = trim((string)$value);
+        if ($value === '') {
+            continue;
+        }
+        $out[] = ['label' => leaveRequestLabelForKey((string)$key), 'value' => $value];
+    }
+
+    return $out;
+}
+
+function leaveRequestSupportFlags(array $row): array {
+    $flags = [];
+
+    $supporting = decodeLeaveRequestMeta($row['supporting_documents_json'] ?? '');
+    foreach ($supporting as $entry) {
+        if (is_array($entry)) {
+            $entry = implode(', ', array_filter(array_map('strval', $entry), fn($v) => trim($v) !== ''));
+        }
+        $entry = trim((string)$entry);
+        if ($entry !== '') {
+            $flags[] = $entry;
+        }
+    }
+
+    if (!empty($row['medical_certificate_attached'])) {
+        $flags[] = 'Medical certificate attached';
+    }
+    if (!empty($row['affidavit_attached'])) {
+        $flags[] = 'Affidavit attached';
+    }
+    if (!empty($row['emergency_case'])) {
+        $flags[] = 'Emergency case marked';
+    }
+
+    return array_values(array_unique($flags));
+}
+
+
+function fetchLeaveAttachmentMap(PDO $db, array $leaveIds): array {
+    $ids = array_values(array_unique(array_filter(array_map('intval', $leaveIds), fn($id) => $id > 0)));
+    if (empty($ids)) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $db->prepare("
+        SELECT *
+        FROM leave_attachments
+        WHERE leave_request_id IN ($placeholders)
+        ORDER BY created_at ASC, id ASC
+    ");
+    try {
+        $stmt->execute($ids);
+    } catch (Throwable $t) {
+        return [];
+    }
+
+    $out = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $out[(int)$row['leave_request_id']][] = $row;
+    }
+    return $out;
+}
+
+function leaveRequestStatusChipClass(string $value): string {
+    $value = strtolower(trim($value));
+    if ($value === '') return 'neutral';
+    if (str_contains($value, 'approved') || str_contains($value, 'finalized') || str_contains($value, 'printed')) return 'success';
+    if (str_contains($value, 'reject') || str_contains($value, 'return')) return 'danger';
+    if (str_contains($value, 'pending')) return 'warning';
+    return 'neutral';
+}
+
+function renderLeaveRequestDetailModal(array $row, string $modalId, array $options = []): string {
+    $badgeText = $options['badge_text'] ?? 'Leave Request Details';
+    $projected = $options['projected'] ?? null;
+    $previewRows = $options['preview_rows'] ?? [];
+    $showBalanceSnapshot = $options['show_balance_snapshot'] ?? true;
+    $extraActionHtml = $options['extra_action_html'] ?? '';
+
+    $employeeName = trim(($row['first_name'] ?? '') . ' ' . ($row['middle_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+    $details = leaveRequestDetailFields($row);
+    $supportFlags = leaveRequestSupportFlags($row);
+    $attachments = is_array($options['attachments'] ?? null) ? $options['attachments'] : [];
+
+    $requestNotes = [
+        'Employee Reason' => trim((string)($row['reason'] ?? '')),
+        'Department Head Comment' => trim((string)($row['department_head_comments'] ?? '')),
+        'Personnel Comment' => trim((string)($row['personnel_comments'] ?? '')),
+        'Manager Comment' => trim((string)($row['manager_comments'] ?? '')),
+    ];
+
+    ob_start();
+    ?>
+    <div id="<?= $modalId; ?>" class="modal">
+        <div class="modal-content review-modal request-detail-modal">
+            <button type="button" class="modal-close" onclick="closeModal('<?= $modalId; ?>')">&times;</button>
+
+            <div class="review-modal-header">
+                <div>
+                    <h3 style="margin-bottom:6px;"><?= safe_h($employeeName !== '' ? $employeeName : 'Leave Request'); ?></h3>
+                    <?php if (!empty($row['email'])): ?>
+                        <p class="review-muted"><?= safe_h($row['email']); ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($row['department']) || !empty($row['position'])): ?>
+                        <p class="review-muted"><?= safe_h($row['department'] ?? ''); ?><?= (!empty($row['department']) && !empty($row['position'])) ? ' • ' : ''; ?><?= safe_h($row['position'] ?? ''); ?></p>
+                    <?php endif; ?>
+                </div>
+                <div class="review-badge"><?= safe_h($badgeText); ?></div>
+            </div>
+
+            <div class="review-grid request-detail-grid">
+                <div class="review-panel">
+                    <h4>Request Summary</h4>
+                    <div class="review-kv"><span>Leave Type</span><strong><?= safe_h($row['leave_type_name'] ?? $row['leave_type'] ?? '—'); ?></strong></div>
+                    <div class="review-kv"><span>Date Range</span><strong><?= safe_h(app_format_date_range($row['start_date'] ?? '', $row['end_date'] ?? '')); ?></strong></div>
+                    <div class="review-kv"><span>Total Days</span><strong><?= trunc3($row['total_days'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Subtype</span><strong><?= safe_h($row['leave_subtype'] ?? '—'); ?></strong></div>
+                    <div class="review-kv"><span>Commutation</span><strong><?= safe_h($row['commutation_requested'] ?? ($row['commutation'] ?? '—')); ?></strong></div>
+                </div>
+
+                <div class="review-panel">
+                    <h4>Workflow Status</h4>
+                    <div class="review-kv"><span>Status</span><strong><span class="request-chip request-chip-<?= leaveRequestStatusChipClass((string)($row['status'] ?? '')); ?>"><?= safe_h($row['status'] ?? '—'); ?></span></strong></div>
+                    <div class="review-kv"><span>Workflow</span><strong><?= safe_h($row['workflow_status'] ?? '—'); ?></strong></div>
+                    <div class="review-kv"><span>Print Status</span><strong><?= safe_h($row['print_status'] ?? '—'); ?></strong></div>
+                    <div class="review-kv"><span>Submitted</span><strong><?= safe_h(app_format_date($row['created_at'] ?? '')); ?></strong></div>
+                    <div class="review-kv"><span>Filed</span><strong><?= safe_h(app_format_date($row['filing_date'] ?? '')); ?></strong></div>
+                </div>
+
+                <div class="review-panel">
+                    <h4>Employee Information</h4>
+                    <div class="review-kv"><span>Employee ID</span><strong><?= safe_h((string)($row['employee_id'] ?? '—')); ?></strong></div>
+                    <div class="review-kv"><span>Department</span><strong><?= safe_h($row['department'] ?? '—'); ?></strong></div>
+                    <div class="review-kv"><span>Position</span><strong><?= safe_h($row['position'] ?? '—'); ?></strong></div>
+                    <div class="review-kv"><span>Approved At</span><strong><?= safe_h(app_format_date($row['department_head_approved_at'] ?? '')); ?></strong></div>
+                    <div class="review-kv"><span>Personnel Checked</span><strong><?= safe_h(app_format_date($row['personnel_checked_at'] ?? '')); ?></strong></div>
+                </div>
+
+                <?php if ($showBalanceSnapshot): ?>
+                <div class="review-panel">
+                    <h4>Balance Snapshot</h4>
+                    <div class="review-kv"><span>Vacational</span><strong><?= trunc3($row['snapshot_annual_balance'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Sick</span><strong><?= trunc3($row['snapshot_sick_balance'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Force</span><strong><?= trunc3($row['snapshot_force_balance'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Current Annual</span><strong><?= trunc3($row['annual_balance'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Current Sick</span><strong><?= trunc3($row['sick_balance'] ?? 0); ?></strong></div>
+                </div>
+                <?php endif; ?>
+
+                <?php if (is_array($projected)): ?>
+                <div class="review-panel">
+                    <h4>Projected After Approval</h4>
+                    <div class="review-kv"><span>Vacational</span><strong><?= trunc3($projected['annual_after'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Sick</span><strong><?= trunc3($projected['sick_after'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Force</span><strong><?= trunc3($projected['force_after'] ?? 0); ?></strong></div>
+                    <div class="review-kv"><span>Bucket</span><strong><?= safe_h(str_replace('_', ' + ', (string)($projected['bucket'] ?? 'none'))); ?></strong></div>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <?php if (!empty($details)): ?>
+                <div class="review-panel review-panel-full" style="margin-top:18px;">
+                    <h4>Leave-Specific Details</h4>
+                    <div class="request-detail-list">
+                        <?php foreach ($details as $detail): ?>
+                            <div class="request-detail-item">
+                                <span><?= safe_h($detail['label']); ?></span>
+                                <strong><?= safe_h($detail['value']); ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <div class="review-panel review-panel-full" style="margin-top:18px;">
+                <h4>Comments & Notes</h4>
+                <div class="request-note-grid">
+                    <?php $hasNotes = false; foreach ($requestNotes as $label => $value): if ($value === '') continue; $hasNotes = true; ?>
+                        <div class="request-note-card">
+                            <span><?= safe_h($label); ?></span>
+                            <strong><?= nl2br(safe_h($value)); ?></strong>
+                        </div>
+                    <?php endforeach; ?>
+                    <?php if (!$hasNotes): ?>
+                        <p class="review-muted">No notes or review comments recorded yet.</p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <?php if (!empty($supportFlags)): ?>
+                <div class="review-panel review-panel-full" style="margin-top:18px;">
+                    <h4>Supporting Documents & Flags</h4>
+                    <p class="review-muted" style="margin-bottom:10px;">Flags like <strong>travel_authority</strong> are request indicators. Uploaded files, when present, appear separately under <strong>Uploaded Attachments</strong>.</p>
+                    <div class="request-chip-list">
+                        <?php foreach ($supportFlags as $flag): ?>
+                            <span class="request-chip request-chip-neutral"><?= safe_h($flag); ?></span>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($attachments)): ?>
+                <div class="review-panel review-panel-full" style="margin-top:18px;">
+                    <h4>Uploaded Attachments</h4>
+                    <div class="request-note-grid">
+                        <?php foreach ($attachments as $attachment): ?>
+                            <?php
+                                $fileUrl = Auth::appUrl((string)($attachment['file_path'] ?? ''));
+                                $fileSize = (int)($attachment['file_size'] ?? 0);
+                                $mimeType = strtolower((string)($attachment['mime_type'] ?? ''));
+                                $originalName = (string)($attachment['original_name'] ?? 'Attachment');
+                                $isPreviewable = str_starts_with($mimeType, 'image/') || $mimeType === 'application/pdf';
+                            ?>
+                            <div class="request-note-card">
+                                <span><?= safe_h($attachment['document_type'] ?? 'supporting_document'); ?></span>
+                                <strong style="word-break:break-word;"><?= safe_h($originalName); ?></strong>
+                                <small class="review-muted"><?= $fileSize > 0 ? safe_h(number_format($fileSize / 1024 / 1024, 2) . ' MB') : '—'; ?></small>
+                                <div class="attachment-action-row" style="margin-top:8px;">
+                                    <?php if ($isPreviewable): ?>
+                                        <button
+                                            type="button"
+                                            class="btn-export"
+                                            onclick='openAttachmentPreview(<?= json_encode($fileUrl, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT); ?>, <?= json_encode($originalName, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT); ?>, <?= json_encode($mimeType, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT); ?>)'>
+                                            Preview
+                                        </button>
+                                    <?php endif; ?>
+                                    <a class="btn-export" href="<?= safe_h($fileUrl); ?>" target="_blank" rel="noopener">Open File</a>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($previewRows)): ?>
+                <div class="review-panel review-panel-full" style="margin-top:18px;">
+                    <div class="review-panel-head">
+                        <div>
+                            <h4 style="margin-bottom:4px;">Leave Card Preview</h4>
+                            <p class="review-muted">Latest employee transactions and balance movement</p>
+                        </div>
+                        <a href="reports.php?type=leave_card&employee_id=<?= (int)$row['employee_id']; ?>" target="_blank" class="btn-export">Open Full Leave Card</a>
+                    </div>
+                    <div class="review-leave-card-wrap modern-preview-wrap">
+                        <table class="review-leave-card-table modern-preview-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Particulars</th>
+                                    <th>Vac Earned</th>
+                                    <th>Vac Deducted</th>
+                                    <th>Vac Balance</th>
+                                    <th>Sick Earned</th>
+                                    <th>Sick Deducted</th>
+                                    <th>Sick Balance</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($previewRows as $previewRow): ?>
+                                    <?php
+                                        $vb = $previewRow['vac_balance'] ?? '';
+                                        $sb = $previewRow['sick_balance'] ?? '';
+                                        $statusTextRaw = (string)($previewRow['status'] ?? '');
+                                        $statusText = safe_h($statusTextRaw);
+                                        $entryType = $previewRow['entry_type'] ?? '';
+                                        $rowClass = $entryType === 'leave' ? 'preview-row-leave' : 'preview-row-budget';
+                                        $statusClass = strtolower(preg_replace('/[^a-z0-9]+/', '-', $statusTextRaw));
+                                    ?>
+                                    <tr class="<?= $rowClass; ?>">
+                                        <td><?= safe_h(app_format_date($previewRow['date'] ?? '')); ?></td>
+                                        <td class="preview-particulars"><?= safe_h($previewRow['particulars'] ?? ''); ?></td>
+                                        <td><?= ((($previewRow['vac_earned'] ?? 0) != 0) ? trunc3($previewRow['vac_earned']) : '—'); ?></td>
+                                        <td><?= ((($previewRow['vac_deducted'] ?? 0) != 0) ? trunc3($previewRow['vac_deducted']) : '—'); ?></td>
+                                        <td><?= ($vb === '' ? '—' : trunc3($vb)); ?></td>
+                                        <td><?= ((($previewRow['sick_earned'] ?? 0) != 0) ? trunc3($previewRow['sick_earned']) : '—'); ?></td>
+                                        <td><?= ((($previewRow['sick_deducted'] ?? 0) != 0) ? trunc3($previewRow['sick_deducted']) : '—'); ?></td>
+                                        <td><?= ($sb === '' ? '—' : trunc3($sb)); ?></td>
+                                        <td><span class="preview-status-badge preview-status-<?= $statusClass !== '' ? $statusClass : 'default'; ?>"><?= $statusText !== '' ? $statusText : '—'; ?></span></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <div class="review-modal-actions">
+                <?= $extraActionHtml; ?>
+                <button type="button" class="btn-secondary" onclick="closeModal('<?= $modalId; ?>')">Close</button>
+            </div>
+        </div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
 $whereDeptHead = "lr.workflow_status = 'pending_department_head' AND lr.status = 'pending'";
 $wherePersonnel = "lr.workflow_status = 'pending_personnel' AND lr.status = 'pending'";
 
@@ -331,7 +687,7 @@ if (in_array($role, ['personnel','hr'], true)) {
 }
 
 $pendingDeptHead = $db->query("
-    SELECT lr.*, e.first_name, e.middle_name, e.last_name, u.email,
+    SELECT lr.*, e.first_name, e.middle_name, e.last_name, e.department, e.position, e.annual_balance, e.sick_balance, e.force_balance, u.email,
            COALESCE(lt.name, lr.leave_type) AS leave_type_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
@@ -370,7 +726,7 @@ if ($isPersonnelOnlyView) {
 }
 
 $finalized = $db->query("
-    SELECT lr.*, e.first_name, e.middle_name, e.last_name, u.email,
+    SELECT lr.*, e.first_name, e.middle_name, e.last_name, e.department, e.position, e.annual_balance, e.sick_balance, e.force_balance, u.email,
            COALESCE(lt.name, lr.leave_type) AS leave_type_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
@@ -381,7 +737,7 @@ $finalized = $db->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $returnedOrRejected = $db->query("
-    SELECT lr.*, e.first_name, e.middle_name, e.last_name, u.email,
+    SELECT lr.*, e.first_name, e.middle_name, e.last_name, e.department, e.position, e.annual_balance, e.sick_balance, e.force_balance, u.email,
            COALESCE(lt.name, lr.leave_type) AS leave_type_name
     FROM leave_requests lr
     JOIN employees e ON lr.employee_id = e.id
@@ -406,7 +762,7 @@ foreach ($personnelEmployeeIds as $empId) {
 // Prepare archived requests for the "Archived" toggle
 if ($role === 'manager') {
     $archivedQuery = $db->prepare("
-        SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
+        SELECT lr.*, e.first_name, e.middle_name, e.last_name, e.department, e.position, e.annual_balance, e.sick_balance, e.force_balance, COALESCE(lt.name, lr.leave_type) AS leave_type_name
         FROM leave_requests lr
         JOIN employees e ON lr.employee_id = e.id
         LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
@@ -418,7 +774,7 @@ if ($role === 'manager') {
     $archivedQuery->execute([$_SESSION['emp_id'] ?? 0]);
 } else {
     $archivedQuery = $db->prepare("
-        SELECT lr.*, e.first_name, e.last_name, COALESCE(lt.name, lr.leave_type) AS leave_type_name
+        SELECT lr.*, e.first_name, e.middle_name, e.last_name, e.department, e.position, e.annual_balance, e.sick_balance, e.force_balance, COALESCE(lt.name, lr.leave_type) AS leave_type_name
         FROM leave_requests lr
         JOIN employees e ON lr.employee_id = e.id
         LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
@@ -458,6 +814,15 @@ $returnedOrRejected = $returnedPagination['items'];
 
 $archivedPagination = paginate_array($archived, (int)($_GET['arch_page'] ?? 1), 10);
 $archived = $archivedPagination['items'];
+
+$visibleLeaveIds = array_merge(
+    array_column($pendingDeptHead, 'id'),
+    array_column($pendingPersonnel, 'id'),
+    array_column($finalized, 'id'),
+    array_column($returnedOrRejected, 'id'),
+    array_column($archived, 'id')
+);
+$leaveAttachmentMap = fetchLeaveAttachmentMap($db, $visibleLeaveIds);
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -567,6 +932,14 @@ if (empty($_SESSION['csrf_token'])) {
                             <td class="col-action">
                                 <div class="personnel-action-bar">
                                     <button type="button"
+                                            class="icon-action-btn labelled"
+                                            onclick="openModal('deptDetailModal_<?= (int)$r['id']; ?>')"
+                                            title="View full request details">
+                                        <span class="action-icon">👁</span>
+                                        <span class="action-label">Details</span>
+                                    </button>
+
+                                    <button type="button"
                                             class="icon-action-btn labelled icon-approve"
                                             onclick="openModal('deptActionModal_<?= (int)$r['id']; ?>')"
                                             title="Approve or reject request">
@@ -605,6 +978,11 @@ if (empty($_SESSION['csrf_token'])) {
                             </div>
                         </div>
                         <?php
+                        $deptActionModalsHtml .= renderLeaveRequestDetailModal($r, 'deptDetailModal_' . (int)$r['id'], [
+                            'badge_text' => 'Pending Department Head Approval',
+                            'show_balance_snapshot' => false,
+                            'attachments' => $leaveAttachmentMap[(int)$r['id']] ?? [],
+                        ]);
                         $deptActionModalsHtml .= ob_get_clean();
                         ?>
                     <?php endforeach; ?>
@@ -651,6 +1029,13 @@ if (empty($_SESSION['csrf_token'])) {
                         $projected = computeProjectedBalances($r);
                         $modalId = 'reviewModal_' . (int)$r['id'];
                         $previewRows = $leaveCardPreviewMap[(int)$r['employee_id']] ?? [];
+                        $personnelModalHtml .= renderLeaveRequestDetailModal($r, $modalId, [
+                            'badge_text' => 'Pending Personnel Review',
+                            'projected' => $projected,
+                            'preview_rows' => $previewRows,
+                            'show_balance_snapshot' => true,
+                            'attachments' => $leaveAttachmentMap[(int)$r['id']] ?? [],
+                        ]);
                         ?>
                         <tr class="personnel-row">
                             <td class="col-employee">
@@ -722,134 +1107,6 @@ if (empty($_SESSION['csrf_token'])) {
                             </td>
                         </tr>
 
-                        <?php ob_start(); ?>
-                        <div id="<?= $modalId; ?>" class="modal">
-                            <div class="modal-content review-modal">
-                                <button type="button" class="modal-close" onclick="closeModal('<?= $modalId; ?>')">&times;</button>
-
-                                <div class="review-modal-header">
-                                    <div>
-                                        <h3 style="margin-bottom:6px;"><?= safe_h($employeeName); ?></h3>
-                                        <p class="review-muted"><?= safe_h($r['email']); ?></p>
-                                        <p class="review-muted"><?= safe_h($r['department'] ?? ''); ?><?= !empty($r['position']) ? ' • '.safe_h($r['position']) : ''; ?></p>
-                                    </div>
-                                    <div class="review-badge">Pending Personnel Review</div>
-                                </div>
-
-                                <div class="review-grid">
-                                    <div class="review-panel">
-                                        <h4>Leave Request Summary</h4>
-                                        <div class="review-kv"><span>Leave Type</span><strong><?= safe_h($r['leave_type_name']); ?></strong></div>
-                                        <div class="review-kv"><span>Date Range</span><strong><?= safe_h(app_format_date_range($r['start_date'] ?? '', $r['end_date'] ?? '')); ?></strong></div>
-                                        <div class="review-kv"><span>Total Days</span><strong><?= trunc3($r['total_days']); ?></strong></div>
-                                        <div class="review-kv"><span>Reason</span><strong><?= safe_h($r['reason'] ?? ''); ?></strong></div>
-                                        <div class="review-kv"><span>Dept Head Comment</span><strong><?= safe_h($r['department_head_comments'] ?? ''); ?></strong></div>
-                                    </div>
-
-                                    <div class="review-panel">
-                                        <h4>Current Balances Before Deduction</h4>
-                                        <div class="review-kv"><span>Vacational</span><strong><?= trunc3($projected['annual_before']); ?></strong></div>
-                                        <div class="review-kv"><span>Sick</span><strong><?= trunc3($projected['sick_before']); ?></strong></div>
-                                        <div class="review-kv"><span>Force</span><strong><?= trunc3($projected['force_before']); ?></strong></div>
-                                    </div>
-
-                                    <div class="review-panel">
-                                        <h4>Projected Balances After Final Approval</h4>
-                                        <div class="review-kv"><span>Vacational</span><strong><?= trunc3($projected['annual_after']); ?></strong></div>
-                                        <div class="review-kv"><span>Sick</span><strong><?= trunc3($projected['sick_after']); ?></strong></div>
-                                        <div class="review-kv"><span>Force</span><strong><?= trunc3($projected['force_after']); ?></strong></div>
-                                    </div>
-                                </div>
-
-                                <div class="review-panel review-panel-full" style="margin-top:18px;">
-                                    <div class="review-panel-head">
-                                        <div>
-                                            <h4 style="margin-bottom:4px;">Leave Card Preview</h4>
-                                            <p class="review-muted">Latest employee transactions and balance movement</p>
-                                        </div>
-                                        <a href="reports.php?type=leave_card&employee_id=<?= (int)$r['employee_id']; ?>" target="_blank" class="btn-export">Open Full Leave Card</a>
-                                    </div>
-
-                                    <?php
-                                    $latestVac = trunc3($projected['annual_before']);
-                                    $latestSick = trunc3($projected['sick_before']);
-                                    $latestForce = trunc3($projected['force_before']);
-                                    ?>
-
-                                    <div class="preview-summary-strip">
-                                        <div class="preview-summary-card">
-                                            <span class="preview-summary-label">Current Vacational</span>
-                                            <strong><?= $latestVac; ?></strong>
-                                        </div>
-                                        <div class="preview-summary-card">
-                                            <span class="preview-summary-label">Current Sick</span>
-                                            <strong><?= $latestSick; ?></strong>
-                                        </div>
-                                        <div class="preview-summary-card">
-                                            <span class="preview-summary-label">Current Force</span>
-                                            <strong><?= $latestForce; ?></strong>
-                                        </div>
-                                    </div>
-
-                                    <div class="review-leave-card-wrap modern-preview-wrap">
-                                        <table class="review-leave-card-table modern-preview-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Date</th>
-                                                    <th>Particulars</th>
-                                                    <th>Vac Earned</th>
-                                                    <th>Vac Deducted</th>
-                                                    <th>Vac Balance</th>
-                                                    <th>Sick Earned</th>
-                                                    <th>Sick Deducted</th>
-                                                    <th>Sick Balance</th>
-                                                    <th>Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php if (empty($previewRows)): ?>
-                                                    <tr>
-                                                        <td colspan="9" class="preview-empty">No leave card history available.</td>
-                                                    </tr>
-                                                <?php else: ?>
-                                                    <?php foreach ($previewRows as $row): ?>
-                                                        <?php
-                                                        $vb = $row['vac_balance'] ?? '';
-                                                        $sb = $row['sick_balance'] ?? '';
-                                                        $statusTextRaw = (string)($row['status'] ?? '');
-                                                        $statusText = safe_h($statusTextRaw);
-                                                        $entryType = $row['entry_type'] ?? '';
-                                                        $rowClass = $entryType === 'leave' ? 'preview-row-leave' : 'preview-row-budget';
-                                                        $statusClass = strtolower(preg_replace('/[^a-z0-9]+/', '-', $statusTextRaw));
-                                                        ?>
-                                                        <tr class="<?= $rowClass; ?>">
-                                                            <td><?= safe_h(app_format_date($row['date'] ?? '')); ?></td>
-                                                            <td class="preview-particulars"><?= safe_h($row['particulars'] ?? ''); ?></td>
-                                                            <td><?= ((($row['vac_earned'] ?? 0) != 0) ? trunc3($row['vac_earned']) : '—'); ?></td>
-                                                            <td><?= ((($row['vac_deducted'] ?? 0) != 0) ? trunc3($row['vac_deducted']) : '—'); ?></td>
-                                                            <td><?= ($vb === '' ? '—' : trunc3($vb)); ?></td>
-                                                            <td><?= ((($row['sick_earned'] ?? 0) != 0) ? trunc3($row['sick_earned']) : '—'); ?></td>
-                                                            <td><?= ((($row['sick_deducted'] ?? 0) != 0) ? trunc3($row['sick_deducted']) : '—'); ?></td>
-                                                            <td><?= ($sb === '' ? '—' : trunc3($sb)); ?></td>
-                                                            <td>
-                                                                <span class="preview-status-badge preview-status-<?= $statusClass !== '' ? $statusClass : 'default'; ?>">
-                                                                    <?= $statusText !== '' ? $statusText : '—'; ?>
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                <?php endif; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <div class="review-modal-actions">
-                                    <button type="button" class="btn-secondary" onclick="closeModal('<?= $modalId; ?>')">Close</button>
-                                </div>
-                            </div>
-                        </div>
-
                         <div id="personnelActionModal_<?= (int)$r['id']; ?>" class="modal">
                             <div class="modal-content floating-action-modal small-action-modal">
                                 <button type="button" class="modal-close" onclick="closeModal('personnelActionModal_<?= (int)$r['id']; ?>')">&times;</button>
@@ -873,9 +1130,7 @@ if (empty($_SESSION['csrf_token'])) {
                                 </form>
                             </div>
                         </div>
-                        <?php
-                        $personnelModalHtml .= ob_get_clean();
-                        ?>
+
                     <?php endforeach; ?>
                     </tbody>
                 </table>
@@ -911,6 +1166,7 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>Days</th>
                         <th>Workflow</th>
                         <th>Print Status</th>
+                        <th>Details</th>
                         <?php if (in_array($role, ['personnel','hr','admin'], true)): ?>
                             <th>Action</th>
                         <?php endif; ?>
@@ -925,6 +1181,12 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= trunc3($r['total_days']); ?></td>
                             <td><?= safe_h($r['workflow_status'] ?? 'finalized'); ?></td>
                             <td><?= safe_h($r['print_status'] ?? '—'); ?></td>
+                            <td>
+                                <button type="button" class="icon-action-btn labelled" onclick="openModal('finalDetailModal_<?= (int)$r['id']; ?>')" title="View full request details">
+                                    <span class="action-icon">👁</span>
+                                    <span class="action-label">Details</span>
+                                </button>
+                            </td>
 
                             <?php if (in_array($role, ['personnel','hr','admin'], true)): ?>
                                 <td>
@@ -954,6 +1216,10 @@ if (empty($_SESSION['csrf_token'])) {
                 </table>
             </div>
             <?= pagination_render($finalizedPagination, 'fin_page', ['tab' => $tab]); ?>
+
+            <?php foreach ($finalized as $r): ?>
+                <?= renderLeaveRequestDetailModal($r, 'finalDetailModal_' . (int)$r['id'], ['badge_text' => 'Finalized / Approved Request', 'attachments' => $leaveAttachmentMap[(int)$r['id']] ?? []]); ?>
+            <?php endforeach; ?>
 
             <?php foreach ($finalized as $r): ?>
                 <div id="printModal_<?= (int)$r['id']; ?>" class="modal">
@@ -1047,6 +1313,7 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>Status</th>
                         <th>Workflow</th>
                         <th>Comments</th>
+                        <th>Details</th>
                     </tr>
                     <?php foreach ($returnedOrRejected as $r): ?>
                         <tr>
@@ -1057,11 +1324,20 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= safe_h($r['status']); ?></td>
                             <td><?= safe_h($r['workflow_status'] ?? '—'); ?></td>
                             <td><?= safe_h($r['personnel_comments'] ?? $r['department_head_comments'] ?? $r['manager_comments'] ?? ''); ?></td>
+                            <td>
+                                <button type="button" class="icon-action-btn labelled" onclick="openModal('rejectDetailModal_<?= (int)$r['id']; ?>')" title="View full request details">
+                                    <span class="action-icon">👁</span>
+                                    <span class="action-label">Details</span>
+                                </button>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </table>
             </div>
             <?= pagination_render($returnedPagination, 'rej_page', ['tab' => $tab]); ?>
+            <?php foreach ($returnedOrRejected as $r): ?>
+                <?= renderLeaveRequestDetailModal($r, 'rejectDetailModal_' . (int)$r['id'], ['badge_text' => 'Rejected / Returned Request', 'attachments' => $leaveAttachmentMap[(int)$r['id']] ?? []]); ?>
+            <?php endforeach; ?>
         <?php endif; ?>
     </div>
 </div>
@@ -1090,6 +1366,7 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>Days</th>
                         <th>Status</th>
                         <th>Reason</th>
+                        <th>Details</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -1101,16 +1378,43 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= trunc3($r['total_days']); ?></td>
                             <td><?= safe_h(ucfirst($r['status'])); ?></td>
                             <td><?= safe_h($r['manager_comments'] ?? $r['reason'] ?? ''); ?></td>
+                            <td>
+                                <button type="button" class="icon-action-btn labelled" onclick="openModal('archDetailModal_<?= (int)$r['id']; ?>')" title="View full request details">
+                                    <span class="action-icon">👁</span>
+                                    <span class="action-label">Details</span>
+                                </button>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
             <?= pagination_render($archivedPagination, 'arch_page', ['tab' => $tab]); ?>
+            <?php foreach ($archived as $r): ?>
+                <?= renderLeaveRequestDetailModal($r, 'archDetailModal_' . (int)$r['id'], ['badge_text' => 'Archived Request', 'show_balance_snapshot' => false, 'attachments' => $leaveAttachmentMap[(int)$r['id']] ?? []]); ?>
+            <?php endforeach; ?>
         <?php endif; ?>
     </div>
 </div>
 <?php endif; ?>
+
+<div id="attachmentPreviewModal" class="modal attachment-preview-modal">
+    <div class="modal-content review-modal attachment-preview-modal-content">
+        <button type="button" class="modal-close" onclick="closeAttachmentPreview()">&times;</button>
+        <div class="review-modal-header">
+            <div>
+                <span class="review-modal-badge">Attachment Preview</span>
+                <h3 id="attachmentPreviewTitle">Preview</h3>
+                <p class="review-muted">Quick preview for uploaded request attachments.</p>
+            </div>
+        </div>
+        <div id="attachmentPreviewBody" class="attachment-preview-body"></div>
+        <div class="review-modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeAttachmentPreview()">Close</button>
+            <a id="attachmentPreviewOpenLink" class="btn-export" href="#" target="_blank" rel="noopener">Open in New Tab</a>
+        </div>
+    </div>
+</div>
 
 <script>
 function openModal(id) {
@@ -1121,6 +1425,46 @@ function openModal(id) {
 function closeModal(id) {
     var el = document.getElementById(id);
     if (el) el.classList.remove('open');
+}
+
+function openAttachmentPreview(url, name, mimeType) {
+    var modal = document.getElementById('attachmentPreviewModal');
+    var title = document.getElementById('attachmentPreviewTitle');
+    var body = document.getElementById('attachmentPreviewBody');
+    var openLink = document.getElementById('attachmentPreviewOpenLink');
+    if (!modal || !title || !body || !openLink) return;
+
+    title.textContent = name || 'Attachment Preview';
+    openLink.href = url || '#';
+    body.innerHTML = '';
+
+    if (mimeType === 'application/pdf') {
+        var frame = document.createElement('iframe');
+        frame.src = url;
+        frame.className = 'attachment-preview-frame';
+        frame.setAttribute('title', name || 'Attachment Preview');
+        body.appendChild(frame);
+    } else if (mimeType && mimeType.indexOf('image/') === 0) {
+        var img = document.createElement('img');
+        img.src = url;
+        img.alt = name || 'Attachment Preview';
+        img.className = 'attachment-preview-image';
+        body.appendChild(img);
+    } else {
+        var fallback = document.createElement('p');
+        fallback.className = 'review-muted';
+        fallback.textContent = 'Preview is not available for this file type. Use “Open in New Tab” instead.';
+        body.appendChild(fallback);
+    }
+
+    modal.classList.add('open');
+}
+
+function closeAttachmentPreview() {
+    var modal = document.getElementById('attachmentPreviewModal');
+    var body = document.getElementById('attachmentPreviewBody');
+    if (modal) modal.classList.remove('open');
+    if (body) body.innerHTML = '';
 }
 
 document.querySelectorAll('.modal').forEach(function(modal) {

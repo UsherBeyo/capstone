@@ -1,3 +1,9 @@
+
+window.AppLoader = window.AppLoader || {
+    show: function() {},
+    hide: function() {}
+};
+
 function calculateDays(onComplete) {
     const startField = document.getElementById("start_date");
     const endField = document.getElementById("end_date");
@@ -17,12 +23,6 @@ function calculateDays(onComplete) {
         feedbackField.textContent = message || '';
         feedbackField.style.color = isError ? '#b91c1c' : '#6b7280';
     };
-
-    if (start) {
-        endField.min = start;
-    } else {
-        endField.removeAttribute('min');
-    }
 
     if (!start || !end) {
         totalField.value = '';
@@ -157,6 +157,7 @@ function initAjaxFragments(root) {
             var activeSelectionStart = shouldRestoreFocus && typeof activeElement.selectionStart === 'number' ? activeElement.selectionStart : null;
             var activeSelectionEnd = shouldRestoreFocus && typeof activeElement.selectionEnd === 'number' ? activeElement.selectionEnd : null;
             setLoading(true);
+            if (window.AppLoader) window.AppLoader.show();
 
             fetch(urlString, {
                 headers: {
@@ -200,6 +201,7 @@ function initAjaxFragments(root) {
                     var currentFragment = document.querySelector('.ajax-fragment[data-fragment-id="' + fragmentId + '"]');
                     if (currentFragment) {
                         currentFragment.classList.remove('is-loading');
+                        if (window.AppLoader) window.AppLoader.hide();
                     }
                 });
         };

@@ -207,6 +207,15 @@ $medicalCertificateAttached = !empty(arr($request, 'medical_certificate_attached
 $affidavitAttached = !empty(arr($request, 'affidavit_attached', 0));
 $emergencyCase = !empty(arr($request, 'emergency_case', 0));
 
+$uploadedAttachments = [];
+try {
+    $stmtAtt = $db->prepare("SELECT original_name, file_path, file_size FROM leave_attachments WHERE leave_request_id = ? ORDER BY created_at ASC, id ASC");
+    $stmtAtt->execute([$id]);
+    $uploadedAttachments = $stmtAtt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $t) {
+    $uploadedAttachments = [];
+}
+
 $isVacationBucket = ($selectedLeaveType === 'vacation leave');
 $isForceBucket = ($selectedLeaveType === 'mandatory/forced leave');
 $isSickBucket = ($selectedLeaveType === 'sick leave');

@@ -1890,6 +1890,109 @@ p { line-height: 1.6; }
     }
 }
 
+
+.request-detail-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.request-detail-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.request-detail-item,
+.request-note-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: #f8fafc;
+}
+
+.request-detail-item span,
+.request-note-card span {
+    display: block;
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.request-detail-item strong,
+.request-note-card strong {
+    display: block;
+    color: #111827;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 600;
+}
+
+.request-note-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.request-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.request-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+
+.request-chip-success {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
+}
+
+.request-chip-warning {
+    background: #fffbeb;
+    color: #b45309;
+    border-color: #fde68a;
+}
+
+.request-chip-danger {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+.request-chip-neutral {
+    background: #f8fafc;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.request-detail-modal .review-modal-actions {
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.request-detail-modal .review-modal-actions .btn-export {
+    margin-right: auto;
+}
+
+@media (max-width: 900px) {
+    .request-detail-list,
+    .request-note-grid,
+    .request-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Pending Personnel row cleanup */
 .personnel-row td {
     vertical-align: middle;
@@ -3269,4 +3372,127 @@ body.login-page {
     .login-showcase-card--minimal {
         width: 100%;
     }
+}
+
+
+/* ================================================== */
+/*  Shared Loading Overlay                            */
+/* ================================================== */
+
+.app-loading-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(248, 250, 252, 0.78);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.app-loading-overlay.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.app-loading-card {
+    min-width: 152px;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(229, 231, 235, 0.9);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+}
+
+.app-loading-spinner {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 2px solid rgba(37, 99, 235, 0.18);
+    border-top-color: var(--primary);
+    animation: appLoaderSpin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+.app-loading-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.01em;
+}
+
+@keyframes appLoaderSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-loading-overlay,
+    .app-loading-spinner {
+        transition: none;
+        animation: none;
+    }
+}
+
+
+.request-note-card .btn-export {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:120px;
+}
+
+#attachment-file-list {
+  gap:8px;
+  display:flex;
+  flex-wrap:wrap;
+}
+
+
+.attachment-action-row {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.attachment-preview-modal-content {
+  max-width: 980px;
+  width: min(96vw, 980px);
+}
+
+.attachment-preview-body {
+  min-height: 360px;
+  max-height: 70vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#f8fafc;
+  border:1px solid #e5e7eb;
+  border-radius:16px;
+  overflow:hidden;
+}
+
+.attachment-preview-image {
+  max-width:100%;
+  max-height:68vh;
+  display:block;
+  object-fit:contain;
+  background:#fff;
+}
+
+.attachment-preview-frame {
+  width:100%;
+  min-height:68vh;
+  border:0;
+  background:#fff;
 }
