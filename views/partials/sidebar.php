@@ -2,6 +2,7 @@
 if (!isset($_SESSION)) session_start();
 require_once __DIR__ . '/../../helpers/Flash.php';
 require_once __DIR__ . '/../../helpers/Auth.php';
+require_once __DIR__ . '/../../helpers/Notifications.php';
 
 if (empty($_SESSION['user_id'])) {
     header('Location: ' . Auth::appUrl('login'));
@@ -10,10 +11,13 @@ if (empty($_SESSION['user_id'])) {
 $role = $_SESSION['role'] ?? '';
 $flashMessages = flash_get_all();
 
+$reportsHref = 'reports.php';
+
 if (!isset($db)) {
     require_once __DIR__ . '/../../config/database.php';
     $db = (new Database())->connect();
 }
+$sidebarNotificationCounts = app_notification_sidebar_counts($db, $_SESSION);
 ?>
 <?php include __DIR__ . '/../layout/header.php'; ?>
 
@@ -38,6 +42,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4z" clip-rule="evenodd" />
                 </svg>
                 <span>Leave Requests</span>
+                <?php if (!empty($sidebarNotificationCounts['leave_requests'])): ?><span class="sidebar-badge"><?= (int)$sidebarNotificationCounts['leave_requests']; ?></span><?php endif; ?>
             </a>
         <?php endif; ?>
 

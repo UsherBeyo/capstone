@@ -17,15 +17,18 @@ $role = $_SESSION['role'];
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
 $isPersonnelOnlyView = ($role === 'personnel');
+$isDepartmentHeadView = ($role === 'department_head');
 $showPendingDepartmentHead = in_array($role, ['admin','manager','department_head'], true);
 $showPendingPersonnel = in_array($role, ['admin','hr','personnel'], true) && $role !== 'department_head';
 $showApprovedSection = true;
 $showRejectedSection = true;
-$showArchivedSection = !$isPersonnelOnlyView;
+$showArchivedSection = !$isPersonnelOnlyView && !$isDepartmentHeadView;
 
 $allowedTabs = $isPersonnelOnlyView
     ? ['pending', 'approved', 'rejected']
-    : ['all', 'pending', 'approved', 'rejected', 'archived'];
+    : ($isDepartmentHeadView
+        ? ['all', 'pending', 'approved', 'rejected']
+        : ['all', 'pending', 'approved', 'rejected', 'archived']);
 
 // tab filter controls (all / pending / approved / rejected / archived)
 $tab = $_GET['tab'] ?? ($isPersonnelOnlyView ? 'pending' : 'all');
@@ -35,6 +38,105 @@ if (!in_array($tab, $allowedTabs, true)) {
 
 function safe_h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+
+function leave_request_department_ids_for_user(PDO $db, int $userId, int $fallbackEmployeeId = 0): array {
+    try {
+        $stmt = $db->prepare("SELECT dha.department_id FROM department_head_assignments dha JOIN employees e ON e.id = dha.employee_id WHERE e.user_id = ? AND dha.is_active = 1");
+        $stmt->execute([$userId]);
+        $ids = array_values(array_unique(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)))));
+        if (!empty($ids)) {
+            return $ids;
+        }
+    } catch (Throwable $t) {
+        // ignore and fall back
+    }
+
+    if ($fallbackEmployeeId > 0) {
+        try {
+            $stmt = $db->prepare("SELECT department_id FROM employees WHERE id = ? LIMIT 1");
+            $stmt->execute([$fallbackEmployeeId]);
+            $deptId = (int)($stmt->fetchColumn() ?: 0);
+            if ($deptId > 0) {
+                return [$deptId];
+            }
+        } catch (Throwable $t) {
+            // ignore
+        }
+    }
+
+    return [];
+}
+
+function leave_request_filter_date(array $row): string {
+    if (!empty($row['start_date']) && $row['start_date'] !== '0000-00-00') {
+        return (string)$row['start_date'];
+    }
+    return substr((string)($row['created_at'] ?? ''), 0, 10);
+}
+
+function leave_request_sort_timestamp(array $row, string $sortBy): int {
+    $sortBy = strtolower(trim($sortBy));
+    $value = '';
+    switch ($sortBy) {
+        case 'submitted':
+            $value = (string)($row['created_at'] ?? '');
+            break;
+        case 'forwarded':
+            $value = (string)($row['department_head_approved_at'] ?? $row['created_at'] ?? '');
+            break;
+        case 'approved':
+            $value = (string)($row['finalized_at'] ?? $row['personnel_checked_at'] ?? $row['department_head_approved_at'] ?? $row['created_at'] ?? '');
+            break;
+        case 'leave':
+        default:
+            $value = leave_request_filter_date($row);
+            break;
+    }
+    $ts = strtotime($value);
+    return $ts ?: 0;
+}
+
+function leave_request_apply_filters(array $rows, int $month, int $year, int $departmentId, bool $applyDepartmentFilter, string $sortBy, string $direction): array {
+    $rows = array_values(array_filter($rows, function(array $row) use ($month, $year, $departmentId, $applyDepartmentFilter) {
+        if ($applyDepartmentFilter && $departmentId > 0) {
+            $rowDeptId = (int)($row['department_id'] ?? 0);
+            if ($rowDeptId !== $departmentId) {
+                return false;
+            }
+        }
+
+        $filterDate = leave_request_filter_date($row);
+        if ($filterDate === '' || $filterDate === '0000-00-00') {
+            return !($month > 0 || $year > 0);
+        }
+
+        $ts = strtotime($filterDate);
+        if (!$ts) {
+            return !($month > 0 || $year > 0);
+        }
+
+        if ($month > 0 && (int)date('n', $ts) !== $month) {
+            return false;
+        }
+        if ($year > 0 && (int)date('Y', $ts) !== $year) {
+            return false;
+        }
+        return true;
+    }));
+
+    usort($rows, function(array $a, array $b) use ($sortBy, $direction) {
+        $ta = leave_request_sort_timestamp($a, $sortBy);
+        $tb = leave_request_sort_timestamp($b, $sortBy);
+        if ($ta === $tb) {
+            $ia = (int)($a['id'] ?? 0);
+            $ib = (int)($b['id'] ?? 0);
+            return strtolower($direction) === 'asc' ? ($ia <=> $ib) : ($ib <=> $ia);
+        }
+        return strtolower($direction) === 'asc' ? ($ta <=> $tb) : ($tb <=> $ta);
+    });
+
+    return $rows;
 }
 
 function trunc3($v): string {
@@ -61,6 +163,44 @@ try {
 } catch (Throwable $t) {
     $signatories = [];
 }
+
+$departmentFilterVisible = in_array($role, ['admin', 'personnel'], true);
+$filterMonth = max(0, min(12, (int)($_GET['month'] ?? 0)));
+$filterYear = max(0, (int)($_GET['year'] ?? 0));
+$filterDepartmentId = $departmentFilterVisible ? max(0, (int)($_GET['department_id'] ?? 0)) : 0;
+$sortBy = strtolower(trim((string)($_GET['sort_by'] ?? 'leave')));
+if (!in_array($sortBy, ['leave', 'submitted', 'forwarded', 'approved'], true)) {
+    $sortBy = 'leave';
+}
+$sortDirection = strtolower(trim((string)($_GET['direction'] ?? 'desc')));
+if (!in_array($sortDirection, ['asc', 'desc'], true)) {
+    $sortDirection = 'desc';
+}
+$autoOpenDetailId = max(0, (int)($_GET['open_detail'] ?? 0));
+
+$departmentOptions = [];
+try {
+    $departmentOptions = $db->query("SELECT id, name FROM departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $t) {
+    $departmentOptions = [];
+}
+
+$availableYears = [];
+try {
+    $yearRows = $db->query("SELECT DISTINCT YEAR(COALESCE(NULLIF(start_date, '0000-00-00'), DATE(created_at))) AS yr FROM leave_requests HAVING yr IS NOT NULL ORDER BY yr DESC")->fetchAll(PDO::FETCH_COLUMN);
+    $availableYears = array_values(array_unique(array_filter(array_map('intval', $yearRows))));
+} catch (Throwable $t) {
+    $availableYears = [];
+}
+if ($filterYear > 0 && !in_array($filterYear, $availableYears, true)) {
+    array_unshift($availableYears, $filterYear);
+    $availableYears = array_values(array_unique($availableYears));
+    rsort($availableYears);
+}
+
+$departmentHeadDepartmentIds = $isDepartmentHeadView
+    ? leave_request_department_ids_for_user($db, $userId, (int)($_SESSION['emp_id'] ?? 0))
+    : [];
 
 function columnExists(PDO $db, string $table, string $column): bool {
     try {
@@ -680,6 +820,13 @@ $wherePersonnel = "lr.workflow_status = 'pending_personnel' AND lr.status = 'pen
 if (in_array($role, ['manager','department_head'], true)) {
     $whereDeptHead .= " AND lr.department_head_user_id = " . $userId;
 }
+if ($isDepartmentHeadView) {
+    if (empty($departmentHeadDepartmentIds)) {
+        $whereDeptHead .= " AND 1 = 0";
+    } else {
+        $whereDeptHead .= " AND lr.department_id IN (" . implode(',', array_map('intval', $departmentHeadDepartmentIds)) . ")";
+    }
+}
 if (in_array($role, ['personnel','hr'], true)) {
     // personnel sees only their stage
 } elseif ($role !== 'admin') {
@@ -723,6 +870,16 @@ $returnedWhere = "(lr.workflow_status IN ('rejected_department_head','returned_b
 
 if ($isPersonnelOnlyView) {
     $finalizedWhere .= " AND COALESCE(lr.print_status, '') IN ('', 'pending_print', 'printed')";
+}
+if ($isDepartmentHeadView) {
+    if (empty($departmentHeadDepartmentIds)) {
+        $finalizedWhere .= " AND 1 = 0";
+        $returnedWhere .= " AND 1 = 0";
+    } else {
+        $deptIn = implode(',', array_map('intval', $departmentHeadDepartmentIds));
+        $finalizedWhere .= " AND lr.department_id IN ($deptIn)";
+        $returnedWhere .= " AND lr.department_id IN ($deptIn)";
+    }
 }
 
 $finalized = $db->query("
@@ -787,6 +944,12 @@ if ($role === 'manager') {
 }
 $archived = $archivedQuery->fetchAll(PDO::FETCH_ASSOC);
 
+$pendingDeptHead = leave_request_apply_filters($pendingDeptHead, $filterMonth, $filterYear, $filterDepartmentId, $departmentFilterVisible, $sortBy, $sortDirection);
+$pendingPersonnel = leave_request_apply_filters($pendingPersonnel, $filterMonth, $filterYear, $filterDepartmentId, $departmentFilterVisible, $sortBy, $sortDirection);
+$finalized = leave_request_apply_filters($finalized, $filterMonth, $filterYear, $filterDepartmentId, $departmentFilterVisible, $sortBy, $sortDirection);
+$returnedOrRejected = leave_request_apply_filters($returnedOrRejected, $filterMonth, $filterYear, $filterDepartmentId, $departmentFilterVisible, $sortBy, $sortDirection);
+$archived = leave_request_apply_filters($archived, $filterMonth, $filterYear, $filterDepartmentId, $departmentFilterVisible, $sortBy, $sortDirection);
+
 
 $pdhSearch = trim((string)($_GET['pdh_q'] ?? ''));
 $ppSearch = trim((string)($_GET['pp_q'] ?? ''));
@@ -840,11 +1003,22 @@ if (empty($_SESSION['csrf_token'])) {
 <?php include __DIR__ . '/partials/sidebar.php'; ?>
 
 <div class="app-main">
-    <h1>Leave Requests</h1>
-    <p class="page-subtitle" style="margin-bottom:14px;">Review, track, and manage employee leave submissions</p>
-
-    <div class="filter-row" style="margin-bottom:16px;">
-        <div class="filter-tabs" id="leaveRequestTabs">
+    <?php
+    $tabBaseParams = [
+        'month' => $filterMonth > 0 ? $filterMonth : null,
+        'year' => $filterYear > 0 ? $filterYear : null,
+        'department_id' => $departmentFilterVisible && $filterDepartmentId > 0 ? $filterDepartmentId : null,
+        'sort_by' => $sortBy !== 'leave' ? $sortBy : null,
+        'direction' => $sortDirection !== 'desc' ? $sortDirection : null,
+    ];
+    ?>
+    <div class="page-header leave-requests-header">
+        <div class="page-title-group">
+            <h1>Leave Requests</h1>
+            <p class="page-subtitle">Review, track, and manage employee leave submissions</p>
+        </div>
+        <div class="page-actions leave-requests-header-actions">
+            <div class="filter-tabs" id="leaveRequestTabs">
             <?php
             $tabs = $isPersonnelOnlyView
                 ? [
@@ -852,22 +1026,92 @@ if (empty($_SESSION['csrf_token'])) {
                     'approved' => 'Approved',
                     'rejected' => 'Rejected',
                 ]
-                : [
-                    'all' => 'All',
-                    'pending' => 'Pending',
-                    'approved' => 'Approved',
-                    'rejected' => 'Rejected',
-                    'archived' => 'Archived',
-                ];
+                : ($isDepartmentHeadView
+                    ? [
+                        'all' => 'All',
+                        'pending' => 'Pending',
+                        'approved' => 'Approved',
+                        'rejected' => 'Rejected',
+                    ]
+                    : [
+                        'all' => 'All',
+                        'pending' => 'Pending',
+                        'approved' => 'Approved',
+                        'rejected' => 'Rejected',
+                        'archived' => 'Archived',
+                    ]);
             foreach ($tabs as $key => $label) {
                 $active = ($tab === $key) ? ' is-active' : '';
-                echo '<a href="?tab=' . $key . '" class="filter-tab' . $active . '" data-tab="' . $key . '">' . htmlspecialchars($label) . '</a>';
+                $tabUrl = $_SERVER['PHP_SELF'] . '?' . http_build_query(array_filter(array_merge($tabBaseParams, ['tab' => $key]), fn($v) => $v !== null && $v !== ''));
+                echo '<a href="' . safe_h($tabUrl) . '" class="filter-tab' . $active . '" data-tab="' . safe_h($key) . '">' . htmlspecialchars($label) . '</a>';
             }
             ?>
+            </div>
+
+            <form method="get" class="leave-request-filter-bar leave-request-filter-bar-inline" id="leaveRequestFilterForm" data-auto-submit="1">
+                <input type="hidden" name="tab" value="<?= safe_h($tab); ?>">
+
+                <div class="leave-request-filter-grid">
+                    <?php if ($departmentFilterVisible): ?>
+                    <label>
+                        <span>Department</span>
+                        <select name="department_id" class="filter-control auto-submit-filter" aria-label="Department filter">
+                            <option value="0">All Departments</option>
+                            <?php foreach ($departmentOptions as $deptOption): ?>
+                                <option value="<?= (int)$deptOption['id']; ?>" <?= $filterDepartmentId === (int)$deptOption['id'] ? 'selected' : ''; ?>><?= safe_h($deptOption['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <?php endif; ?>
+
+                    <label>
+                        <span>Month</span>
+                        <select name="month" class="filter-control auto-submit-filter" aria-label="Month filter">
+                            <option value="0">All Months</option>
+                            <?php for ($m = 1; $m <= 12; $m++): ?>
+                                <option value="<?= $m; ?>" <?= $filterMonth === $m ? 'selected' : ''; ?>><?= safe_h(date('F', mktime(0, 0, 0, $m, 1))); ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>Year</span>
+                        <select name="year" class="filter-control filter-year-select auto-submit-filter" aria-label="Year filter">
+                            <option value="0">Year</option>
+                            <?php foreach ($availableYears as $yearOption): ?>
+                                <option value="<?= (int)$yearOption; ?>" <?= $filterYear === (int)$yearOption ? 'selected' : ''; ?>><?= (int)$yearOption; ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+
+                    <label class="inline-filter-group inline-filter-group-sortby">
+                        <span class="inline-filter-label">Sort by</span>
+                        <select name="sort_by" class="filter-control auto-submit-filter" aria-label="Sort by">
+                            <option value="leave" <?= $sortBy === 'leave' ? 'selected' : ''; ?>>Date of Leave</option>
+                            <option value="submitted" <?= $sortBy === 'submitted' ? 'selected' : ''; ?>>Date Submitted</option>
+                            <option value="forwarded" <?= $sortBy === 'forwarded' ? 'selected' : ''; ?>>Date Forwarded</option>
+                            <option value="approved" <?= $sortBy === 'approved' ? 'selected' : ''; ?>>Date Approved</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>Direction</span>
+                        <select name="direction" class="filter-control auto-submit-filter" aria-label="Sort direction">
+                            <option value="desc" <?= $sortDirection === 'desc' ? 'selected' : ''; ?>>Newest First</option>
+                            <option value="asc" <?= $sortDirection === 'asc' ? 'selected' : ''; ?>>Oldest First</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="leave-request-filter-actions">
+                    <button type="submit" class="btn-secondary compact-filter-btn">Apply</button>
+                    <a class="btn btn-link-like compact-filter-btn" href="leave_requests.php?tab=<?= safe_h($tab); ?>">Reset</a>
+                </div>
+            </form>
         </div>
     </div>
 
-    <div id="section-pending" style="<?= (($isPersonnelOnlyView && $tab === 'pending') || (!$isPersonnelOnlyView && ($tab === 'all' || $tab === 'pending'))) ? '' : 'display:none;'; ?>">
+<div id="section-pending" style="<?= (($isPersonnelOnlyView && $tab === 'pending') || (!$isPersonnelOnlyView && ($tab === 'all' || $tab === 'pending'))) ? '' : 'display:none;'; ?>">
         <?php if ($showPendingDepartmentHead): ?>
         <div class="ui-card mb-6 ajax-fragment" data-fragment-id="leave-pdh" data-page-param="pdh_page" data-search-param="pdh_q">
             <h3>Pending Department Head Approval</h3>
@@ -1519,7 +1763,51 @@ document.querySelectorAll('.filter-tab').forEach(function(tab) {
 
 // initialize (in case server-side default differs)
 setActiveTab(activeTab);
+
+(function(){
+    var requestId = <?= (int)$autoOpenDetailId; ?>;
+    if (!requestId) return;
+    var activeTab = <?= json_encode($tab); ?>;
+    var modalId = null;
+    if (activeTab === 'approved') {
+        modalId = 'finalDetailModal_' + requestId;
+    } else if (activeTab === 'rejected') {
+        modalId = 'rejectDetailModal_' + requestId;
+    } else if (activeTab === 'archived') {
+        modalId = 'archDetailModal_' + requestId;
+    } else {
+        if (document.getElementById('reviewModal_' + requestId)) {
+            modalId = 'reviewModal_' + requestId;
+        } else if (document.getElementById('deptDetailModal_' + requestId)) {
+            modalId = 'deptDetailModal_' + requestId;
+        }
+    }
+    if (!modalId) return;
+    window.setTimeout(function(){
+        if (typeof openModal === 'function') {
+            openModal(modalId);
+        }
+    }, 180);
+})();
 </script>
 
+
+<script>
+(function(){
+  var form = document.getElementById('leaveRequestFilterForm');
+  if (!form) return;
+  var controls = form.querySelectorAll('.auto-submit-filter');
+  var submitTimer = null;
+  function autoSubmit(){
+    if (submitTimer) window.clearTimeout(submitTimer);
+    submitTimer = window.setTimeout(function(){
+      form.submit();
+    }, 80);
+  }
+  controls.forEach(function(control){
+    control.addEventListener('change', autoSubmit);
+  });
+})();
+</script>
 </body>
 </html>

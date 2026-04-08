@@ -261,7 +261,8 @@ if (is_array($historyEmployee)) {
 
         .create-employee-modal {
             width: min(980px, calc(100vw - 32px));
-            max-height: calc(100vh - 32px);
+            height: min(900px, calc(100vh - 40px));
+            max-height: calc(100vh - 40px);
             padding: 0;
             overflow: hidden;
             border-radius: 24px;
@@ -287,7 +288,8 @@ if (is_array($historyEmployee)) {
             display: grid;
             grid-template-columns: 220px 1fr;
             min-height: 100%;
-            max-height: calc(100vh - 32px);
+            height: 100%;
+            max-height: calc(100vh - 40px);
         }
         .create-employee-aside {
             background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
@@ -333,8 +335,16 @@ if (is_array($historyEmployee)) {
         .create-employee-form {
             padding: 22px 22px 18px;
             background: #fff;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .employee-modal-body {
+            flex: 1 1 auto;
+            min-height: 0;
             overflow-y: auto;
             overscroll-behavior: contain;
+            padding-right: 4px;
         }
         .create-employee-grid {
             display: grid;
@@ -386,13 +396,84 @@ if (is_array($historyEmployee)) {
             padding-left: 42px;
         }
         .employee-modal-actions {
-            position: sticky;
-            bottom: 0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex: 0 0 auto;
             background: #fff;
             border-top: 1px solid #e5e7eb;
-            margin-top: 18px;
+            margin-top: 14px;
             padding-top: 14px;
-            padding-bottom: 2px;
+            padding-bottom: 14px;
+            z-index: 2;
+        }
+        .employee-modal-actions .btn-primary,
+        .employee-modal-actions .btn-secondary {
+            margin-right: 0;
+            flex: 0 0 auto;
+        }
+
+        .open-edit-modal {
+            border: 1px solid var(--border);
+            background: #fff;
+            cursor: pointer;
+        }
+        .employee-readonly-stack {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px 16px;
+            margin-bottom: 14px;
+        }
+        .employee-readonly-card {
+            min-height: 42px;
+            border-radius: 12px;
+            border: 1px solid #dbe3ef;
+            background: #f8fafc;
+            padding: 10px 12px;
+            color: #0f172a;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        .employee-edit-preview {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid #dbe3ef;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #f8fbff 0%, #eff6ff 100%);
+            margin-bottom: 16px;
+        }
+        .employee-edit-preview img,
+        .employee-edit-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 999px;
+            object-fit: cover;
+            border: 2px solid #dbeafe;
+            box-shadow: 0 6px 16px rgba(37,99,235,.14);
+            flex: 0 0 auto;
+        }
+        .employee-edit-avatar {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 24px;
+            font-weight: 800;
+        }
+        .employee-edit-preview-name {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 800;
+            color: #0f172a;
+        }
+        .employee-edit-preview-meta {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 13px;
         }
 
         @media (max-width: 1600px) {
@@ -517,6 +598,7 @@ if (is_array($historyEmployee)) {
 
         @media (max-width: 900px) {
             .create-employee-modal {
+                height: calc(100vh - 20px);
                 max-height: calc(100vh - 20px);
             }
             .create-employee-shell {
@@ -576,6 +658,7 @@ if (is_array($historyEmployee)) {
                 </div>
                 <form method="POST" action="../controllers/AdminController.php" enctype="multipart/form-data" class="create-employee-form">
                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                    <div class="employee-modal-body">
                     <div class="create-employee-grid">
                         <div class="form-group full">
                             <label>Email</label>
@@ -681,6 +764,7 @@ if (is_array($historyEmployee)) {
                             </select>
                         </div>
                     </div>
+                    </div>
 
                     <div class="employee-modal-actions">
                         <button type="button" class="btn btn-secondary" id="cancelCreateModal">Cancel</button>
@@ -691,19 +775,242 @@ if (is_array($historyEmployee)) {
         </div>
     </div>
 
+    <div id="editModal" class="modal" style="display:none;">
+        <div class="modal-content create-employee-modal">
+            <span class="modal-close" id="closeEditModal">&times;</span>
+            <div class="create-employee-shell">
+                <div class="create-employee-aside">
+                    <div class="create-employee-kicker">Admin update</div>
+                    <h3>Edit Employee</h3>
+                    <p>Update employee profile, assignment, and balance details using the same clean layout as the create form.</p>
+                </div>
+                <form method="POST" action="../controllers/AdminController.php" enctype="multipart/form-data" class="create-employee-form" id="editEmployeeForm">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
+                    <input type="hidden" name="update_employee" value="1">
+                    <input type="hidden" name="employee_id" id="edit_employee_id" value="">
+
+                    <div class="employee-modal-body">
+                    <div class="employee-edit-preview">
+                        <img src="" alt="Employee photo" id="editProfileImage" style="display:none;">
+                        <div class="employee-edit-avatar" id="editProfileFallback">👤</div>
+                        <div>
+                            <p class="employee-edit-preview-name" id="editPreviewName">Employee Name</p>
+                            <p class="employee-edit-preview-meta" id="editPreviewMeta">Update the selected employee information below.</p>
+                        </div>
+                    </div>
+
+                    <div class="employee-readonly-stack">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <div class="employee-readonly-card" id="edit_email_display">—</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Role</label>
+                            <div class="employee-readonly-card" id="edit_role_display">—</div>
+                        </div>
+                    </div>
+
+                    <div class="create-employee-grid">
+                        <div class="form-group full">
+                            <label>Profile Picture</label>
+                            <input type="file" name="profile_pic" accept="image/*" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>First Name</label>
+                            <input type="text" name="first_name" id="edit_first_name" required class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Middle Name</label>
+                            <input type="text" name="middle_name" id="edit_middle_name" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Last Name</label>
+                            <input type="text" name="last_name" id="edit_last_name" required class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Department</label>
+                            <select name="department_id" id="edit_department_id" required class="form-select">
+                                <option value="">Select Department</option>
+                                <?php foreach($departments as $d): ?>
+                                    <option value="<?= $d['id']; ?>"><?= htmlspecialchars($d['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Position</label>
+                            <input type="text" name="position" id="edit_position" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Salary</label>
+                            <div class="salary-input-wrap">
+                                <span class="currency-badge">₱</span>
+                                <input type="number" step="0.01" name="salary" id="edit_salary" class="form-control" placeholder="0.00">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select name="status" id="edit_status" class="form-select">
+                                <option value="">Select status</option>
+                                <option value="Permanent">Permanent</option>
+                                <option value="JO">JO</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Civil Status</label>
+                            <select name="civil_status" id="edit_civil_status" class="form-select">
+                                <option value="">Select civil status</option>
+                                <option value="Single">Single</option>
+                                <option value="Married">Married</option>
+                                <option value="Divorced">Divorced</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Entrance to Duty</label>
+                            <input type="date" name="entrance_to_duty" id="edit_entrance_to_duty" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Unit</label>
+                            <input type="text" name="unit" id="edit_unit" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>GSIS Policy No.</label>
+                            <input type="text" name="gsis_policy_no" id="edit_gsis_policy_no" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>National Reference Card No.</label>
+                            <input type="text" name="national_reference_card_no" id="edit_national_reference_card_no" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Vacational Balance</label>
+                            <input type="number" step="0.001" name="annual_balance" id="edit_annual_balance" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Sick Balance</label>
+                            <input type="number" step="0.001" name="sick_balance" id="edit_sick_balance" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Force Balance</label>
+                            <input type="number" name="force_balance" id="edit_force_balance" class="form-control">
+                        </div>
+
+                        <div class="form-group full">
+                            <label>Assign Manager / Department Head</label>
+                            <select name="manager_id" id="edit_manager_id" class="form-select">
+                                <option value="">None</option>
+                                <?php foreach($managers as $m): ?>
+                                    <option value="<?= $m['id']; ?>"><?= htmlspecialchars(trim(($m['first_name'] ?? '') . ' ' . ($m['middle_name'] ?? '') . ' ' . ($m['last_name'] ?? ''))); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="employee-modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelEditModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
+        const createModal = document.getElementById('createModal');
+        const editModal = document.getElementById('editModal');
+
         document.getElementById('openCreateModal').addEventListener('click', function(e){
             e.preventDefault();
-            document.getElementById('createModal').style.display = 'flex';
+            createModal.style.display = 'flex';
         });
         document.getElementById('closeCreateModal').addEventListener('click', function(){
-            document.getElementById('createModal').style.display = 'none';
+            createModal.style.display = 'none';
         });
         document.getElementById('cancelCreateModal').addEventListener('click', function(){
-            document.getElementById('createModal').style.display = 'none';
+            createModal.style.display = 'none';
         });
+
+        function closeEditEmployeeModal() {
+            editModal.style.display = 'none';
+        }
+
+        function setFieldValue(id, value) {
+            const field = document.getElementById(id);
+            if (field) field.value = value || '';
+        }
+
+        function openEditEmployeeModal(trigger) {
+            const data = trigger.dataset;
+            setFieldValue('edit_employee_id', data.employeeId);
+            setFieldValue('edit_first_name', data.firstName);
+            setFieldValue('edit_middle_name', data.middleName);
+            setFieldValue('edit_last_name', data.lastName);
+            setFieldValue('edit_department_id', data.departmentId);
+            setFieldValue('edit_position', data.position);
+            setFieldValue('edit_salary', data.salary);
+            setFieldValue('edit_status', data.status);
+            setFieldValue('edit_civil_status', data.civilStatus);
+            setFieldValue('edit_entrance_to_duty', data.entranceToDuty);
+            setFieldValue('edit_unit', data.unit);
+            setFieldValue('edit_gsis_policy_no', data.gsisPolicyNo);
+            setFieldValue('edit_national_reference_card_no', data.nationalReferenceCardNo);
+            setFieldValue('edit_annual_balance', data.annualBalance);
+            setFieldValue('edit_sick_balance', data.sickBalance);
+            setFieldValue('edit_force_balance', data.forceBalance);
+            setFieldValue('edit_manager_id', data.managerId);
+
+            document.getElementById('edit_email_display').textContent = data.email || '—';
+            const prettyRole = (data.role || '').replace(/_/g, ' ').replace(/\w/g, function(chr){ return chr.toUpperCase(); });
+            document.getElementById('edit_role_display').textContent = prettyRole || '—';
+
+            const fullName = [data.firstName, data.middleName, data.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+            document.getElementById('editPreviewName').textContent = fullName || 'Employee';
+            const deptText = document.getElementById('edit_department_id').selectedOptions[0]?.textContent || 'No department';
+            const positionText = data.position || 'No position set';
+            document.getElementById('editPreviewMeta').textContent = deptText + ' • ' + positionText;
+
+            const img = document.getElementById('editProfileImage');
+            const fallback = document.getElementById('editProfileFallback');
+            if (data.profilePic) {
+                img.src = data.profilePic;
+                img.style.display = 'block';
+                fallback.style.display = 'none';
+            } else {
+                img.removeAttribute('src');
+                img.style.display = 'none';
+                fallback.style.display = 'inline-flex';
+            }
+
+            editModal.style.display = 'flex';
+        }
+
+        document.addEventListener('click', function(e){
+            const btn = e.target.closest('.open-edit-modal');
+            if (!btn) return;
+            e.preventDefault();
+            openEditEmployeeModal(btn);
+        });
+
+        document.getElementById('closeEditModal').addEventListener('click', closeEditEmployeeModal);
+        document.getElementById('cancelEditModal').addEventListener('click', closeEditEmployeeModal);
+
         window.addEventListener('click', function(e){
-            if(e.target == document.getElementById('createModal')) document.getElementById('createModal').style.display = 'none';
+            if (e.target === createModal) createModal.style.display = 'none';
+            if (e.target === editModal) editModal.style.display = 'none';
         });
 
     </script>
@@ -760,10 +1067,30 @@ if (is_array($historyEmployee)) {
                             <span aria-hidden="true">👁️</span>
                             <span>View</span>
                         </a>
-                        <a href="edit_employee.php?id=<?= $e['id']; ?>" title="Edit user" class="profile-link">
+                        <button type="button" title="Edit user" class="profile-link open-edit-modal"
+                            data-employee-id="<?= (int)$e['id']; ?>"
+                            data-first-name="<?= htmlspecialchars((string)($e['first_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-middle-name="<?= htmlspecialchars((string)($e['middle_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-last-name="<?= htmlspecialchars((string)($e['last_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-email="<?= htmlspecialchars((string)($e['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-role="<?= htmlspecialchars((string)($e['role'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-department-id="<?= htmlspecialchars((string)($e['department_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-position="<?= htmlspecialchars((string)($e['position'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-salary="<?= htmlspecialchars((string)($e['salary'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-status="<?= htmlspecialchars((string)($e['status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-civil-status="<?= htmlspecialchars((string)($e['civil_status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-entrance-to-duty="<?= htmlspecialchars((string)($e['entrance_to_duty'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-unit="<?= htmlspecialchars((string)($e['unit'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-gsis-policy-no="<?= htmlspecialchars((string)($e['gsis_policy_no'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-national-reference-card-no="<?= htmlspecialchars((string)($e['national_reference_card_no'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-annual-balance="<?= htmlspecialchars(number_format((float)($e['annual_balance'] ?? 0), 3, '.', ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-sick-balance="<?= htmlspecialchars(number_format((float)($e['sick_balance'] ?? 0), 3, '.', ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-force-balance="<?= htmlspecialchars((string)($e['force_balance'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-manager-id="<?= htmlspecialchars((string)($e['manager_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                            data-profile-pic="<?= htmlspecialchars((string)($e['profile_pic'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
                             <span aria-hidden="true">✏️</span>
                             <span>Edit</span>
-                        </a>
+                        </button>
                         <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link">
                             <span aria-hidden="true">🗄️</span>
                             <span>Export</span>

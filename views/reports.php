@@ -455,6 +455,17 @@ function exportPdfTcpdf(array $headers, array $rows, string $filename, ?array $c
 $role = $_SESSION['role'] ?? '';
 $sessionEmpId = intval($_SESSION['emp_id'] ?? 0);
 
+$sessionDepartment = '';
+if ($sessionEmpId > 0) {
+    try {
+        $deptStmt = $db->prepare("SELECT department FROM employees WHERE id = ? LIMIT 1");
+        $deptStmt->execute([$sessionEmpId]);
+        $sessionDepartment = (string)($deptStmt->fetchColumn() ?: '');
+    } catch (Throwable $t) {
+        $sessionDepartment = '';
+    }
+}
+
 // Detect columns
 $hasTransDate = columnExists($db, 'budget_history', 'trans_date');
 $hasSnapshots = columnExists($db, 'leave_requests', 'snapshot_annual_balance') && columnExists($db, 'leave_requests', 'snapshot_sick_balance');
@@ -464,20 +475,39 @@ $reportType = $_GET['type'] ?? 'summary';
 $departmentFilter = $_GET['dept'] ?? '';
 $employeeFilter = intval($_GET['employee_id'] ?? 0);
 
-// ✅ If employee or department head: force leave_card for themselves
-if (in_array($role, ['employee', 'department_head'], true)) {
+// Employees are limited to their own leave card.
+if ($role === 'employee') {
     $reportType = 'leave_card';
     $employeeFilter = $sessionEmpId;
+} elseif ($role === 'department_head') {
+    // Department heads are restricted to their own department across reports.
+    $departmentFilter = $sessionDepartment;
+    if ($reportType === 'leave_card' && $employeeFilter <= 0) {
+        $employeeFilter = $sessionEmpId;
+    }
 } elseif ($role === 'personnel' && $reportType === 'leave_card' && $employeeFilter <= 0 && $sessionEmpId > 0) {
     $employeeFilter = $sessionEmpId;
 }
 
-// Access: admin/manager/hr/personnel can access reports; employee and department head only own leave card
+// Access: admin/manager/hr/personnel can access reports; employee only own leave card; department head summary is locked to own department.
 if (!in_array($role, ['admin', 'manager', 'hr', 'personnel', 'employee', 'department_head'], true)) {
     flash_redirect('dashboard.php', 'error', 'Access Denied');
 }
-if (in_array($role, ['employee', 'department_head'], true) && ($employeeFilter !== $sessionEmpId || $reportType !== 'leave_card')) {
+if ($role === 'employee' && ($employeeFilter !== $sessionEmpId || $reportType !== 'leave_card')) {
     flash_redirect('reports.php?type=leave_card&employee_id=' . $sessionEmpId, 'error', 'You can only view your own leave card.');
+}
+if ($role === 'department_head') {
+    if (!in_array($reportType, ['summary', 'balance', 'usage', 'leave_card'], true)) {
+        $reportType = 'summary';
+    }
+    if ($reportType === 'leave_card' && $employeeFilter > 0) {
+        $empDeptStmt = $db->prepare("SELECT department FROM employees WHERE id = ? LIMIT 1");
+        $empDeptStmt->execute([$employeeFilter]);
+        $targetDept = (string)($empDeptStmt->fetchColumn() ?: '');
+        if ($targetDept === '' || $targetDept !== $sessionDepartment) {
+            flash_redirect('reports.php?type=summary', 'error', 'You can only view leave cards for employees in your department.');
+        }
+    }
 }
 
 /**
@@ -629,11 +659,41 @@ if ($reportType === 'balance') {
     $reportData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $reportTitle = "Leave Usage Report";
 } else {
-    $totalEmployees = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
-    $totalPending = $db->query("SELECT COUNT(*) FROM leave_requests WHERE LOWER(status) = 'pending'")->fetchColumn();
-    $totalApproved = $db->query("SELECT COUNT(*) FROM leave_requests WHERE LOWER(status) = 'approved'")->fetchColumn();
-    $avgAnnualBalance = $db->query("SELECT AVG(annual_balance) FROM employees")->fetchColumn();
-    $reportTitle = "Leave System Summary";
+    if ($departmentFilter !== '') {
+        $empCountStmt = $db->prepare("SELECT COUNT(*) FROM employees WHERE department = ?");
+        $empCountStmt->execute([$departmentFilter]);
+        $totalEmployees = $empCountStmt->fetchColumn();
+
+        $pendingStmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM leave_requests lr
+            INNER JOIN employees e ON e.id = lr.employee_id
+            WHERE LOWER(lr.status) = 'pending' AND e.department = ?
+        ");
+        $pendingStmt->execute([$departmentFilter]);
+        $totalPending = $pendingStmt->fetchColumn();
+
+        $approvedStmt = $db->prepare("
+            SELECT COUNT(*)
+            FROM leave_requests lr
+            INNER JOIN employees e ON e.id = lr.employee_id
+            WHERE LOWER(lr.status) = 'approved' AND e.department = ?
+        ");
+        $approvedStmt->execute([$departmentFilter]);
+        $totalApproved = $approvedStmt->fetchColumn();
+
+        $avgStmt = $db->prepare("SELECT AVG(annual_balance) FROM employees WHERE department = ?");
+        $avgStmt->execute([$departmentFilter]);
+        $avgAnnualBalance = $avgStmt->fetchColumn();
+
+        $reportTitle = "Leave System Summary - " . $departmentFilter;
+    } else {
+        $totalEmployees = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn();
+        $totalPending = $db->query("SELECT COUNT(*) FROM leave_requests WHERE LOWER(status) = 'pending'")->fetchColumn();
+        $totalApproved = $db->query("SELECT COUNT(*) FROM leave_requests WHERE LOWER(status) = 'approved'")->fetchColumn();
+        $avgAnnualBalance = $db->query("SELECT AVG(annual_balance) FROM employees")->fetchColumn();
+        $reportTitle = "Leave System Summary";
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -654,7 +714,10 @@ if ($reportType === 'balance') {
     <div class="ui-card" style="margin-bottom:24px;">
         <h3>Report Filter</h3>
         <form method="GET" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-            <?php if(!in_array($role, ['employee', 'department_head'], true)): ?>
+            <?php if($role === 'employee'): ?>
+                <input type="hidden" name="type" value="leave_card">
+                <p style="margin:0;">Viewing: <strong>Leave Card</strong></p>
+            <?php else: ?>
             <div>
                 <label>Report Type:</label>
                 <select name="type">
@@ -664,14 +727,15 @@ if ($reportType === 'balance') {
                     <option value="leave_card" <?= ($reportType === 'leave_card' ? 'selected' : ''); ?>>Leave Card</option>
                 </select>
             </div>
-            <?php else: ?>
-                <input type="hidden" name="type" value="leave_card">
-                <p style="margin:0;">Viewing: <strong>Leave Card</strong></p>
             <?php endif; ?>
 
             <?php if($reportType !== 'leave_card'): ?>
             <div>
                 <label>Department:</label>
+                <?php if ($role === 'department_head'): ?>
+                    <input type="hidden" name="dept" value="<?= safe_h($departmentFilter); ?>">
+                    <span><?= safe_h($departmentFilter ?: 'No department assigned'); ?></span>
+                <?php else: ?>
                 <select name="dept">
                     <option value="">All Departments</option>
                     <?php foreach ($departments as $d): ?>
@@ -680,18 +744,24 @@ if ($reportType === 'balance') {
                         </option>
                     <?php endforeach; ?>
                 </select>
+                <?php endif; ?>
             </div>
             <?php else: ?>
             <div>
                 <label>Employee:</label>
-                <?php if(in_array($role, ['employee', 'department_head'], true)): ?>
+                <?php if($role === 'employee'): ?>
                     <input type="hidden" name="employee_id" value="<?= safe_h($sessionEmpId); ?>">
                     <span><?= safe_h($currentEmp ? (($currentEmp['first_name'] ?? '').' '.($currentEmp['last_name'] ?? '')) : ''); ?></span>
                 <?php else: ?>
                     <select name="employee_id">
                         <option value="">-- select --</option>
                         <?php
-                        $empStmt = $db->query("SELECT id, first_name, last_name FROM employees ORDER BY first_name");
+                        if ($role === 'department_head') {
+                            $empStmt = $db->prepare("SELECT id, first_name, last_name FROM employees WHERE department = ? ORDER BY first_name, last_name");
+                            $empStmt->execute([$sessionDepartment]);
+                        } else {
+                            $empStmt = $db->query("SELECT id, first_name, last_name FROM employees ORDER BY first_name, last_name");
+                        }
                         foreach($empStmt->fetchAll(PDO::FETCH_ASSOC) as $empRow):
                         ?>
                             <option value="<?= (int)$empRow['id']; ?>" <?= ($employeeFilter == $empRow['id'] ? 'selected' : ''); ?>>

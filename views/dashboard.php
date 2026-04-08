@@ -65,6 +65,8 @@ if ($userName === '') {
 $today = date('Y-m-d');
 $monthStart = date('Y-m-01');
 $monthEnd = date('Y-m-t');
+$yearStart = date('Y-01-01');
+$yearEnd = date('Y-12-31');
 
 $employeeDashboard = [];
 $departmentHeadDashboard = [];
@@ -76,6 +78,51 @@ if ($role === 'employee' && $employeeRow) {
     $annual = (float)($employeeRow['annual_balance'] ?? 0);
     $sick = (float)($employeeRow['sick_balance'] ?? 0);
     $force = (float)($employeeRow['force_balance'] ?? 0);
+
+    $monthlyUsageStmt = $db->prepare("SELECT leave_type, action, old_balance, new_balance
+        FROM budget_history
+        WHERE employee_id = ?
+          AND COALESCE(trans_date, DATE(created_at)) BETWEEN ? AND ?
+          AND action LIKE 'deduction%'");
+    $monthlyUsageStmt->execute([(int)$employeeRow['id'], $monthStart, $monthEnd]);
+    $annualUsedThisMonth = 0.0;
+    $sickUsedThisMonth = 0.0;
+    foreach ($monthlyUsageStmt->fetchAll(PDO::FETCH_ASSOC) as $usageRow) {
+        $leaveTypeRaw = strtolower(trim((string)($usageRow['leave_type'] ?? '')));
+        $delta = max(0.0, (float)($usageRow['old_balance'] ?? 0) - (float)($usageRow['new_balance'] ?? 0));
+        if ($delta <= 0) {
+            continue;
+        }
+
+        if (str_contains($leaveTypeRaw, 'sick')) {
+            $sickUsedThisMonth += $delta;
+            continue;
+        }
+
+        if (str_contains($leaveTypeRaw, 'force') || str_contains($leaveTypeRaw, 'mandatory')) {
+            continue;
+        }
+
+        $annualUsedThisMonth += $delta;
+    }
+
+    $forceUsageStmt = $db->prepare("SELECT leave_type, old_balance, new_balance
+        FROM budget_history
+        WHERE employee_id = ?
+          AND COALESCE(trans_date, DATE(created_at)) BETWEEN ? AND ?
+          AND action LIKE 'deduction%'");
+    $forceUsageStmt->execute([(int)$employeeRow['id'], $yearStart, $yearEnd]);
+    $forceUsedThisYear = 0.0;
+    foreach ($forceUsageStmt->fetchAll(PDO::FETCH_ASSOC) as $usageRow) {
+        $leaveTypeRaw = strtolower(trim((string)($usageRow['leave_type'] ?? '')));
+        $delta = max(0.0, (float)($usageRow['old_balance'] ?? 0) - (float)($usageRow['new_balance'] ?? 0));
+        if ($delta <= 0) {
+            continue;
+        }
+        if (str_contains($leaveTypeRaw, 'force') || str_contains($leaveTypeRaw, 'mandatory')) {
+            $forceUsedThisYear += $delta;
+        }
+    }
 
     $requestStmt = $db->prepare("SELECT lr.*, COALESCE(lt.name, lr.leave_type) AS leave_type_name
         FROM leave_requests lr
@@ -102,6 +149,9 @@ if ($role === 'employee' && $employeeRow) {
         'annual' => $annual,
         'sick' => $sick,
         'force' => $force,
+        'annual_used_this_month' => round($annualUsedThisMonth, 3),
+        'sick_used_this_month' => round($sickUsedThisMonth, 3),
+        'force_used_this_year' => round($forceUsedThisYear, 3),
         'pending_count' => count($pendingRequests),
         'approved_this_month' => $approvedThisMonth,
         'upcoming_count' => count($upcomingLeaves),
@@ -342,17 +392,20 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
             margin-bottom: 24px;
         }
         .dashboard-intro {
-            background: var(--card);
-            border: 1px solid rgba(37,99,235,0.14);
+            background: linear-gradient(135deg, #ffffff 0%, #eef4ff 100%);
+            border: 1px solid rgba(37,99,235,0.16);
+            box-shadow: 0 18px 36px rgba(37,99,235,.08);
         }
         .dashboard-intro h3 { margin: 0 0 10px; font-size: 26px; }
         .dashboard-intro p { margin: 0; color: var(--muted); line-height: 1.65; }
         .dashboard-side-note {
             display:flex; flex-direction:column; justify-content:center; gap:10px;
-            background: linear-gradient(180deg, #ffffff, #f8fbff);
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #ffffff;
+            box-shadow: 0 18px 40px rgba(37,99,235,.20);
         }
-        .dashboard-side-note .mini-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-        .dashboard-side-note .mini-value { font-size: 28px; font-weight: 700; color: var(--text); }
+        .dashboard-side-note .mini-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,.78); }
+        .dashboard-side-note .mini-value { font-size: 30px; font-weight: 800; color: #ffffff; }
         .dashboard-metrics {
             display:grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -364,11 +417,15 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
             border-radius: 18px;
             border: 1px solid var(--border);
             background: linear-gradient(180deg, #fff, #fbfdff);
-            box-shadow: 0 10px 24px rgba(15,23,42,.05);
+            box-shadow: 0 12px 28px rgba(15,23,42,.06);
         }
         .dashboard-metric .metric-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
         .dashboard-metric .metric-value { font-size: 30px; font-weight: 700; color: var(--text); line-height: 1; }
         .dashboard-metric .metric-sub { margin-top: 10px; font-size: 13px; color: var(--muted); }
+        .dashboard-metric:nth-child(1) { background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-color: rgba(37,99,235,.18); }
+        .dashboard-metric:nth-child(2) { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-color: rgba(16,185,129,.18); }
+        .dashboard-metric:nth-child(3) { background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border-color: rgba(249,115,22,.20); }
+        .dashboard-metric:nth-child(4) { background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); border-color: rgba(139,92,246,.18); }
         .dashboard-grid {
             display:grid;
             grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -419,7 +476,7 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
             display:grid; gap: 12px;
         }
         .dashboard-list-item {
-            padding: 14px 16px; border-radius: 14px; border:1px solid var(--border); background:#fff;
+            padding: 14px 16px; border-radius: 14px; border:1px solid var(--border); background:linear-gradient(180deg, #fff, #fcfdff); box-shadow: 0 8px 18px rgba(15,23,42,.04);
         }
         .dashboard-list-item strong { color: var(--text); }
         .dashboard-list-item .meta { margin-top: 6px; color: var(--muted); font-size: 13px; }
@@ -508,7 +565,7 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
         </div>
 
         <div class="ui-card dashboard-chart-card">
-            <div class="dashboard-panel-title"><h3>Leave Balances</h3></div>
+            <div class="dashboard-panel-title"><h3>Leave Usage vs Remaining</h3></div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
                 <div style="flex:1;min-width:240px;max-width:320px;height:240px;"><canvas id="annualChart"></canvas></div>
                 <div style="flex:1;min-width:240px;max-width:320px;height:240px;"><canvas id="sickChart"></canvas></div>
@@ -557,27 +614,28 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
         <script>
         document.addEventListener('DOMContentLoaded', function () {
             var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#111827';
-            function makeDoughnut(id, title, remaining, ideal, colors) {
+            function makeDoughnut(id, title, usedThisMonth, remaining, colors) {
                 var el = document.getElementById(id);
                 if (!el) return;
-                var used = Math.max(0, ideal - remaining);
+                var used = Math.max(0, parseFloat(usedThisMonth || 0));
+                var remainingValue = Math.max(0, parseFloat(remaining || 0));
                 new Chart(el.getContext('2d'), {
                     type: 'doughnut',
-                    data: { labels: ['Used', 'Remaining'], datasets: [{ data: [used, remaining], backgroundColor: colors }] },
+                    data: { labels: ['Used this month', 'Remaining'], datasets: [{ data: [used, remainingValue], backgroundColor: colors }] },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: { position: 'bottom', labels: { color: textColor } },
                             title: { display: true, text: title, color: textColor },
-                            tooltip: { callbacks: { label: function(context){ return context.label + ': ' + context.parsed + ' days'; } } }
+                            tooltip: { callbacks: { label: function(context){ return context.label + ': ' + Number(context.parsed || 0).toFixed(3) + ' days'; } } }
                         }
                     }
                 });
             }
-            makeDoughnut('annualChart', 'Vacational Leave', <?= json_encode((float)$employeeDashboard['annual']); ?>, 20, ['#fda4af', '#2563eb']);
-            makeDoughnut('sickChart', 'Sick Leave', <?= json_encode((float)$employeeDashboard['sick']); ?>, 10, ['#fde68a', '#16a34a']);
-            makeDoughnut('forceChart', 'Force Leave', <?= json_encode((float)$employeeDashboard['force']); ?>, 5, ['#fca5a5', '#0f766e']);
+            makeDoughnut('annualChart', 'Vacational Leave', <?= json_encode((float)($employeeDashboard['annual_used_this_month'] ?? 0)); ?>, <?= json_encode((float)$employeeDashboard['annual']); ?>, ['#fda4af', '#2563eb']);
+            makeDoughnut('sickChart', 'Sick Leave', <?= json_encode((float)($employeeDashboard['sick_used_this_month'] ?? 0)); ?>, <?= json_encode((float)$employeeDashboard['sick']); ?>, ['#fde68a', '#16a34a']);
+            makeDoughnut('forceChart', 'Force Leave (Used This Year)', <?= json_encode((float)($employeeDashboard['force_used_this_year'] ?? 0)); ?>, <?= json_encode((float)$employeeDashboard['force']); ?>, ['#fca5a5', '#0f766e']);
         });
         </script>
 
