@@ -125,6 +125,42 @@ function uploadLeaveAttachments(array $files, int $leaveId, int $userId, LeaveAt
 }
 
 
+
+function countUploadedFiles(array $files): int {
+    if (empty($files['name']) || !is_array($files['name'])) {
+        return 0;
+    }
+    $count = 0;
+    foreach ($files['name'] as $name) {
+        if (trim((string)$name) !== '') {
+            $count++;
+        }
+    }
+    return $count;
+}
+
+function isLateSickFilingForPersonnel(array $row): bool {
+    $leaveType = strtolower(trim((string)($row['leave_type_name'] ?? $row['leave_type'] ?? '')));
+    if (!in_array($leaveType, ['sick leave', 'sick'], true)) {
+        return false;
+    }
+
+    $filingDate = trim((string)($row['filing_date'] ?? ''));
+    $endDate = trim((string)($row['end_date'] ?? ''));
+    if ($filingDate === '' || $endDate === '') {
+        return false;
+    }
+
+    try {
+        $filing = new DateTime($filingDate);
+        $end = new DateTime($endDate);
+        $end->modify('+1 month');
+        return $filing > $end;
+    } catch (Throwable $t) {
+        return false;
+    }
+}
+
 function fetchLeaveForWorkflow(PDO $db, int $leaveId): ?array {
     $stmt = $db->prepare("
         SELECT lr.*, e.user_id AS employee_user_id, e.first_name, e.last_name, u.email,
@@ -228,13 +264,36 @@ if ($action === 'approve') {
         flash_redirect('../views/leave_requests.php', 'success', 'Leave approved by Department Head and forwarded to Personnel');
     }
 
+
     // Stage 2: Personnel final approval
     if ($workflow === 'pending_personnel') {
         if (!in_array($role, ['personnel','hr','admin'], true)) {
             workflowError("Unauthorized access");
         }
 
-        $ok = $leaveModel->respondToLeave($leave_id, $userId, 'approve', $comments);
+        $approvalOptions = [];
+        if (isLateSickFilingForPersonnel($row)) {
+            $payStatus = trim((string)($_POST['approval_pay_status'] ?? 'without_pay'));
+            $days = (float)($row['total_days'] ?? 0);
+            if ($payStatus === 'with_pay') {
+                $approvalOptions['approved_with_pay'] = $days;
+                $approvalOptions['approved_without_pay'] = 0.0;
+                $approvalOptions['deduct_days'] = $days;
+            } else {
+                $approvalOptions['approved_with_pay'] = 0.0;
+                $approvalOptions['approved_without_pay'] = $days;
+                $approvalOptions['deduct_days'] = 0.0;
+            }
+        }
+
+        $policy = $leaveModel->getLeavePolicy($row['leave_type_id'] ?? $row['leave_type_name'] ?? $row['leave_type'] ?? '');
+        if (!empty($policy) && empty($policy['deduct_balance'])) {
+            $approvalOptions['approved_with_pay'] = (float)($row['total_days'] ?? 0);
+            $approvalOptions['approved_without_pay'] = 0.0;
+            $approvalOptions['deduct_days'] = 0.0;
+        }
+
+        $ok = $leaveModel->respondToLeave($leave_id, $userId, 'approve', $comments, $approvalOptions);
         if (!$ok) {
             flash_redirect('../views/leave_requests.php', 'error', 'Unable to finalize approval');
         }
@@ -426,6 +485,7 @@ if ($action === 'apply') {
     if (!is_array($details)) {
         $details = [];
     }
+    $details['force_balance_only'] = !empty($details['force_balance_only']) ? 1 : 0;
 
     $supportingDocuments = $_POST['supporting_documents'] ?? [];
     if (!is_array($supportingDocuments)) {
@@ -453,6 +513,34 @@ if ($action === 'apply') {
         $err = implode(' ', array_map('implode', $v->getErrors()));
 flash_redirect('../views/apply_leave.php', 'error', $err);
     }
+
+    $typeLookup = new LeaveType($db);
+    $typeInfo = $typeLookup->get($typeId);
+    $policy = $leaveModel->getLeavePolicy($typeInfo ?: $typeId);
+    $days = $leaveModel->calculateDays($start, $end);
+    $uploadedFileCount = countUploadedFiles($_FILES['attachments'] ?? []);
+    $selectedDocCount = count(array_filter($supportingDocuments, static function ($value) {
+        return trim((string)$value) !== '';
+    }));
+
+    if (!empty($policy['required_doc_count'])) {
+        if ($selectedDocCount < (int)$policy['required_doc_count']) {
+flash_redirect('../views/apply_leave.php', 'error', 'Please select the required supporting document type(s) for this leave.');
+        }
+        if ($uploadedFileCount < (int)$policy['required_doc_count']) {
+flash_redirect('../views/apply_leave.php', 'error', 'Please upload the required supporting file(s) for this leave type.');
+        }
+    }
+
+    $typeNameForValidation = strtolower(trim((string)($typeInfo['name'] ?? '')));
+    if (in_array($typeNameForValidation, ['sick leave', 'sick'], true) && $days > 5) {
+        if (!$medicalCertificateAttached) {
+flash_redirect('../views/apply_leave.php', 'error', 'Medical certificate is required for sick leave beyond five (5) continuous working days.');
+        }
+        if ($uploadedFileCount < 1) {
+flash_redirect('../views/apply_leave.php', 'error', 'Please upload the medical certificate file for this sick leave request.');
+        }
+    }
     $extraData = [
         'filing_date' => $filingDate,
         'leave_subtype' => $leaveSubtype !== '' ? $leaveSubtype : null,
@@ -461,6 +549,7 @@ flash_redirect('../views/apply_leave.php', 'error', $err);
         'medical_certificate_attached' => $medicalCertificateAttached,
         'affidavit_attached' => $affidavitAttached,
         'emergency_case' => $emergencyCase,
+        'force_balance_only' => !empty($details['force_balance_only']) ? 1 : 0,
     ];
 
     $result = $leaveModel->apply(

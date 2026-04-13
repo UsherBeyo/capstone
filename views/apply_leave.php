@@ -25,6 +25,8 @@ function safeFloat($v): float {
 
 function leaveRulePreset(string $typeName): array {
     $key = strtolower(trim($typeName));
+    $key = preg_replace('/\s+/', ' ', $key);
+    $key = str_replace([' / ', ' /', '/ '], '/', $key);
 
     $base = [
         'bucket' => 'annual',
@@ -34,7 +36,11 @@ function leaveRulePreset(string $typeName): array {
         'show_rules' => true,
         'min_days_notice' => 0,
         'max_days' => null,
+        'max_days_per_year' => null,
+        'deduct_balance' => true,
+        'required_doc_count' => 0,
         'allow_emergency' => false,
+        'show_force_balance_only' => false,
         'subtype_label' => '',
         'subtypes' => [],
         'show_location_text' => false,
@@ -48,6 +54,7 @@ function leaveRulePreset(string $typeName): array {
         'show_terminal_reason' => false,
         'documents' => [],
         'rules_text' => [],
+        'used_by_year' => [],
     ];
 
     switch ($key) {
@@ -66,19 +73,16 @@ function leaveRulePreset(string $typeName): array {
                 ],
                 'show_location_text' => true,
                 'location_label' => 'Location / Destination',
-                'documents' => [
-                    'travel_authority' => 'Travel authority / clearance if applicable',
-                ],
                 'rules_text' => [
-                    'It shall be filed five (5) days in advance, whenever possible, of the effective date of such leave.',
-                    'Vacation leave within the Philippines or abroad shall be indicated for travel authority and clearance purposes.',
+                    'Vacation leave must be filed five (5) days before the start date of leave.',
+                    'This leave deducts from the Vacational Balance.',
                 ],
             ]);
 
-                case 'mandatory / forced leave':
         case 'mandatory/forced leave':
-        case 'mandatory / force leave':
+        case 'mandatory / forced leave':
         case 'mandatory/force leave':
+        case 'mandatory / force leave':
         case 'mandatory':
         case 'forced':
         case 'forced leave':
@@ -89,11 +93,12 @@ function leaveRulePreset(string $typeName): array {
                 'bucket_label' => 'Force Balance',
                 'secondary_bucket' => 'annual',
                 'secondary_bucket_label' => 'Vacational Balance',
-                'min_days_notice' => 0,
+                'min_days_notice' => 5,
+                'show_force_balance_only' => true,
                 'rules_text' => [
-                    'Annual five-day vacation leave shall be forfeited if not taken during the year.',
-                    'If the scheduled leave is cancelled due to exigency of service, it shall no longer be deducted.',
-                    'Availment of one (1) day or more vacation leave may be considered in complying with mandatory/forced leave, subject to rules.',
+                    'Force leave must be filed five (5) days before the start date of leave.',
+                    'Standard force leave deduction affects both Force Balance and Vacational Balance.',
+                    'If this leave is for official seminar or work-aligned attendance, tick the checkbox below so it deducts only from Force Balance and not from Vacational Balance.',
                 ],
             ]);
 
@@ -110,13 +115,14 @@ function leaveRulePreset(string $typeName): array {
                 ],
                 'show_illness_text' => true,
                 'documents' => [
-                    'medical_certificate' => 'Medical Certificate',
-                    'affidavit' => 'Affidavit if medical consultation was not availed of',
+                    'medical_certificate' => 'Medical Certificate (required when the sick leave covers more than five (5) continuous working days)',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'It shall be filed immediately upon employee’s return from such leave.',
-                    'If filed in advance or exceeding five (5) days, application shall be accompanied by a medical certificate.',
-                    'If medical consultation was not availed of, an affidavit should be executed by the applicant.',
+                    'If the sick leave covers more than five (5) continuous working days, a medical certificate is required.',
+                    'Sick leave should be filed within one (1) calendar month from the date of leave.',
+                    'If filed beyond one (1) calendar month, personnel will decide whether it will be recorded as with pay or without pay.',
+                    'When recorded as without pay, Sick Balance will not be deducted and the leave will be treated as without pay on the printable form.',
                 ],
             ]);
 
@@ -126,15 +132,15 @@ function leaveRulePreset(string $typeName): array {
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
                 'max_days' => 105,
+                'deduct_balance' => false,
                 'show_expected_delivery' => true,
                 'documents' => [
-                    'proof_of_pregnancy' => 'Proof of pregnancy (ultrasound / doctor’s certificate)',
-                    'allocation_form' => 'Notice of Allocation of Maternity Leave Credits (if needed)',
+                    'proof_of_pregnancy' => 'Proof of pregnancy',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Maternity leave is for 105 days.',
-                    'Proof of pregnancy such as ultrasound or doctor’s certificate on expected date of delivery is required.',
-                    'Accomplished Notice of Allocation of Maternity Leave Credits may be needed.',
+                    'Proof of pregnancy attachment is required.',
+                    'This leave does not deduct from any leave balance.',
                 ],
             ]);
 
@@ -144,13 +150,17 @@ function leaveRulePreset(string $typeName): array {
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
                 'max_days' => 7,
+                'max_days_per_year' => 7,
+                'deduct_balance' => false,
                 'documents' => [
-                    'child_delivery_proof' => 'Proof of child’s delivery (birth certificate / medical certificate)',
-                    'marriage_contract' => 'Marriage contract',
+                    'child_delivery_proof' => 'Proof of child’s delivery (Birth Certificate or Medical Certificate)',
+                    'marriage_contract' => 'Marriage Contract',
                 ],
+                'required_doc_count' => 2,
                 'rules_text' => [
-                    'Paternity leave is for 7 days.',
-                    'Proof of child’s delivery and marriage contract are required.',
+                    'Paternity leave is limited to seven (7) days per year.',
+                    'If the total requested or already filed days exceed seven (7), the request should be filed as Vacation Leave instead.',
+                    'This leave does not deduct from any leave balance.',
                 ],
             ]);
 
@@ -159,8 +169,10 @@ function leaveRulePreset(string $typeName): array {
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
                 'max_days' => 3,
-                'min_days_notice' => 7,
-                'allow_emergency' => true,
+                'max_days_per_year' => 3,
+                'min_days_notice' => 5,
+                'deduct_balance' => false,
+                'allow_emergency' => false,
                 'subtype_label' => 'Special Privilege Leave Details',
                 'subtypes' => [
                     'within_ph' => 'Within the Philippines',
@@ -169,11 +181,14 @@ function leaveRulePreset(string $typeName): array {
                 'show_location_text' => true,
                 'location_label' => 'Location / Destination',
                 'documents' => [
-                    'travel_authority' => 'Travel authority / clearance if applicable',
+                    'special_privilege_supporting_document' => 'Special Privilege Leave supporting document',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'It shall be filed/approved for at least one (1) week prior to availment, except in emergency cases.',
-                    'Travel details shall be indicated for travel authority and clearance purposes.',
+                    'Special Privilege Leave must be filed five (5) days before the start date.',
+                    'Only up to three (3) days may be consumed in one year.',
+                    'Supporting document attachment is required.',
+                    'This leave does not deduct from any leave balance.',
                 ],
             ]);
 
@@ -182,13 +197,18 @@ function leaveRulePreset(string $typeName): array {
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
                 'max_days' => 7,
+                'max_days_per_year' => 7,
                 'min_days_notice' => 5,
+                'deduct_balance' => false,
                 'documents' => [
-                    'solo_parent_id' => 'Updated Solo Parent Identification Card',
+                    'solo_parent_id' => 'Solo Parent Identification Card',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'It shall be filed in advance or whenever possible five (5) days before going on such leave.',
-                    'Updated Solo Parent Identification Card is required.',
+                    'Solo Parent Leave is limited to seven (7) days per year.',
+                    'It must be filed five (5) to seven (7) days before the start date of leave.',
+                    'Solo Parent Identification Card attachment is required.',
+                    'This leave does not deduct from any leave balance.',
                 ],
             ]);
 
@@ -204,13 +224,13 @@ function leaveRulePreset(string $typeName): array {
                 ],
                 'show_other_purpose' => true,
                 'documents' => [
-                    'agency_requirements' => 'Agency internal requirements, if any',
-                    'study_contract' => 'Contract between agency head and employee',
+                    'study_contract' => 'Study Leave Contract',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Study leave is up to 6 months.',
-                    'Agency internal requirements, if any, must be met.',
-                    'A contract between the agency head or authorized representative and the employee is required.',
+                    'Study Leave may be granted for up to six (6) months.',
+                    'The study leave contract attachment is required.',
+                    'This leave deducts from the Vacational Balance.',
                 ],
             ]);
 
@@ -220,34 +240,38 @@ function leaveRulePreset(string $typeName): array {
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
                 'max_days' => 10,
+                'max_days_per_year' => 10,
+                'deduct_balance' => false,
                 'allow_emergency' => true,
                 'documents' => [
-                    'barangay_protection_order' => 'Barangay Protection Order / certification',
-                    'court_protection_order' => 'Temporary/Permanent Protection Order / certification',
-                    'police_report' => 'Police report',
-                    'medical_certificate' => 'Medical certificate, if applicable',
+                    'barangay_protection_order' => 'Barangay Protection Order (BPO)',
+                    'court_protection_order' => 'Temporary/Permanent Protection Order (TPO/PPO)',
+                    'bpo_tpo_ppo_filing_certification' => 'Certification that the BPO/TPO/PPO application has been filed',
+                    'police_report_or_medical_certificate' => 'Police Report and/or Medical Certificate',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
+                    'VAWC leave is limited to ten (10) days per year.',
                     'It shall be filed in advance or immediately upon the woman employee’s return from such leave.',
-                    'Supporting documents such as BPO, TPO/PPO, certifications, police report, or medical certificate may be required.',
+                    'At least one supporting document from the list is required.',
+                    'This leave does not deduct from any leave balance.',
                 ],
             ]);
 
-        case 'rehabilitation leave':
         case 'rehabilitation privilege':
+        case 'rehabilitation leave':
             return array_merge($base, [
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
-                'max_days' => 180,
+                'max_days' => 300,
                 'documents' => [
-                    'letter_request' => 'Letter request',
-                    'police_report' => 'Relevant report such as police report, if any',
-                    'medical_certificate' => 'Medical certificate on injuries and treatment',
-                    'government_physician_concurrence' => 'Written concurrence of a government physician if attending physician is private',
+                    'rehabilitation_documents' => 'Rehabilitation Leave Supporting Document',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Application shall be made within one (1) week from the time of the accident except when a longer period is warranted.',
-                    'Relevant reports and medical certificate are required.',
+                    'Rehabilitation Leave may be granted for up to ten (10) months.',
+                    'Supporting attachment is required.',
+                    'This leave deducts from the Vacational Balance.',
                 ],
             ]);
 
@@ -256,17 +280,15 @@ function leaveRulePreset(string $typeName): array {
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
                 'max_days' => 60,
-                'min_days_notice' => 5,
-                'allow_emergency' => true,
                 'show_surgery_details' => true,
                 'documents' => [
-                    'medical_certificate' => 'Medical certificate from proper medical authorities',
-                    'clinical_summary' => 'Clinical summary / histopathological report / operative technique',
+                    'women_leave_supporting_document' => 'Special Leave Benefits for Women supporting document',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Application may be filed at least five (5) days prior to scheduled gynecological surgery.',
-                    'In emergency cases, application shall be filed immediately upon employee’s return.',
-                    'Medical certificate and supporting clinical records are required.',
+                    'Special Leave Benefits for Women may be granted for up to two (2) months.',
+                    'Supporting attachment is required.',
+                    'This leave deducts from the Vacational Balance.',
                 ],
             ]);
 
@@ -275,13 +297,18 @@ function leaveRulePreset(string $typeName): array {
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
                 'max_days' => 5,
+                'max_days_per_year' => 5,
+                'allow_emergency' => true,
                 'show_calamity_location' => true,
                 'documents' => [
-                    'calamity_proof' => 'Proof that residence is in declared calamity area',
+                    'calamity_supporting_document' => 'Proof that the employee is eligible for Special Emergency (Calamity) Leave',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Can be applied for a maximum of five (5) working days, straight or staggered, within thirty (30) days from actual occurrence.',
-                    'This privilege shall be enjoyed once a year only.',
+                    'Special Emergency (Calamity) Leave may be applied for a maximum of five (5) straight working days or on a staggered basis within thirty (30) days from the actual occurrence of the calamity or disaster.',
+                    'It may be enjoyed once a year only.',
+                    'Supporting proof is required and must be validated by the office.',
+                    'This leave deducts from the Vacational Balance.',
                 ],
             ]);
 
@@ -291,10 +318,12 @@ function leaveRulePreset(string $typeName): array {
                 'bucket_label' => 'Vacational Balance',
                 'show_monetization_reason' => true,
                 'documents' => [
-                    'letter_request' => 'Letter request stating valid and justifiable reasons',
+                    'monetization_attachment' => 'Monetization Supporting Attachment',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Application for monetization of fifty percent (50%) or more of accumulated leave credits shall be accompanied by a letter request.',
+                    'Attachment is required for monetization of leave credits.',
+                    'This leave deducts from the Vacational Balance.',
                 ],
             ]);
 
@@ -302,12 +331,15 @@ function leaveRulePreset(string $typeName): array {
             return array_merge($base, [
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
+                'deduct_balance' => false,
                 'show_terminal_reason' => true,
                 'documents' => [
-                    'separation_proof' => 'Proof of resignation, retirement, or separation from service',
+                    'proof_of_separation' => 'Proof of resignation, retirement, or separation from the service',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Proof of resignation, retirement, or separation from service is required.',
+                    'Proof of resignation, retirement, or separation from the service is required.',
+                    'This leave does not deduct from any leave balance.',
                 ],
             ]);
 
@@ -315,11 +347,14 @@ function leaveRulePreset(string $typeName): array {
             return array_merge($base, [
                 'bucket' => 'annual',
                 'bucket_label' => 'Vacational Balance',
+                'deduct_balance' => false,
                 'documents' => [
-                    'dswd_proof' => 'Authenticated copy of Pre-Adoptive Placement Authority from DSWD',
+                    'pre_adoptive_placement_authority' => 'Authenticated copy of the Pre-Adoptive Placement Authority issued by the DSWD',
                 ],
+                'required_doc_count' => 1,
                 'rules_text' => [
-                    'Application shall be filed with an authenticated copy of the Pre-Adoptive Placement Authority issued by DSWD.',
+                    'Application for Adoption Leave shall be filed with an authenticated copy of the Pre-Adoptive Placement Authority issued by the DSWD.',
+                    'This leave does not deduct from any leave balance.',
                 ],
             ]);
 
@@ -327,6 +362,7 @@ function leaveRulePreset(string $typeName): array {
             return $base;
     }
 }
+
 
 $empStmt = $db->prepare("
     SELECT e.id, e.first_name, e.middle_name, e.last_name, e.department, e.position, e.salary,
@@ -346,6 +382,24 @@ if (!$employee) {
 $typesStmt = $db->query("SELECT * FROM leave_types ORDER BY id ASC");
 $leaveTypes = $typesStmt->fetchAll(PDO::FETCH_ASSOC);
 
+$leaveTypeUsageByYear = [];
+$usageStmt = $db->prepare("
+    SELECT leave_type_id, YEAR(start_date) AS usage_year, SUM(total_days) AS used_days
+    FROM leave_requests
+    WHERE employee_id = ?
+      AND leave_type_id IS NOT NULL
+      AND status IN ('pending', 'approved')
+    GROUP BY leave_type_id, YEAR(start_date)
+");
+$usageStmt->execute([$emp_id]);
+foreach ($usageStmt->fetchAll(PDO::FETCH_ASSOC) as $usageRow) {
+    $typeId = (int)($usageRow['leave_type_id'] ?? 0);
+    $year = (string)($usageRow['usage_year'] ?? '');
+    if ($typeId > 0 && $year !== '') {
+        $leaveTypeUsageByYear[$typeId][$year] = safeFloat($usageRow['used_days'] ?? 0);
+    }
+}
+
 $balanceMap = [
     'annual' => safeFloat($employee['annual_balance'] ?? 0),
     'sick'   => safeFloat($employee['sick_balance'] ?? 0),
@@ -360,6 +414,7 @@ foreach ($leaveTypes as $lt) {
     $preset['name'] = (string)$lt['name'];
     $preset['current_balance'] = $balanceMap[$preset['bucket']] ?? 0;
     $preset['secondary_balance'] = !empty($preset['secondary_bucket']) ? ($balanceMap[$preset['secondary_bucket']] ?? 0) : null;
+    $preset['used_by_year'] = $leaveTypeUsageByYear[(int)$lt['id']] ?? [];
     $leaveTypeRulesById[(int)$lt['id']] = $preset;
 }
 
@@ -719,6 +774,13 @@ if (attachmentInput && attachmentFileList) {
                     <textarea name="details[terminal_reason]" id="detail_terminal_reason" class="compact-textarea" placeholder="Indicate resignation / retirement / separation details"></textarea>
                 </div>
 
+                <div id="force-balance-only-wrapper" style="display:none;margin-top:16px;">
+                    <label class="chip">
+                        <input type="checkbox" name="details[force_balance_only]" id="detail_force_balance_only" value="1" style="width:auto;">
+                        Official seminar / work-aligned attendance (deduct from Force Balance only; do not deduct Vacational Balance)
+                    </label>
+                </div>
+
                 <div style="margin-top:16px;">
                     <label for="reason">General Reason / Remarks</label>
                     <textarea name="reason" id="reason" rows="5" required class="compact-textarea" placeholder="Enter the reason for your leave request"></textarea>
@@ -751,8 +813,9 @@ if (attachmentInput && attachmentFileList) {
                 </div>
             </div>
 
+            <div id="submit-block-note" class="warning-box" style="margin-top:0;margin-bottom:12px;"></div>
             <div style="text-align:center;margin-top:20px;">
-                <button type="submit" style="padding:12px 32px;font-size:16px;">Submit Leave Request</button>
+                <button type="submit" id="submitLeaveButton" style="padding:12px 32px;font-size:16px;">Submit Leave Request</button>
             </div>
         </form>
     </div>
@@ -798,6 +861,7 @@ function renderSubtypeOptions(rule) {
 function renderDocuments(rule) {
     const section = document.getElementById('documents-section');
     const list = document.getElementById('documents-list');
+    const selectedDocs = Array.from(document.querySelectorAll('input[name="supporting_documents[]"]:checked')).map(input => input.value);
     list.innerHTML = '';
 
     if (!rule || !rule.documents || Object.keys(rule.documents).length === 0) {
@@ -809,11 +873,19 @@ function renderDocuments(rule) {
         const item = document.createElement('label');
         item.className = 'doc-item';
         item.innerHTML = `
-            <input type="checkbox" name="supporting_documents[]" value="${key}">
+            <input type="checkbox" name="supporting_documents[]" value="${key}" ${selectedDocs.includes(key) ? 'checked' : ''}>
             <span>${text}</span>
         `;
         list.appendChild(item);
     });
+
+    if ((rule.required_doc_count || 0) > 0) {
+        const note = document.createElement('div');
+        note.className = 'muted-note';
+        note.style.marginTop = '8px';
+        note.textContent = `Required upload count for this leave: ${rule.required_doc_count}`;
+        list.appendChild(note);
+    }
 
     section.classList.add('active');
 }
@@ -838,9 +910,39 @@ function renderRules(rule) {
     ruleBox.classList.add('active');
 }
 
+function getSelectedRuleYear() {
+    const start = document.getElementById('start_date').value;
+    if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
+        return start.slice(0, 4);
+    }
+    const filing = document.querySelector('input[name="filing_date"]').value;
+    if (filing && /^\d{4}-\d{2}-\d{2}$/.test(filing)) {
+        return filing.slice(0, 4);
+    }
+    return String(new Date().getFullYear());
+}
+
+function getRuleUsage(rule) {
+    if (!rule || !rule.used_by_year) {
+        return 0;
+    }
+    const year = getSelectedRuleYear();
+    return Number(rule.used_by_year[year] || 0);
+}
+
+function getAttachmentCount() {
+    const attachmentInput = document.getElementById('attachments');
+    return attachmentInput && attachmentInput.files ? attachmentInput.files.length : 0;
+}
+
+function getSelectedSupportingDocumentCount() {
+    return document.querySelectorAll('input[name="supporting_documents[]"]:checked').length;
+}
+
 function updateWarning(rule) {
     const warningBox = document.getElementById('warning-box');
     const start = document.getElementById('start_date').value;
+    const end = document.getElementById('end_date').value;
     const filing = document.querySelector('input[name="filing_date"]').value;
     const totalDays = parseFloat(document.getElementById('total_days').value || '0');
 
@@ -854,12 +956,17 @@ function updateWarning(rule) {
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
             if (diffDays < rule.min_days_notice) {
-                warnings.push(`This leave is normally filed at least ${rule.min_days_notice} day(s) in advance.`);
+                warnings.push(`This leave is filed at least ${rule.min_days_notice} day(s) in advance.`);
             }
         }
 
         if (rule.max_days && totalDays > rule.max_days) {
-            warnings.push(`This leave type normally allows up to ${rule.max_days} day(s).`);
+            warnings.push(`This leave type allows up to ${rule.max_days} day(s) per application.`);
+        }
+
+        const usedThisYear = getRuleUsage(rule);
+        if (rule.max_days_per_year && (usedThisYear + totalDays) > Number(rule.max_days_per_year)) {
+            warnings.push(`This leave type allows up to ${rule.max_days_per_year} day(s) per year. Already filed this year: ${usedThisYear}.`);
         }
 
         const emergencyChecked = document.getElementById('emergency_case').checked;
@@ -867,8 +974,19 @@ function updateWarning(rule) {
             warnings.push('Emergency filing is not normally allowed for this leave type.');
         }
 
-        if ((rule.name || '').toLowerCase().includes('sick') && totalDays > 5) {
-            warnings.push('Sick leave exceeding five (5) days should be accompanied by a medical certificate.');
+        const isSick = (rule.name || '').toLowerCase().includes('sick');
+        if (isSick && totalDays > 5) {
+            warnings.push('Sick leave exceeding five (5) continuous working days requires a medical certificate.');
+        }
+
+        if (isSick && end && filing) {
+            const endDate = new Date(end + 'T00:00:00');
+            const filingDate = new Date(filing + 'T00:00:00');
+            const lateCheck = new Date(endDate);
+            lateCheck.setMonth(lateCheck.getMonth() + 1);
+            if (filingDate > lateCheck) {
+                warnings.push('This sick leave was filed beyond one (1) calendar month. Personnel will choose whether it is with pay or without pay.');
+            }
         }
     }
 
@@ -882,6 +1000,70 @@ function updateWarning(rule) {
     warningBox.classList.add('active');
 }
 
+function refreshSubmitState(rule) {
+    const submitBtn = document.getElementById('submitLeaveButton');
+    const noteBox = document.getElementById('submit-block-note');
+    if (!submitBtn || !noteBox) {
+        return;
+    }
+
+    let reasons = [];
+    const start = document.getElementById('start_date').value;
+    const filing = document.querySelector('input[name="filing_date"]').value;
+    const totalDays = parseFloat(document.getElementById('total_days').value || '0');
+    const selectedDocs = getSelectedSupportingDocumentCount();
+    const attachmentCount = getAttachmentCount();
+
+    if (rule) {
+        if (rule.min_days_notice && start && filing) {
+            const startDate = new Date(start + 'T00:00:00');
+            const filingDate = new Date(filing + 'T00:00:00');
+            const diffDays = Math.floor((startDate - filingDate) / (1000 * 60 * 60 * 24));
+            if (diffDays < rule.min_days_notice) {
+                reasons.push(`Minimum notice requirement not met (${rule.min_days_notice} day(s)).`);
+            }
+        }
+
+        if (rule.max_days && totalDays > rule.max_days) {
+            reasons.push(`Maximum days per application exceeded (${rule.max_days}).`);
+        }
+
+        const usedThisYear = getRuleUsage(rule);
+        if (rule.max_days_per_year && (usedThisYear >= Number(rule.max_days_per_year) || (usedThisYear + totalDays) > Number(rule.max_days_per_year))) {
+            reasons.push(`Maximum days per year exceeded (${rule.max_days_per_year}).`);
+        }
+
+        if ((rule.required_doc_count || 0) > 0) {
+            if (selectedDocs < Number(rule.required_doc_count)) {
+                reasons.push(`Select at least ${rule.required_doc_count} required document type(s).`);
+            }
+            if (attachmentCount < Number(rule.required_doc_count)) {
+                reasons.push(`Upload at least ${rule.required_doc_count} supporting attachment file(s).`);
+            }
+        }
+
+        const isSick = (rule.name || '').toLowerCase().includes('sick');
+        const medCertChecked = !!document.querySelector('input[name="medical_certificate_attached"]:checked');
+        if (isSick && totalDays > 5) {
+            if (!medCertChecked) {
+                reasons.push('Medical certificate checkbox must be marked for sick leave beyond five (5) days.');
+            }
+            if (attachmentCount < 1) {
+                reasons.push('Upload the medical certificate file for this sick leave request.');
+            }
+        }
+    }
+
+    submitBtn.disabled = reasons.length > 0;
+    if (reasons.length > 0) {
+        noteBox.innerHTML = reasons.join('<br>');
+        noteBox.classList.add('active');
+    } else {
+        noteBox.innerHTML = '';
+        noteBox.classList.remove('active');
+    }
+}
+
 function updateLeaveTypeUI() {
     const typeElem = document.getElementById('leave_type');
     const selectedId = typeElem.value;
@@ -893,7 +1075,9 @@ function updateLeaveTypeUI() {
     detailsSection.classList.toggle('active', !!rule);
 
     if (rule) {
-        if (rule.secondary_bucket_label && rule.secondary_balance !== null) {
+        if (rule.deduct_balance === false) {
+            balanceBanner.innerHTML = `<strong>${rule.name}</strong> does not deduct from any leave balance.`;
+        } else if (rule.secondary_bucket_label && rule.secondary_balance !== null) {
             balanceBanner.innerHTML = `<strong>${rule.name}</strong> deducts from <strong>${rule.bucket_label}</strong> and <strong>${rule.secondary_bucket_label}</strong> · Current balances: <strong>${Number(rule.current_balance).toFixed(3)}</strong> + <strong>${Number(rule.secondary_balance).toFixed(3)}</strong> day(s)`;
         } else {
             balanceBanner.innerHTML = `<strong>${rule.name}</strong> deducts from <strong>${rule.bucket_label}</strong> · Current balance: <strong>${Number(rule.current_balance).toFixed(3)}</strong> day(s)`;
@@ -918,8 +1102,10 @@ function updateLeaveTypeUI() {
     document.getElementById('surgery-wrapper').style.display = rule && rule.show_surgery_details ? 'block' : 'none';
     document.getElementById('monetization-wrapper').style.display = rule && rule.show_monetization_reason ? 'block' : 'none';
     document.getElementById('terminal-wrapper').style.display = rule && rule.show_terminal_reason ? 'block' : 'none';
+    document.getElementById('force-balance-only-wrapper').style.display = rule && rule.show_force_balance_only ? 'block' : 'none';
 
     updateWarning(rule);
+    refreshSubmitState(rule);
 }
 
 window.addEventListener('load', function () {
@@ -952,6 +1138,21 @@ window.addEventListener('load', function () {
         emergencyCase.addEventListener('change', updateLeaveTypeUI);
     }
 
+    document.addEventListener('change', function (event) {
+        if (!event.target) {
+            return;
+        }
+        if (event.target.name === 'medical_certificate_attached' || event.target.id === 'detail_force_balance_only') {
+            updateLeaveTypeUI();
+            return;
+        }
+        if (event.target.name === 'supporting_documents[]') {
+            const selectedId = document.getElementById('leave_type').value;
+            const rule = leaveTypeRules[selectedId] || null;
+            refreshSubmitState(rule);
+        }
+    });
+
     updateLeaveTypeUI();
 });
 
@@ -967,9 +1168,9 @@ if (attachmentInput && attachmentFileList) {
             chip.textContent = file.name + ' (' + sizeMb + ' MB)';
             attachmentFileList.appendChild(chip);
         });
+        updateLeaveTypeUI();
     });
 }
-
 </script>
 
 </body>

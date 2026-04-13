@@ -127,9 +127,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
             lr.total_days,
             lr.snapshot_annual_balance,
             lr.snapshot_sick_balance,
-            lr.snapshot_force_balance
+            lr.snapshot_force_balance,
+            lrf.cert_vacation_less_this_application,
+            lrf.cert_sick_less_this_application
          FROM leave_requests lr
          LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+         LEFT JOIN leave_request_forms lrf ON lrf.leave_request_id = lr.id
          WHERE lr.employee_id = ?
          ORDER BY lr.start_date ASC, lr.created_at ASC"
     );
@@ -162,7 +165,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'leave_card' && (
             $statusRaw = 'earning';
         } else {
             if ($statusRaw === 'approved') {
-                if ($isSick) {
+                if ($r['cert_vacation_less_this_application'] !== null || $r['cert_sick_less_this_application'] !== null) {
+                    $vacDed = floatval($r['cert_vacation_less_this_application'] ?? 0);
+                    $sickDed = floatval($r['cert_sick_less_this_application'] ?? 0);
+                } elseif ($isSick) {
                     $sickDed = $days;
                 } else {
                     $vacDed = $days;

@@ -232,9 +232,12 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
             lr.total_days,
             lr.snapshot_annual_balance,
             lr.snapshot_sick_balance,
-            lr.snapshot_force_balance
+            lr.snapshot_force_balance,
+            lrf.cert_vacation_less_this_application,
+            lrf.cert_sick_less_this_application
         FROM leave_requests lr
         LEFT JOIN leave_types lt ON lt.id = lr.leave_type_id
+        LEFT JOIN leave_request_forms lrf ON lrf.leave_request_id = lr.id
         WHERE lr.employee_id = ?
         ORDER BY COALESCE(lr.start_date, DATE(lr.created_at)) ASC, lr.created_at ASC, lr.id ASC
     ";
@@ -261,7 +264,10 @@ function buildLeaveCardRows(PDO $db, int $empId, bool $hasTransDate, bool $hasSn
         $sickDed = 0.0;
 
         if ($statusRaw === 'approved') {
-            if (in_array($typeLower, ['sick', 'sick leave'], true)) {
+            if ($r['cert_vacation_less_this_application'] !== null || $r['cert_sick_less_this_application'] !== null) {
+                $vacDed = floatval($r['cert_vacation_less_this_application'] ?? 0);
+                $sickDed = floatval($r['cert_sick_less_this_application'] ?? 0);
+            } elseif (in_array($typeLower, ['sick', 'sick leave'], true)) {
                 $sickDed = $days;
             } else {
                 $vacDed = $days;
@@ -425,6 +431,30 @@ function normalizeLeaveTypePreviewKey(string $name): string {
     return $aliases[$key] ?? $key;
 }
 
+
+function isLateSickForPreview(array $row): bool {
+    $type = normalizeLeaveTypePreviewKey((string)($row['leave_type_name'] ?? $row['leave_type'] ?? ''));
+    if ($type !== 'sick leave') {
+        return false;
+    }
+
+    $filingDate = trim((string)($row['filing_date'] ?? ''));
+    $endDate = trim((string)($row['end_date'] ?? ''));
+    if ($filingDate === '' || $endDate === '') {
+        return false;
+    }
+
+    try {
+        $filing = new DateTime($filingDate);
+        $end = new DateTime($endDate);
+        $end->modify('+1 month');
+        return $filing > $end;
+    } catch (Throwable $t) {
+        return false;
+    }
+}
+
+
 function computeProjectedBalances(array $row): array {
     $annualBefore = floatval($row['annual_balance'] ?? 0);
     $sickBefore   = floatval($row['sick_balance'] ?? 0);
@@ -432,6 +462,19 @@ function computeProjectedBalances(array $row): array {
 
     $days = floatval($row['total_days'] ?? 0);
     $type = normalizeLeaveTypePreviewKey((string)($row['leave_type_name'] ?? $row['leave_type'] ?? ''));
+    $details = decodeLeaveRequestMeta($row['details_json'] ?? null);
+    $forceBalanceOnly = !empty($details['force_balance_only']);
+
+    $nonDeductTypes = [
+        'maternity leave',
+        'paternity leave',
+        'special privilege leave',
+        'solo parent leave',
+        'vawc leave',
+        '10-day vawc leave',
+        'terminal leave',
+        'adoption leave',
+    ];
 
     $projected = [
         'annual_before' => $annualBefore,
@@ -443,16 +486,26 @@ function computeProjectedBalances(array $row): array {
         'bucket'        => 'none',
     ];
 
-    if ($type === 'vacation leave') {
+    if (in_array($type, $nonDeductTypes, true)) {
+        $projected['bucket'] = 'non_deduct';
+    } elseif ($type === 'vacation leave') {
         $projected['annual_after'] = max(0, $annualBefore - $days);
         $projected['bucket'] = 'annual';
     } elseif ($type === 'sick leave') {
-        $projected['sick_after'] = max(0, $sickBefore - $days);
-        $projected['bucket'] = 'sick';
+        if (isLateSickForPreview($row)) {
+            $projected['bucket'] = 'sick_late';
+        } else {
+            $projected['sick_after'] = max(0, $sickBefore - $days);
+            $projected['bucket'] = 'sick';
+        }
     } elseif ($type === 'mandatory/forced leave') {
-        $projected['annual_after'] = max(0, $annualBefore - $days);
         $projected['force_after'] = max(0, $forceBefore - $days);
-        $projected['bucket'] = 'annual_force';
+        if ($forceBalanceOnly) {
+            $projected['bucket'] = 'force_only';
+        } else {
+            $projected['annual_after'] = max(0, $annualBefore - $days);
+            $projected['bucket'] = 'annual_force';
+        }
     }
 
     return $projected;
@@ -1316,9 +1369,9 @@ if (empty($_SESSION['csrf_token'])) {
 
                             <td class="col-balance">
                                 <div class="balance-stack compact">
-                                    <span class="balance-chip <?= $projected['bucket'] === 'annual' ? 'chip-affected' : ''; ?>">Vac: <strong><?= trunc3($projected['annual_after']); ?></strong></span>
+                                    <span class="balance-chip <?= in_array($projected['bucket'], ['annual', 'annual_force'], true) ? 'chip-affected' : ''; ?>">Vac: <strong><?= trunc3($projected['annual_after']); ?></strong></span>
                                     <span class="balance-chip <?= $projected['bucket'] === 'sick' ? 'chip-affected' : ''; ?>">Sick: <strong><?= trunc3($projected['sick_after']); ?></strong></span>
-                                    <span class="balance-chip <?= $projected['bucket'] === 'force' ? 'chip-affected' : ''; ?>">Force: <strong><?= trunc3($projected['force_after']); ?></strong></span>
+                                    <span class="balance-chip <?= in_array($projected['bucket'], ['force', 'annual_force', 'force_only'], true) ? 'chip-affected' : ''; ?>">Force: <strong><?= trunc3($projected['force_after']); ?></strong></span>
                                 </div>
                             </td>
 
@@ -1361,6 +1414,12 @@ if (empty($_SESSION['csrf_token'])) {
                                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                                     <input type="hidden" name="leave_id" value="<?= (int)$r['id']; ?>">
                                     <input type="hidden" name="action" value="approve">
+                                    <?php if (isLateSickForPreview($r)): ?>
+                                        <select name="approval_pay_status" required>
+                                            <option value="without_pay">Approve as Without Pay</option>
+                                            <option value="with_pay">Approve as With Pay</option>
+                                        </select>
+                                    <?php endif; ?>
                                     <input type="text" name="comments" placeholder="Optional note">
                                     <button type="submit">Final Approve</button>
                                 </form>
