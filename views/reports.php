@@ -711,14 +711,18 @@ if ($reportType === 'balance') {
     <h1><?= safe_h($reportTitle); ?></h1>
     <p class="page-subtitle" style="margin-bottom:14px;">Generate summaries, exports, and leave records</p>
 
-    <div class="ui-card" style="margin-bottom:24px;">
-        <h3>Report Filter</h3>
-        <form method="GET" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+    <div class="ui-card report-panel-card" style="margin-bottom:24px;">
+        <div class="report-panel-header">
+            <h3>Report Filter</h3>
+        </div>
+        <form method="GET" class="report-filter-row">
             <?php if($role === 'employee'): ?>
                 <input type="hidden" name="type" value="leave_card">
-                <p style="margin:0;">Viewing: <strong>Leave Card</strong></p>
+                <div class="report-filter-field">
+                    <p class="report-filter-static" style="margin:0;">Viewing: <strong>Leave Card</strong></p>
+                </div>
             <?php else: ?>
-            <div>
+            <div class="report-filter-field">
                 <label>Report Type:</label>
                 <select name="type">
                     <option value="summary" <?= ($reportType === 'summary' ? 'selected' : ''); ?>>Summary</option>
@@ -730,11 +734,11 @@ if ($reportType === 'balance') {
             <?php endif; ?>
 
             <?php if($reportType !== 'leave_card'): ?>
-            <div>
+            <div class="report-filter-field">
                 <label>Department:</label>
                 <?php if ($role === 'department_head'): ?>
                     <input type="hidden" name="dept" value="<?= safe_h($departmentFilter); ?>">
-                    <span><?= safe_h($departmentFilter ?: 'No department assigned'); ?></span>
+                    <span class="report-field-value"><?= safe_h($departmentFilter ?: 'No department assigned'); ?></span>
                 <?php else: ?>
                 <select name="dept">
                     <option value="">All Departments</option>
@@ -747,11 +751,11 @@ if ($reportType === 'balance') {
                 <?php endif; ?>
             </div>
             <?php else: ?>
-            <div>
+            <div class="report-filter-field">
                 <label>Employee:</label>
                 <?php if($role === 'employee'): ?>
                     <input type="hidden" name="employee_id" value="<?= safe_h($sessionEmpId); ?>">
-                    <span><?= safe_h($currentEmp ? (($currentEmp['first_name'] ?? '').' '.($currentEmp['last_name'] ?? '')) : ''); ?></span>
+                    <span class="report-field-value"><?= safe_h($currentEmp ? (($currentEmp['first_name'] ?? '').' '.($currentEmp['last_name'] ?? '')) : ''); ?></span>
                 <?php else: ?>
                     <select name="employee_id">
                         <option value="">-- select --</option>
@@ -773,31 +777,63 @@ if ($reportType === 'balance') {
             </div>
             <?php endif; ?>
 
-            <button type="submit">Apply Filter</button>
+            <div class="report-filter-field report-filter-button-field">
+                <label class="report-filter-label--hidden">Apply Filter</label>
+                <button type="submit" class="report-filter-button">Apply Filter</button>
+            </div>
 
             <?php
             $base = "?type=" . urlencode($reportType) . "&dept=" . urlencode($departmentFilter);
             if ($reportType === 'leave_card' && $employeeFilter) $base .= "&employee_id=" . intval($employeeFilter);
             ?>
             <?php if ($reportType === 'leave_card' && $employeeFilter): ?>
-                <a href="employee_profile.php?export=leave_card&id=<?= intval($employeeFilter); ?>" class="btn-export">Export Leave Card</a>
+                <a href="employee_profile.php?export=leave_card&id=<?= intval($employeeFilter); ?>" class="report-export-button">
+                    <span class="export-icon">📄</span> Export Leave Card
+                </a>
             <?php else: ?>
-                <a href="<?= $base; ?>&export=1&format=excel" class="btn-export">Export Excel</a>
-                <a href="<?= $base; ?>&export=1&format=pdf" class="btn-export">Export PDF</a>
+                <a href="<?= $base; ?>&export=1&format=excel" class="report-export-button">
+                    <span class="export-icon">📊</span> Export Excel
+                </a>
+                <a href="<?= $base; ?>&export=1&format=pdf" class="report-export-button">
+                    <span class="export-icon">📄</span> Export PDF
+                </a>
             <?php endif; ?>
         </form>
     </div>
 
     <?php if ($reportType === 'summary'): ?>
-        <div class="ui-card">
-            <h3>System Summary</h3>
-            <table>
-                <tr><th>Metric</th><th>Value</th></tr>
-                <tr><td>Total Employees</td><td><?= (int)$totalEmployees; ?></td></tr>
-                <tr><td>Pending Requests</td><td><?= (int)$totalPending; ?></td></tr>
-                <tr><td>Approved Requests</td><td><?= (int)$totalApproved; ?></td></tr>
-                <tr><td>Average Vacational Balance</td><td><?= trunc3($avgAnnualBalance); ?> days</td></tr>
-            </table>
+        <div class="ui-card report-summary-card">
+            <div class="report-panel-header">
+                <h3>System Summary</h3>
+            </div>
+            <div class="summary-table-wrapper">
+                <table class="report-summary-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>   Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Total Employees</td>
+                            <td><span class="summary-value-pill"><?= (int)$totalEmployees; ?></span></td>
+                        </tr> 
+                        <tr>
+                            <td>Pending Requests</td>
+                            <td><span class="summary-value-pill"><?= (int)$totalPending; ?></span></td>
+                        </tr>
+                        <tr>
+                            <td>Approved Requests</td>
+                            <td><span class="summary-value-pill"><?= (int)$totalApproved; ?></span></td>
+                        </tr>
+                        <tr>
+                            <td>Average Vacational Balance</td>
+                            <td><span class="summary-value-pill"><?= trunc3($avgAnnualBalance); ?> days</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
     <?php elseif ($reportType === 'balance'): ?>

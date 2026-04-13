@@ -191,7 +191,7 @@ if (empty($_SESSION['csrf_token'])) {
                                 <option value="Company Event" <?= ($h['type'] === 'Company Event' ? 'selected' : ''); ?>>Company Event</option>
                                 <option value="Other" <?= ($h['type'] === 'Other' || empty($h['type']) ? 'selected' : ''); ?>>Other</option>
                             </select>
-                            <button type="submit">Update</button>
+                            <button style="padding: 12px;" type="submit">Update</button>
                         </form>
                         <form method="POST" action="../controllers/HolidayController.php" class="holiday-delete-form">
                             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">

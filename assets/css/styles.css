@@ -369,7 +369,7 @@ small, .text-small {
     border-color: var(--primary-hover);
 }
 
-.btn-secondary {
+.btn-secondary {   
     background: #fff;
     color: var(--text);
     border-color: var(--border);
@@ -380,12 +380,12 @@ small, .text-small {
 }
 
 .btn-ghost {
-    background: #fff;
-    color: var(--text);
+    background: #2563eb;
+    color: #ffffff;
     border-color: var(--border);
 }
 .btn-ghost:hover { 
-    background: var(--bg);
+    background: #1d4ed8;
     border-color: var(--primary);
 }
 
@@ -430,6 +430,171 @@ small, .text-small {
 .ui-card-header { margin-bottom: 16px; }
 .ui-card-title { font-size: 22px; font-weight: 600; color: var(--text); margin:0; }
 .ui-card-actions { margin-top: 16px; display:flex; gap:8px; }
+
+.report-panel-card,
+.report-summary-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 16px;
+    box-shadow: none;
+    padding: 24px;
+}
+
+.report-panel-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 18px 0;
+}
+
+.report-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-end;
+}
+
+.report-filter-field {
+    flex: 1 1 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-filter-field label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #6B7280;
+    margin-bottom: 6px;
+}
+
+.report-filter-field select,
+.report-filter-field span {
+    height: 44px;
+    min-height: 44px;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    background: #F8FAFC;
+    padding: 0 12px;
+    font-size: 14px;
+    color: #334155;
+    display: inline-flex;
+    align-items: center;
+}
+
+.report-filter-field select {
+    width: 95%;
+}
+
+.report-filter-button-field {
+    flex: 0 0 220px;
+}
+
+.report-filter-button {
+    margin-bottom: 20px;
+    margin-right: 250px;
+    width: 100%;
+    height: 44px;
+    background: #2563EB;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.report-export-button {
+    margin-bottom: 20px;
+    height: 44px;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    background: #FFFFFF;
+    color: #0F172A;
+    padding: 0 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.report-export-button:hover {
+    background: #F8FAFC;
+}
+
+.export-icon {
+    font-size: 16px;
+}
+
+.summary-table-wrapper {
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #FFFFFF;
+}
+
+.report-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.report-summary-table thead th {
+    background: #F8FAFC;
+    color: #64748B;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    padding: 14px 16px;
+}
+
+.report-summary-table tbody td {
+    padding: 14px 16px;
+    border-top: 1px solid #E5E7EB;
+    text-align: start;
+}
+
+.report-summary-table tbody td:first-child {
+    color: #0F172A;
+    font-weight: 500;
+    padding-right: 40px;
+}
+
+.report-summary-table tbody td:last-child {
+    padding-left: 40px;
+    text-align:justify;
+}
+
+.summary-value-pill {
+    display:contents;
+    background: #EFF4FF;
+    color: #1D4ED8;
+    margin-right: 200px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.report-filter-static,
+.report-field-value {
+    width: 100%;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    color: #0F172A;
+    font-size: 14px;
+}
+
+.report-filter-label--hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    border: 0;
+}
 
 .collapsible-card {
     overflow: hidden; 
@@ -1148,13 +1313,13 @@ button:hover {
 }
 
 button.secondary, .btn-secondary {
-    background: #ffffff;
-    color: var(--text);
+    background: #2563eb;
+    color: #ffffff;
     border: 1px solid var(--border);
 }
 
 button.secondary:hover, .btn-secondary:hover {
-    background: var(--bg);
+    background: #1d4ed8;
 }
 
 /* export CSV button style */

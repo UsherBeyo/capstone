@@ -415,8 +415,18 @@ $calendarBaseUrl = $appBase . 'calendar';
         }
         .calendar-modal-trigger:hover {
             transform: translateY(-2px);
+            color: #ffffff;
+            background: #2563eb;
             box-shadow: 0 12px 26px rgba(15,23,42,0.08);
             border-color: rgba(37,99,235,0.22);
+        }
+        .calendar-modal-trigger:hover .calendar-trigger-title,
+        .calendar-modal-trigger:hover .calendar-trigger-sub {
+            color: #ffffff;
+        }
+        .calendar-modal-trigger:hover .calendar-trigger-count {
+            background: linear-gradient(135deg, #2563eb, #d2f0e6);
+            color: #ffffff;
         }
         .calendar-trigger-copy {
             min-width: 0;
@@ -431,6 +441,7 @@ $calendarBaseUrl = $appBase . 'calendar';
             font-size: 12px;
             color: var(--secondary-text);
         }
+        
         .calendar-trigger-count {
             flex-shrink: 0;
             min-width: 58px;
