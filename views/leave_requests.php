@@ -1506,7 +1506,7 @@ if (empty($_SESSION['csrf_token'])) {
                                                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token']; ?>">
                                                 <input type="hidden" name="leave_id" value="<?= (int)$r['id']; ?>">
                                                 <input type="hidden" name="action" value="mark_printed">
-                                                <button type="submit" class="btn-success" title="Mark this request as printed">Mark Printed</button>
+                                                <button type="submit" class="btn-success" title="Mark this request as printed">Mark as Printed</button>
                                             </form>
                                         <?php else: ?>
                                             <span class="status-badge approved">Printed</span>

@@ -392,7 +392,7 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
             margin-bottom: 24px;
         }
         .dashboard-intro {
-            background: linear-gradient(135deg, #ffffff 0%, #eef4ff 100%);
+            background: #ffffff;
             border: 1px solid rgba(37,99,235,0.16);
             box-shadow: 0 18px 36px rgba(37,99,235,.08);
         }
@@ -400,12 +400,12 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
         .dashboard-intro p { margin: 0; color: var(--muted); line-height: 1.65; }
         .dashboard-side-note {
             display:flex; flex-direction:column; justify-content:center; gap:10px;
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            background: #ffffff;
             color: #ffffff;
             box-shadow: 0 18px 40px rgba(37,99,235,.20);
         }
-        .dashboard-side-note .mini-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,.78); }
-        .dashboard-side-note .mini-value { font-size: 30px; font-weight: 800; color: #ffffff; }
+        .dashboard-side-note .mini-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: rgba(0, 0, 0, 0.78); }
+        .dashboard-side-note .mini-value { font-size: 30px; font-weight: 800; color: #000000; }
         .dashboard-metrics {
             display:grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -422,10 +422,10 @@ $monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
         .dashboard-metric .metric-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
         .dashboard-metric .metric-value { font-size: 30px; font-weight: 700; color: var(--text); line-height: 1; }
         .dashboard-metric .metric-sub { margin-top: 10px; font-size: 13px; color: var(--muted); }
-        .dashboard-metric:nth-child(1) { background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-color: rgba(37,99,235,.18); }
-        .dashboard-metric:nth-child(2) { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-color: rgba(16,185,129,.18); }
-        .dashboard-metric:nth-child(3) { background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border-color: rgba(249,115,22,.20); }
-        .dashboard-metric:nth-child(4) { background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); border-color: rgba(139,92,246,.18); }
+        .dashboard-metric:nth-child(1) { background: #ffffff; }
+        .dashboard-metric:nth-child(2) { background: #ffffff; }
+        .dashboard-metric:nth-child(3) { background: #ffffff; }
+        .dashboard-metric:nth-child(4) { background: #ffffff; }
         .dashboard-grid {
             display:grid;
             grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
