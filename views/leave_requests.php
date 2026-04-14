@@ -1232,7 +1232,7 @@ if (empty($_SESSION['csrf_token'])) {
                                             class="icon-action-btn labelled"
                                             onclick="openModal('deptDetailModal_<?= (int)$r['id']; ?>')"
                                             title="View full request details">
-                                        <span class="action-icon">👁</span>
+                                        <span class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 72 72" fill="currentColor" style="flex-shrink:0;"><path d="M 31 11 C 19.973 11 11 19.973 11 31 C 11 42.027 19.973 51 31 51 C 34.974166 51 38.672385 49.821569 41.789062 47.814453 L 54.726562 60.751953 C 56.390563 62.415953 59.088953 62.415953 60.751953 60.751953 C 62.415953 59.087953 62.415953 56.390563 60.751953 54.726562 L 47.814453 41.789062 C 49.821569 38.672385 51 34.974166 51 31 C 51 19.973 42.027 11 31 11 z M 31 19 C 37.616 19 43 24.384 43 31 C 43 37.616 37.616 43 31 43 C 24.384 43 19 37.616 19 31 C 19 24.384 24.384 19 31 19 z"/></svg></span>
                                         <span class="action-label">Details</span>
                                     </button>
 
@@ -1381,7 +1381,7 @@ if (empty($_SESSION['csrf_token'])) {
                                             class="icon-action-btn labelled"
                                             onclick="openModal('<?= $modalId; ?>')"
                                             title="Review details">
-                                        <span class="action-icon">👁</span>
+                                        <span class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 72 72" fill="currentColor" style="flex-shrink:0;"><path d="M 31 11 C 19.973 11 11 19.973 11 31 C 11 42.027 19.973 51 31 51 C 34.974166 51 38.672385 49.821569 41.789062 47.814453 L 54.726562 60.751953 C 56.390563 62.415953 59.088953 62.415953 60.751953 60.751953 C 62.415953 59.087953 62.415953 56.390563 60.751953 54.726562 L 47.814453 41.789062 C 49.821569 38.672385 51 34.974166 51 31 C 51 19.973 42.027 11 31 11 z M 31 19 C 37.616 19 43 24.384 43 31 C 43 37.616 37.616 43 31 43 C 24.384 43 19 37.616 19 31 C 19 24.384 24.384 19 31 19 z"/></svg></span>
                                         <span class="action-label">View</span>
                                     </button>
 
@@ -1389,7 +1389,7 @@ if (empty($_SESSION['csrf_token'])) {
                                        target="_blank"
                                        class="icon-action-btn labelled"
                                        title="Open full leave card">
-                                        <span class="action-icon">📄</span>
+                                        <span class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 52 52" fill="currentColor" style="flex-shrink:0;"><path d="m36.4 14.8h8.48a1.09 1.09 0 0 0 1.12-1.12 1 1 0 0 0 -.32-.8l-10.56-10.56a1 1 0 0 0 -.8-.32 1.09 1.09 0 0 0 -1.12 1.12v8.48a3.21 3.21 0 0 0 3.2 3.2z"/><path d="m44.4 19.6h-11.2a4.81 4.81 0 0 1 -4.8-4.8v-11.2a1.6 1.6 0 0 0 -1.6-1.6h-16a4.81 4.81 0 0 0 -4.8 4.8v38.4a4.81 4.81 0 0 0 4.8 4.8h30.4a4.81 4.81 0 0 0 4.8-4.8v-24a1.6 1.6 0 0 0 -1.6-1.6zm-32-1.6a1.62 1.62 0 0 1 1.6-1.55h6.55a1.56 1.56 0 0 1 1.57 1.55v1.59a1.63 1.63 0 0 1 -1.59 1.58h-6.53a1.55 1.55 0 0 1 -1.58-1.58zm24 20.77a1.6 1.6 0 0 1 -1.6 1.6h-20.8a1.6 1.6 0 0 1 -1.6-1.6v-1.57a1.6 1.6 0 0 1 1.6-1.6h20.8a1.6 1.6 0 0 1 1.6 1.6zm3.2-9.6a1.6 1.6 0 0 1 -1.6 1.63h-24a1.6 1.6 0 0 1 -1.6-1.6v-1.6a1.6 1.6 0 0 1 1.6-1.6h24a1.6 1.6 0 0 1 1.6 1.6z"/></svg></span>
                                         <span class="action-label">Leave Card</span>
                                     </a>
 
@@ -1486,7 +1486,7 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= safe_h($r['print_status'] ?? '—'); ?></td>
                             <td>
                                 <button type="button" class="icon-action-btn labelled" onclick="openModal('finalDetailModal_<?= (int)$r['id']; ?>')" title="View full request details">
-                                    <span class="action-icon">👁</span>
+                                    <span class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 72 72" fill="currentColor" style="flex-shrink:0;"><path d="M 31 11 C 19.973 11 11 19.973 11 31 C 11 42.027 19.973 51 31 51 C 34.974166 51 38.672385 49.821569 41.789062 47.814453 L 54.726562 60.751953 C 56.390563 62.415953 59.088953 62.415953 60.751953 60.751953 C 62.415953 59.087953 62.415953 56.390563 60.751953 54.726562 L 47.814453 41.789062 C 49.821569 38.672385 51 34.974166 51 31 C 51 19.973 42.027 11 31 11 z M 31 19 C 37.616 19 43 24.384 43 31 C 43 37.616 37.616 43 31 43 C 24.384 43 19 37.616 19 31 C 19 24.384 24.384 19 31 19 z"/></svg></span>
                                     <span class="action-label">Details</span>
                                 </button>
                             </td>
@@ -1629,7 +1629,7 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= safe_h($r['personnel_comments'] ?? $r['department_head_comments'] ?? $r['manager_comments'] ?? ''); ?></td>
                             <td>
                                 <button type="button" class="icon-action-btn labelled" onclick="openModal('rejectDetailModal_<?= (int)$r['id']; ?>')" title="View full request details">
-                                    <span class="action-icon">👁</span>
+                                    <span class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 72 72" fill="currentColor" style="flex-shrink:0;"><path d="M 31 11 C 19.973 11 11 19.973 11 31 C 11 42.027 19.973 51 31 51 C 34.974166 51 38.672385 49.821569 41.789062 47.814453 L 54.726562 60.751953 C 56.390563 62.415953 59.088953 62.415953 60.751953 60.751953 C 62.415953 59.087953 62.415953 56.390563 60.751953 54.726562 L 47.814453 41.789062 C 49.821569 38.672385 51 34.974166 51 31 C 51 19.973 42.027 11 31 11 z M 31 19 C 37.616 19 43 24.384 43 31 C 43 37.616 37.616 43 31 43 C 24.384 43 19 37.616 19 31 C 19 24.384 24.384 19 31 19 z"/></svg></span>
                                     <span class="action-label">Details</span>
                                 </button>
                             </td>
@@ -1683,7 +1683,7 @@ if (empty($_SESSION['csrf_token'])) {
                             <td><?= safe_h($r['manager_comments'] ?? $r['reason'] ?? ''); ?></td>
                             <td>
                                 <button type="button" class="icon-action-btn labelled" onclick="openModal('archDetailModal_<?= (int)$r['id']; ?>')" title="View full request details">
-                                    <span class="action-icon">👁</span>
+                                    <span class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 72 72" fill="currentColor" style="flex-shrink:0;"><path d="M 31 11 C 19.973 11 11 19.973 11 31 C 11 42.027 19.973 51 31 51 C 34.974166 51 38.672385 49.821569 41.789062 47.814453 L 54.726562 60.751953 C 56.390563 62.415953 59.088953 62.415953 60.751953 60.751953 C 62.415953 59.087953 62.415953 56.390563 60.751953 54.726562 L 47.814453 41.789062 C 49.821569 38.672385 51 34.974166 51 31 C 51 19.973 42.027 11 31 11 z M 31 19 C 37.616 19 43 24.384 43 31 C 43 37.616 37.616 43 31 43 C 24.384 43 19 37.616 19 31 C 19 24.384 24.384 19 31 19 z"/></svg></span>
                                     <span class="action-label">Details</span>
                                 </button>
                             </td>

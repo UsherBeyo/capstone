@@ -65,12 +65,20 @@ if (is_array($historyEmployee)) {
     <style>
         .employee-page-shell {
             display: grid;
-            gap: 24px;
+            gap: 20px;
+            margin-left: -35px;
+
         }
         .employee-list-card {
-            margin-top: 24px;
+            margin-top: 0px;
+        }
+        .employee-page-shell .page-title-group {
+           
+            margin-left: 55px;
+           
         }
         .employee-list-header {
+            
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -79,8 +87,10 @@ if (is_array($historyEmployee)) {
             margin-bottom: 16px;
         }
         .employee-list-meta {
+            
             color: var(--muted);
             font-size: 13px;
+            margin-right: 20px;
         }
         .employee-search-row {
             display: flex;
@@ -90,7 +100,8 @@ if (is_array($historyEmployee)) {
             flex-wrap: wrap;
         }
         .employee-search-row .search-input {
-            flex: 1 1 280px;
+            flex: 0 0 25%;
+            width: 25%;
             min-width: 220px;
         }
         .employee-list-card .table-wrap {
@@ -98,6 +109,7 @@ if (is_array($historyEmployee)) {
             overflow-y: visible;
             padding-bottom: 8px;
             scrollbar-gutter: stable both-edges;
+            
         }
         .employee-list-card .table-wrap::after {
             content: 'Scroll sideways to see more columns';
@@ -107,6 +119,7 @@ if (is_array($historyEmployee)) {
             color: var(--muted);
         }
         .employee-table {
+         
             width: 100%;
             min-width: 1180px;
             table-layout: fixed;
@@ -137,17 +150,19 @@ if (is_array($historyEmployee)) {
         .employee-table th:nth-child(9),
         .employee-table td:nth-child(9),
         .employee-table th:nth-child(10),
-        .employee-table td:nth-child(10),
+        .employee-table td:nth-child(10) { width: 96px; }
         .employee-table th:nth-child(11),
-        .employee-table td:nth-child(11) { width: 96px; }
+        .employee-table td:nth-child(11) { width: 116px; }
         .employee-table th:nth-child(12),
-        .employee-table td:nth-child(12) { width: 132px; }
+        .employee-table td:nth-child(12) { width: 255px; }
         .employee-table th:last-child,
         .employee-table td:last-child {
             position: sticky;
             right: 0;
             z-index: 2;
             box-shadow: -8px 0 18px rgba(15,23,42,.04);
+            padding-left: 10px;
+            background-clip: padding-box;
         }
         .employee-table thead th:last-child {
             background: #fff;
@@ -197,19 +212,18 @@ if (is_array($historyEmployee)) {
         }
         .employee-actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             align-items: center;
             justify-content: flex-end;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             min-width: 0;
         }
         .employee-actions .profile-link {
             display: inline-flex !important;
             align-items: center;
-            justify-content: center;
-            gap: 8px;
+            gap: 6px;
             text-decoration: none;
-            min-width: 96px;
+            min-width: 0;
             height: 32px;
             padding: 0 10px;
             border-radius: 8px;
@@ -487,7 +501,7 @@ if (is_array($historyEmployee)) {
             .employee-table th:nth-child(3),
             .employee-table td:nth-child(3) { width: 190px; }
             .employee-table th:nth-child(12),
-            .employee-table td:nth-child(12) { width: 132px; }
+            .employee-table td:nth-child(12) { width: 220px; }
         }
         @media (max-width: 1500px) {
             .employee-table th:nth-child(8),
@@ -575,15 +589,14 @@ if (is_array($historyEmployee)) {
                 max-width: none;
             }
             .employee-actions {
-                min-width: 0;
+                gap: 6px;
                 flex-wrap: wrap;
                 justify-content: flex-start;
             }
             .employee-actions .profile-link {
-                width: auto;
-                height: auto;
-                padding: 8px 12px;
-                flex: 1 1 calc(50% - 8px);
+                height: 34px;
+                padding: 0 12px;
+                flex: 1 1 calc(50% - 6px);
             }
             .employee-actions .profile-link span:last-child {
                 display: inline !important;
@@ -1060,12 +1073,12 @@ if (is_array($historyEmployee)) {
                 <td data-label="Status"><?= htmlspecialchars($e['status'] ?? '—'); ?></td>
                 <td data-label="Vacational"><span class="employee-balance-chip"><?= isset($e['annual_balance']) ? number_format($e['annual_balance'],3) : '0.000'; ?></span></td>
                 <td data-label="Sick"><span class="employee-balance-chip"><?= isset($e['sick_balance']) ? number_format($e['sick_balance'],3) : '0.000'; ?></span></td>
-                <td data-label="Force"><span class="employee-balance-chip"><?= isset($e['force_balance']) ? $e['force_balance'] : 0; ?></span></td>
+                <td data-label="Force"><span class="employee-balance-chip"><?= isset($e['force_balance']) ? number_format((float)$e['force_balance'], 3) : '0.000'; ?></span></td>
                 <td data-label="Actions" class="employee-actions-cell">
                     <div class="employee-actions">
                                 <a href="employee_profile.php?id=<?= $e['id']; ?>" title="View profile" class="profile-link">
-                            <span aria-hidden="true">👁️</span>
-                            <span>View</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 72 72" fill="currentColor" style="flex-shrink:0;"><path d="M 31 11 C 19.973 11 11 19.973 11 31 C 11 42.027 19.973 51 31 51 C 34.974166 51 38.672385 49.821569 41.789062 47.814453 L 54.726562 60.751953 C 56.390563 62.415953 59.088953 62.415953 60.751953 60.751953 C 62.415953 59.087953 62.415953 56.390563 60.751953 54.726562 L 47.814453 41.789062 C 49.821569 38.672385 51 34.974166 51 31 C 51 19.973 42.027 11 31 11 z M 31 19 C 37.616 19 43 24.384 43 31 C 43 37.616 37.616 43 31 43 C 24.384 43 19 37.616 19 31 C 19 24.384 24.384 19 31 19 z"/></svg>
+                            <span class="btn-label">View</span>
                         </a>
                         <button type="button" title="Edit user" class="profile-link open-edit-modal"
                             data-employee-id="<?= (int)$e['id']; ?>"
@@ -1088,12 +1101,12 @@ if (is_array($historyEmployee)) {
                             data-force-balance="<?= htmlspecialchars((string)($e['force_balance'] ?? 0), ENT_QUOTES, 'UTF-8'); ?>"
                             data-manager-id="<?= htmlspecialchars((string)($e['manager_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                             data-profile-pic="<?= htmlspecialchars((string)($e['profile_pic'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
-                            <span aria-hidden="true">✏️</span>
-                            <span>Edit</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 3.99997H6C4.89543 3.99997 4 4.8954 4 5.99997V18C4 19.1045 4.89543 20 6 20H18C19.1046 20 20 19.1045 20 18V12M18.4142 8.41417L19.5 7.32842C20.281 6.54737 20.281 5.28104 19.5 4.5C18.7189 3.71895 17.4526 3.71895 16.6715 4.50001L15.5858 5.58575M18.4142 8.41417L12.3779 14.4505C12.0987 14.7297 11.7431 14.9201 11.356 14.9975L8.41422 15.5858L9.00257 12.6441C9.08001 12.2569 9.27032 11.9013 9.54951 11.6221L15.5858 5.58575M18.4142 8.41417L15.5858 5.58575"/></svg>
+                            <span class="btn-label">Edit</span>
                         </button>
                         <a href="employee_profile.php?export=leave_card&id=<?= $e['id']; ?>" title="Export leave card" class="profile-link">
-                            <span aria-hidden="true">🗄️</span>
-                            <span>Export</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 459.636 459.636" fill="currentColor" style="flex-shrink:0;"><path d="M424.621,50.643H136.299c-19.307,0-35.015,15.707-35.015,35.014v52.272c15.991,0,25.542,0,41.669,0c12.94-31.165,53.868-39.785,78.182-15.461l73.448,73.448c18.737,18.736,18.741,49.064,0.001,67.802l-73.447,73.447c-24.303,24.307-65.232,15.735-78.184-15.458c-16.127,0-25.679,0-41.669,0v52.272c0,19.307,15.707,35.014,35.015,35.014h288.322c19.307,0,35.015-15.707,35.015-35.014V85.657C459.636,66.35,443.929,50.643,424.621,50.643z"/><path d="M171.254,303.266c0,14.182,17.221,21.362,27.281,11.3l73.449-73.449c6.241-6.241,6.242-16.359,0-22.6l-73.449-73.449c-10.038-10.043-27.281-2.903-27.281,11.3c0,5.785,0,7.735,0,13.522H15.981C7.155,169.891,0,177.046,0,185.872v87.891c0,8.826,7.155,15.981,15.981,15.981c4.522,0.001,151.046,0.001,155.273,0.001V303.266z"/></svg>
+                            <span class="btn-label">Export</span>
                         </a>
                     </div>
                 </td>
