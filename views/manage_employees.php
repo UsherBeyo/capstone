@@ -70,7 +70,7 @@ if (is_array($historyEmployee)) {
 
         }
         .employee-list-card {
-            margin-top: 0px;
+            margin-top: 0%;
         }
         .employee-page-shell .page-title-group {
            

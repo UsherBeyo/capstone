@@ -388,6 +388,13 @@ $calendarBaseUrl = $appBase . 'calendar';
             margin-left: 4px;
             padding-top: 16px;
         }
+        .calendar-nav-actions {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            margin-left: 76px;
+            padding-top: 16px;
+        }
         .calendar-insight-card {
             border-radius: 20px;
             overflow: hidden;
@@ -438,6 +445,7 @@ $calendarBaseUrl = $appBase . 'calendar';
             margin-bottom: 4px;
         }
         .calendar-trigger-sub {
+            
             font-size: 12px;
             color: var(--secondary-text);
         }
@@ -522,6 +530,7 @@ $calendarBaseUrl = $appBase . 'calendar';
             gap: 16px;
         }
         .calendar-summary-card {
+            background: #fff;
             border-radius: 20px;
             overflow: hidden;
         }
@@ -535,6 +544,7 @@ $calendarBaseUrl = $appBase . 'calendar';
             letter-spacing: .08em;
             color: var(--muted);
             margin-bottom: 8px;
+            
         }
         .legend-grid {
             display: grid;
@@ -643,10 +653,10 @@ $calendarBaseUrl = $appBase . 'calendar';
         .month-stats {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
+            gap: 28px;
         }
         .stat-card {
-            padding: 16px;
+            padding: 20px;
             border-radius: 16px;
             border: 1px solid var(--border);
             background: linear-gradient(180deg, #fff, #f8fafc);
@@ -656,18 +666,19 @@ $calendarBaseUrl = $appBase . 'calendar';
             text-transform: uppercase;
             letter-spacing: .07em;
             color: var(--muted);
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
         .stat-value {
-            font-size: 24px;
+            font-size: 28px;
             font-weight: 700;
             color: var(--text);
-            line-height: 1;
+            line-height: 1.2;
+            margin-bottom: 8px;
         }
         .stat-help {
             font-size: 12px;
             color: var(--secondary-text);
-            margin-top: 6px;
+            margin-top: 8px;
         }
         .empty-state {
             padding: 16px;
@@ -808,6 +819,14 @@ $calendarBaseUrl = $appBase . 'calendar';
             .calendar-jump-actions .btn {
                 flex: 1 1 0;
             }
+            .calendar-nav-actions {
+                width: 100%;
+                margin-left: 0;
+                padding-top: 0;
+            }
+            .calendar-nav-actions .btn {
+                flex: 1 1 0;
+            }
             .calendar-trigger-count {
                 min-width: 50px;
                 height: 50px;
@@ -842,11 +861,7 @@ $calendarBaseUrl = $appBase . 'calendar';
             <?php
             $title = 'Leave Calendar';
             $subtitle = 'View all scheduled leaves and holidays';
-            $actions = [
-                '<a href="' . htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . ($month == 1 ? 12 : $month - 1) . '&y=' . ($month == 1 ? $year - 1 : $year) . '" class="btn btn-ghost">&lt; Prev</a>',
-                '<a href="' . htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . intval(date('n')) . '&y=' . intval(date('Y')) . '" class="btn btn-secondary">Today</a>',
-                '<a href="' . htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . ($month == 12 ? 1 : $month + 1) . '&y=' . ($month == 12 ? $year + 1 : $year) . '" class="btn btn-ghost">Next &gt;</a>'
-            ];
+            $actions = [];
             include __DIR__ . '/partials/ui/page-header.php';
             ?>
 
@@ -883,6 +898,11 @@ $calendarBaseUrl = $appBase . 'calendar';
                                 <button type="submit" class="btn btn-primary">Jump</button>
                             </div>
                         </form>
+                        <div class="calendar-nav-actions">
+                            <a href="<?= htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . ($month == 1 ? 12 : $month - 1) . '&y=' . ($month == 1 ? $year - 1 : $year); ?>" class="btn btn-ghost">&lt; Prev</a>
+                            <a href="<?= htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . intval(date('n')) . '&y=' . intval(date('Y')); ?>" class="btn btn-secondary">Today</a>
+                            <a href="<?= htmlspecialchars($calendarBaseUrl, ENT_QUOTES, 'UTF-8') . '?m=' . ($month == 12 ? 1 : $month + 1) . '&y=' . ($month == 12 ? $year + 1 : $year); ?>" class="btn btn-ghost">Next &gt;</a>
+                        </div>
                     </div>
                 </div>
 

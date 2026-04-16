@@ -1853,7 +1853,7 @@ p { line-height: 1.6; }
     vertical-align:middle;
 }
 
-.evt-holiday { background: #ff6b6b; }
+.evt-btn btn-ghost { background: #ff6b6b; }
 .evt-leave { background: #4da6ff; }
 .evt-other { background: #ffd166; }
 

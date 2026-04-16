@@ -61,12 +61,14 @@ if (empty($_SESSION['csrf_token'])) {
             background: #f8fafc;
             color: #111827;
             font-size: 14px;
+            
         }
         .holidays-create-actions {
             grid-column: 1 / -1;
             display: flex;
             justify-content: flex-start;
             gap: 8px;
+            
             margin-top: 4px;
         }
         .holidays-create-actions .btn {
@@ -74,32 +76,38 @@ if (empty($_SESSION['csrf_token'])) {
             font-weight: 600;
         }
         .holiday-action-cell {
+            
             padding: 8px 0;
+            
         }
         .holiday-actions {
             display: flex;
-            gap: 8px;
+            width: 90%;
+            gap: 14px;
             align-items: center;
             flex-wrap: wrap;
         }
         .holiday-update-form {
             display: flex;
-            gap: 6px;
+            gap: 14px;
+            width: 50%;
             align-items: center;
             flex: 1;
         }
         .holiday-update-form input[type="date"] {
-            width: 110px;
+          
+            width: 120px;
             padding: 6px 8px;
         }
         .holiday-update-form input[type="text"] {
             flex: 1;
-            min-width: 140px;
+           width: -200px;
             padding: 6px 8px;
+            
         }
         .holiday-update-form select {
-            width: 140px;
-            padding: 6px 8px;
+            width: 160px;
+           
         }
         .holiday-update-form button {
             padding: 6px 12px;
